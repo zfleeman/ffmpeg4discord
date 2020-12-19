@@ -45,7 +45,7 @@ except:
 duration = math.floor(float(os.popen("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 /usr/app/in/{fname}".format(fname = fname)).read()))
 
 # Filesize for Discord.
-fs = 8.0
+fs = 7.4
 
 # Audio bitrate of the converted clip.
 audio_br = 96
