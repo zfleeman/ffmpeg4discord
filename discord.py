@@ -24,6 +24,7 @@ def encode(ffmpeg_string, fname):
 run = True
 
 fname = os.listdir("/usr/app/in/")[0]
+fname_webm = fname.replace(".mp4",".webm")
 os.rename("/usr/app/in/" + fname, "/usr/app/in/" + fname.replace(" ", ""))
 fname = fname.replace(" ", "")
 startstring = fname[0:2] + ':' + fname[2:4] + ':' + fname[4:6]
@@ -59,22 +60,22 @@ while run:
 		if len(fname) < 11:
 			br = get_bitrate(duration = duration - startseconds, filesize = discord_fs, audio_br = audio_br)
 			ffmpeg_string = '''
-				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -c:v libx264 -b:v {br}k -c:a aac -b:a 96k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 854x480 "/usr/app/out/small_{fname}" -y
-			'''.format(fname = fname, startstring = startstring, br = br)
+				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -c:v libvpx-vp9 -b:v {br}k -an -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -c:v libvpx-vp9 -b:v {br}k -c:a libopus -b:a 96k -pass 2  -s 854x480 "/usr/app/out/small_{fname_webm}" -y
+			'''.format(fname = fname, startstring = startstring, br = br, fname_webm = fname_webm)
 
 		else:
 			br = get_bitrate(duration = endseconds - startseconds, filesize = discord_fs, audio_br = audio_br)
 			ffmpeg_string = '''
-				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -to {endstring} -c:v libx264 -b:v {br}k -c:a aac -b:a 96k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -to {endstring} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 854x480 "/usr/app/out/small_{fname}" -y
-			'''.format(fname = fname, startstring = startstring, endstring = endstring, br = br)
+				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -to {endstring} -c:v libvpx-vp9 -b:v {br}k -an -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -to {endstring} -c:v libvpx-vp9 -b:v {br}k -pass 2 -c:a libopus -b:a 96k -s 854x480 "/usr/app/out/small_{fname_webm}" -y
+			'''.format(fname = fname, startstring = startstring, endstring = endstring, br = br, fname_webm = fname_webm)
 
 	else:
 		br = get_bitrate(duration = duration, filesize = discord_fs, audio_br = audio_br)
 		ffmpeg_string = '''
-			ffmpeg -y -i /usr/app/in/{fname} -c:v libx264 -b:v {br}k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 854x480 "/usr/app/out/small_{fname}" -y
-		'''.format(fname = fname, br = br)
+			ffmpeg -y -i /usr/app/in/{fname} -c:v libvpx-vp9 -b:v {br}k -an -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -c:v libvpx-vp9 -b:v {br}k -pass 2 -c:a libopus -b:a 96k -s 854x480 "/usr/app/out/small_{fname_webm}" -y
+		'''.format(fname = fname, br = br, fname_webm = fname_webm)
 
-	run = encode(ffmpeg_string, fname)
+	run = encode(ffmpeg_string, fname = fname_webm)
 	
 	if run:
 		fs = fs - 0.2
