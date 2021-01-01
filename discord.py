@@ -60,7 +60,7 @@ while run:
 		if len(fname) < 11:
 			br = get_bitrate(duration = duration - startseconds, filesize = discord_fs, audio_br = audio_br)
 			ffmpeg_string = '''
-				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -c:v libvpx-vp9 -b:v {br}k -cpu-used 8 -an -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -c:v libvpx-vp9 -b:v {br}k -c:a libopus -b:a 96k -pass 2 -cpu-used 8 -s 1280x720 "/usr/app/out/small_{fname_webm}" -y
+				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -c:v libvpx-vp9 -b:v {br}k -an -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -c:v libvpx-vp9 -b:v {br}k -c:a libopus -b:a 96k -pass 2 -s 1280x720 "/usr/app/out/small_{fname_webm}" -y
 			'''.format(fname = fname, startstring = startstring, br = br, fname_webm = fname_webm)
 
 		else:
