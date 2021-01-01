@@ -59,19 +59,19 @@ while run:
 		if len(fname) < 11:
 			br = get_bitrate(duration = duration - startseconds, filesize = discord_fs, audio_br = audio_br)
 			ffmpeg_string = '''
-				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -c:v libx264 -b:v {br}k -c:a aac -b:a 96k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 854x480 "/usr/app/out/small_{fname}" -y
+				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -c:v libx264 -b:v {br}k -c:a aac -b:a 96k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 1280x720 "/usr/app/out/small_{fname}" -y
 			'''.format(fname = fname, startstring = startstring, br = br)
 
 		else:
 			br = get_bitrate(duration = endseconds - startseconds, filesize = discord_fs, audio_br = audio_br)
 			ffmpeg_string = '''
-				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -to {endstring} -c:v libx264 -b:v {br}k -c:a aac -b:a 96k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -to {endstring} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 854x480 "/usr/app/out/small_{fname}" -y
+				ffmpeg -y -i /usr/app/in/{fname} -vsync cfr -ss {startstring} -to {endstring} -c:v libx264 -b:v {br}k -c:a aac -b:a 96k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -to {endstring} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 1280x720 "/usr/app/out/small_{fname}" -y
 			'''.format(fname = fname, startstring = startstring, endstring = endstring, br = br)
 
 	else:
 		br = get_bitrate(duration = duration, filesize = discord_fs, audio_br = audio_br)
 		ffmpeg_string = '''
-			ffmpeg -y -i /usr/app/in/{fname} -c:v libx264 -b:v {br}k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 854x480 "/usr/app/out/small_{fname}" -y
+			ffmpeg -y -i /usr/app/in/{fname} -c:v libx264 -b:v {br}k -pass 1 -f null /dev/null && ffmpeg -i /usr/app/in/{fname} -c:v libx264 -b:v {br}k -pass 2 -c:a aac -b:a 96k -s 1280x720 "/usr/app/out/small_{fname}" -y
 		'''.format(fname = fname, br = br)
 
 	run = encode(ffmpeg_string, fname)
