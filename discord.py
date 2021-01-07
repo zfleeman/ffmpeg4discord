@@ -56,23 +56,50 @@ while run:
 	discord_fs = fs * 8000
 
 	if timestamp_run:
-
 		if len(fname) < 11:
 			br = get_bitrate(duration = duration - startseconds, filesize = discord_fs, audio_br = audio_br)
 			ffmpeg_string = '''
-				ffmpeg -y -i /usr/app/in/{fname} -g 48 -keyint_min 48 -sc_threshold 0 -threads 8 -speed 4 -row-mt 1 -vsync cfr -ss {startstring} -c:v libvpx-vp9 -b:v {br}k -an -pass 1 -f webm /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -keyint_min 48 -sc_threshold 0 -row-mt 1 -threads 8 -speed 2 -tile-columns 4 -c:v libvpx-vp9 -b:v {br}k -pass 2 -c:a libopus -b:a 96k -s 1280x720 "/usr/app/out/small_{fname_webm}" -y
+				ffmpeg -y -i /usr/app/in/{fname} \
+					-ss {startstring} \
+					-g 48 -keyint_min 48 -sc_threshold 0 -threads 8 -speed 4 -row-mt 1 -vsync cfr \
+					-c:v libvpx-vp9 -b:v {br}k -an \
+					-pass 1 -f webm /dev/null && \
+				ffmpeg -i /usr/app/in/{fname} \
+					-ss {startstring} \
+					-keyint_min 48 -sc_threshold 0 -row-mt 1 -threads 8 -speed 2 -tile-columns 4 \
+					-c:v libvpx-vp9 -b:v {br}k -c:a libopus -b:a 96k \
+					-pass 2 -s 1280x720 \
+					"/usr/app/out/small_{fname_webm}" -y
 			'''.format(fname = fname, startstring = startstring, br = br, fname_webm = fname_webm)
 
 		else:
 			br = get_bitrate(duration = endseconds - startseconds, filesize = discord_fs, audio_br = audio_br)
 			ffmpeg_string = '''
-				ffmpeg -y -i /usr/app/in/{fname} -g 48 -keyint_min 48 -sc_threshold 0 -threads 8 -speed 4 -row-mt 1 -vsync cfr -ss {startstring} -to {endstring} -c:v libvpx-vp9 -b:v {br}k -an -pass 1 -tile-columns 4 -f webm /dev/null && ffmpeg -i /usr/app/in/{fname} -ss {startstring} -to {endstring} -keyint_min 48 -sc_threshold 0 -row-mt 1 -threads 8 -speed 2 -tile-columns 4 -c:v libvpx-vp9 -b:v {br}k -pass 2 -c:a libopus -b:a 96k -s 1280x720 "/usr/app/out/small_{fname_webm}" -y
+				ffmpeg -y -i /usr/app/in/{fname} \
+					-ss {startstring} -to {endstring} \
+					-g 48 -keyint_min 48 -sc_threshold 0 -threads 8 -speed 4 -row-mt 1 -vsync cfr \
+					-c:v libvpx-vp9 -b:v {br}k -an \
+					-pass 1 -f webm /dev/null && \
+				ffmpeg -i /usr/app/in/{fname} \
+					-ss {startstring} -to {endstring} \
+					-keyint_min 48 -sc_threshold 0 -row-mt 1 -threads 8 -speed 2 -tile-columns 4 \
+					-c:v libvpx-vp9 -b:v {br}k -c:a libopus -b:a 96k \
+					-pass 2 -s 1280x720 \
+					"/usr/app/out/small_{fname_webm}" -y
 			'''.format(fname = fname, startstring = startstring, endstring = endstring, br = br, fname_webm = fname_webm)
 
 	else:
 		br = get_bitrate(duration = duration, filesize = discord_fs, audio_br = audio_br)
 		ffmpeg_string = '''
-			ffmpeg -y -i /usr/app/in/{fname} -g 48 -keyint_min 48 -sc_threshold 0 -threads 8 -speed 4 -row-mt 1 -c:v libvpx-vp9 -b:v {br}k -an -pass 1 -f webm /dev/null && ffmpeg -i /usr/app/in/{fname} -keyint_min 48 -sc_threshold 0 -row-mt 1 -threads 8 -speed 2 -tile-columns 4 -c:v libvpx-vp9 -b:v {br}k -pass 2 -c:a libopus -b:a 96k -s 1280x720 "/usr/app/out/small_{fname_webm}" -y
+			ffmpeg -y -i /usr/app/in/{fname} \
+				-g 48 -keyint_min 48 -sc_threshold 0 -threads 8 -speed 4 -row-mt 1 -vsync cfr \
+				-c:v libvpx-vp9 -b:v {br}k -an \
+				-pass 1 -f webm /dev/null && \
+			ffmpeg -i /usr/app/in/{fname} \
+				-keyint_min 48 -sc_threshold 0 -row-mt 1 -threads 8 -speed 2 -tile-columns 4 \
+				-c:v libvpx-vp9 -b:v {br}k -c:a libopus -b:a 96k \
+				-pass 2 -s 1280x720 \
+				"/usr/app/out/small_{fname_webm}" -y
 		'''.format(fname = fname, br = br, fname_webm = fname_webm)
 
 	run = encode(ffmpeg_string, fname = fname_webm)
