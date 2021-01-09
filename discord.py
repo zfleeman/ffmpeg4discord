@@ -70,8 +70,7 @@ while run:
 					ffmpeg -i /usr/app/in/{fname} -vf scale=1280x720 {timestamped_section} \
 						-g 240 -threads 8 -speed 2 -row-mt 1 -tile-columns 2 \
 						-c:v libvpx-vp9 -b:v {br}k -minrate {minbr}k -maxrate {maxbr}k -c:a libopus -b:a {audio_br}k \
-						-pass 2 \
-						"/usr/app/out/small_{fname_webm}" -y
+						-pass 2 "/usr/app/out/small_{fname_webm}" -y
 	'''
 
 	run = encode(ffmpeg_string, fname = fname_webm)
