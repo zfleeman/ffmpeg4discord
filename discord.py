@@ -74,14 +74,14 @@ while run:
 	discord_fs = fs * 8192
 	br, minbr, maxbr = get_bitrate(duration = duration, filesize = discord_fs, audio_br = audio_br)
 	ffmpeg_string = f'''
-					ffmpeg -y -i /usr/app/in/{fname} {timestamped_section} \
-						{codecs[codec]['pass1']} \
-						-b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
-						-pass 1 -f null /dev/null && \
-					ffmpeg -i /usr/app/in/{fname} {timestamped_section} \
-						{codecs[codec]['pass2']} \
-						-b:a {audio_br}k -b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
-						-pass 2 "/usr/app/out/{codecs[codec]['output_name']}" -y
+		ffmpeg -y -i /usr/app/in/{fname} {timestamped_section} \
+			{codecs[codec]['pass1']} \
+			-b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
+			-pass 1 -f null /dev/null && \
+		ffmpeg -i /usr/app/in/{fname} {timestamped_section} \
+			{codecs[codec]['pass2']} \
+			-b:a {audio_br}k -b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
+			-pass 2 "/usr/app/out/{codecs[codec]['output_name']}" -y
 	'''
 
 	run = encode(ffmpeg_string, output_name = codecs[codec]['output_name'])
