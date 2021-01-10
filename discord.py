@@ -1,6 +1,5 @@
 # Imports
 import os
-import sys
 import math
 
 # Function for calculating the appropriate bitrate to use during conversion
