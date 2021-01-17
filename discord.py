@@ -55,13 +55,18 @@ run = True
 
 codecs = {
 	'vp9':{
-		'pass1':'-vf scale=1280x720 -g 240 -threads 8 -speed 4 -row-mt 1 -tile-columns 2 -vsync cfr -c:v libvpx-vp9 -an',
-		'pass2':'-vf scale=1280x720 -g 240 -threads 8 -speed 2 -row-mt 1 -tile-columns 2 -c:v libvpx-vp9 -c:a libopus',
+		'pass1':'-vf scale=1280x720 -g 240 -threads 8 -speed 4 -row-mt 1 -tile-columns 2 -vsync cfr -c:v libvpx-vp9	-pass 1  -an',
+		'pass2':'-vf scale=1280x720 -g 240 -threads 8 -speed 2 -row-mt 1 -tile-columns 2 -c:v libvpx-vp9 -c:a libopus -pass 2',
 		'output_name':'small_' + fname.replace(".mp4",".webm")
 	},
 	'x264':{
-		'pass1':'-vf scale=854x480 -c:v libx264',
-		'pass2':'-vf scale=854x480 -c:v libx264 -c:a aac',
+		'pass1':'-vf scale=854x480 -vsync cfr -c:v libx264 -pass 1 -an',
+		'pass2':'-vf scale=854x480 -c:v libx264 -c:a aac -pass 2 ',
+		'output_name':'small_' + fname
+	},
+	'x265':{
+		'pass1':'-vf scale=1280x720 -c:v libx265 -vsync cfr -x265-params pass=1 -an',
+		'pass2':'-vf scale=1280x720 -c:v libx265 -x265-params pass=2 -c:a aac',
 		'output_name':'small_' + fname
 	}
 }
@@ -76,11 +81,11 @@ while run:
 		ffmpeg -y -i /usr/app/in/{fname} {timestamped_section} \
 			{codecs[codec]['pass1']} \
 			-b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
-			-pass 1 -f null /dev/null && \
+			-f null /dev/null && \
 		ffmpeg -i /usr/app/in/{fname} {timestamped_section} \
 			{codecs[codec]['pass2']} \
 			-b:a {audio_br}k -b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
-			-pass 2 "/usr/app/out/{codecs[codec]['output_name']}" -y
+			"/usr/app/out/{codecs[codec]['output_name']}" -y
 	'''
 
 	run = encode(ffmpeg_string, output_name = codecs[codec]['output_name'])
