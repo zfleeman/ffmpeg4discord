@@ -55,7 +55,7 @@ run = True
 
 codecs = {
 	'vp9':{
-		'pass1':'-vf scale=1280x720 -g 240 -threads 8 -speed 4 -row-mt 1 -tile-columns 2 -vsync cfr -c:v libvpx-vp9	-pass 1  -an',
+		'pass1':'-vf scale=1280x720 -g 240 -threads 8 -speed 4 -row-mt 1 -tile-columns 2 -vsync cfr -c:v libvpx-vp9 -pass 1 -an',
 		'pass2':'-vf scale=1280x720 -g 240 -threads 8 -speed 2 -row-mt 1 -tile-columns 2 -c:v libvpx-vp9 -c:a libopus -pass 2',
 		'output_name':'small_' + fname.replace(".mp4",".webm")
 	},
