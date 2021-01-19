@@ -31,6 +31,7 @@ The video codec can be selected by changing the environment variable in your `do
 
 - VP9 (`-e codec=vp9` // This is also the default env variable)
 - H.264 (`-e codec=x264`)
+- H.265 (`-e codec=x265`)
 
 ## How does this work?
 The Docker container starts with a Python script that is a simple flow control process that takes information from the file's name and formats a [two-pass encoding](https://trac.ffmpeg.org/wiki/Encode/VP9) command for `ffmpeg` to execute. To obtain the video file's duration, we use `ffprobe`. WebM is currently the default container.
