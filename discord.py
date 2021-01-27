@@ -60,8 +60,8 @@ codecs = {
 		'output_name':'small_' + fname.replace(".mp4",".webm")
 	},
 	'x264':{
-		'pass1':'-vf scale=854x480 -vsync cfr -c:v libx264 -pass 1 -an',
-		'pass2':'-vf scale=854x480 -c:v libx264 -c:a aac -pass 2 ',
+		'pass1':'-vf scale=1280x720 -vsync cfr -c:v libx264 -pass 1 -an',
+		'pass2':'-vf scale=1280x720 -c:v libx264 -c:a aac -pass 2 ',
 		'output_name':'small_' + fname
 	},
 	'x265':{
