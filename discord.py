@@ -85,7 +85,7 @@ while run:
 		ffmpeg {timestamped_section} -i /usr/app/in/{fname} \
 			{codecs[codec]['pass2']} \
 			-b:a {audio_br}k -b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
-			"/usr/app/out/{codecs[codec]['output_name']}" -y
+			/usr/app/out/{codecs[codec]['output_name']} -y
 	'''
 
 	run = encode(ffmpeg_string, output_name = codecs[codec]['output_name'])
