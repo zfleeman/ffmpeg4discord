@@ -44,10 +44,6 @@ fname = fname.replace(" ", "")
 
 # ffprobe to calculate the total duration of the clip.
 length = math.floor(float(os.popen("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 /usr/app/in/{fname}".format(fname = fname)).read()))
-# Filesize for Discord.
-fs = 8.0
-# Audio bitrate of the converted clip.
-audio_br = 96
 
 duration, timestamped_section = time_calculations(fname, length)
 
@@ -72,6 +68,8 @@ codecs = {
 }
 
 codec = os.getenv('codec')
+audio_br = int(os.getenv('audio_br'))
+fs = float(os.getenv('fs'))
 
 while run:
 	# Conversion to KiB

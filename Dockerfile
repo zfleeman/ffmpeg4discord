@@ -5,4 +5,6 @@ COPY discord.py .
 RUN mkdir -p /usr/app/in/
 RUN mkdir -p /usr/app/out/
 ENV codec=vp9
+ENV audio_br=96
+ENV fs=8.0
 CMD ["python","/usr/app/discord.py"]
