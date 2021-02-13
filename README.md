@@ -29,9 +29,20 @@ A Batch file for Windows users is included in this repository for simple "drag a
 ## Codec selection
 The video codec can be selected by changing the environment variable in your `docker run` command, `codec`, to your desired codec. Currently, the following codecs are supported:
 
-- VP9 (`-e codec=vp9` // This is also the default env variable)
-- H.264 (`-e codec=x264`)
-- H.265 (`-e codec=x265`)
+- VP9: `-e codec=vp9`
+  - Creates a higher-quality `.webm` video. This is also the default env variable.
+- H.264: `-e codec=x264`
+  - Increased compatibility, decreased quality.
+- H.265: `-e codec=x265`
+  - Higher-quality `.mp4` file, but it's not compatible with much at the moment.
+
+## Other env variables
+If you want to get a little more creative with the file size or audio bitrate, you can specify different values in your `docker run` command.
+
+- fs: `-e fs=8.0`
+  - Increase or descrease this value if you want to compress your video to something other than the 8MB Discord limit.
+- audio_br: `-e audio_br=96`
+  - You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate.
 
 ## How does this work?
 The Docker container starts with a Python script that is a simple flow control process that takes information from the file's name and formats a [two-pass encoding](https://trac.ffmpeg.org/wiki/Encode/VP9) command for `ffmpeg` to execute. To obtain the video file's duration, we use `ffprobe`. WebM is currently the default container.
