@@ -7,10 +7,10 @@ def get_bitrate(duration, filesize, audio_br):
 	br = math.floor(filesize/duration - audio_br)
 	return br, br * 0.50, br * 1.45
 
-def encode(ffmpeg_string, output_name):
+def encode(ffmpeg_string, output_name, fs):
 	os.system(ffmpeg_string)
 	end_size = os.path.getsize("/usr/app/out/{output_name}".format(output_name = output_name)) * 0.00000095367432
-	if end_size < 8.0:
+	if end_size < fs:
 		print(ffmpeg_string.replace("\t","") + '\nThe FFMPEG string above has yielded a file whose size is ' + str(end_size) + 'MB.\n{output_name} is ready for Discord.\n'.format(output_name = output_name))
 		return False
 	else:
@@ -86,7 +86,7 @@ while run:
 			/usr/app/out/{codecs[codec]['output_name']} -y
 	'''
 
-	run = encode(ffmpeg_string, output_name = codecs[codec]['output_name'])
+	run = encode(ffmpeg_string, output_name = codecs[codec]['output_name'], fs = fs)
 	
 	if run:
 		fs = fs - 0.2
