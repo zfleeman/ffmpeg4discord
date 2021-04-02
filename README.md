@@ -37,12 +37,14 @@ The video codec can be selected by changing the environment variable in your `do
   - Higher-quality `.mp4` file, but it's not compatible with much at the moment.
 
 ## Other env variables
-If you want to get a little more creative with the file size or audio bitrate, you can specify different values in your `docker run` command.
+If you want to get a little more creative with the file size or audio bitrate, you can specify different values in your `docker run` command. The values shown below are the default values specified in `Dockerfile`.
 
-- fs: `-e fs=8.0`
+- File Size: `-e fs=8.0`
   - Increase or descrease this value if you want to compress your video to something other than the 8MB Discord limit.
-- audio_br: `-e audio_br=96`
+- Audio Bitrate: `-e audio_br=96`
   - You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate.
+- Resolution: `-e reso=1280x720`
+  - Modify this value to change the output resolution of your video file.
 
 ## How does this work?
 The Docker container starts with a Python script that is a simple flow control process that takes information from the file's name and formats a [two-pass encoding](https://trac.ffmpeg.org/wiki/Encode/VP9) command for `ffmpeg` to execute. To obtain the video file's duration, we use `ffprobe`. WebM is currently the default container.
