@@ -49,32 +49,35 @@ duration, timestamped_section = time_calculations(fname, length)
 
 run = True
 
+reso = os.getenv('reso')
+codec = os.getenv('codec')
+audio_br = int(os.getenv('audio_br'))
+fs = float(os.getenv('fs'))
+target_fs = fs
+
 codecs = {
 	'vp9':{
-		'pass1':'-vf scale=1280x720 -g 240 -threads 8 -speed 4 -row-mt 1 -tile-columns 2 -vsync cfr -c:v libvpx-vp9 -pass 1 -an',
-		'pass2':'-vf scale=1280x720 -g 240 -threads 8 -speed 2 -row-mt 1 -tile-columns 2 -c:v libvpx-vp9 -c:a libopus -pass 2',
+		'pass1':f'-vf scale={reso} -g 240 -threads 8 -speed 4 -row-mt 1 -tile-columns 2 -vsync cfr -c:v libvpx-vp9 -pass 1 -an',
+		'pass2':f'-vf scale={reso} -g 240 -threads 8 -speed 2 -row-mt 1 -tile-columns 2 -c:v libvpx-vp9 -c:a libopus -pass 2',
 		'output_name':'small_' + fname.replace(".mp4",".webm")
 	},
 	'x264':{
-		'pass1':'-vf scale=1280x720 -vsync cfr -c:v libx264 -pass 1 -an',
-		'pass2':'-vf scale=1280x720 -c:v libx264 -c:a aac -pass 2 ',
+		'pass1':f'-vf scale={reso} -vsync cfr -c:v libx264 -pass 1 -an',
+		'pass2':f'-vf scale={reso} -c:v libx264 -c:a aac -pass 2 ',
 		'output_name':'small_' + fname
 	},
 	'x265':{
-		'pass1':'-vf scale=1280x720 -c:v libx265 -vsync cfr -x265-params pass=1 -an',
-		'pass2':'-vf scale=1280x720 -c:v libx265 -x265-params pass=2 -c:a aac',
+		'pass1':f'-vf scale={reso} -c:v libx265 -vsync cfr -x265-params pass=1 -an',
+		'pass2':f'-vf scale={reso} -c:v libx265 -x265-params pass=2 -c:a aac',
 		'output_name':'small_' + fname
 	}
 }
 
-codec = os.getenv('codec')
-audio_br = int(os.getenv('audio_br'))
-fs = float(os.getenv('fs'))
 
 while run:
 	# Conversion to KiB
-	discord_fs = fs * 8192
-	br, minbr, maxbr = get_bitrate(duration = duration, filesize = discord_fs, audio_br = audio_br)
+	end_fs = fs * 8192
+	br, minbr, maxbr = get_bitrate(duration = duration, filesize = end_fs, audio_br = audio_br)
 	ffmpeg_string = f'''
 		ffmpeg {timestamped_section} -i /usr/app/in/{fname} -y \
 			{codecs[codec]['pass1']} \
@@ -86,7 +89,7 @@ while run:
 			/usr/app/out/{codecs[codec]['output_name']} -y
 	'''
 
-	run = encode(ffmpeg_string, output_name = codecs[codec]['output_name'], fs = fs)
+	run = encode(ffmpeg_string, output_name = codecs[codec]['output_name'], fs = target_fs)
 	
 	if run:
 		fs = fs - 0.2
