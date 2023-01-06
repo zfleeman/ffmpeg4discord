@@ -1,95 +1,103 @@
-# Imports
-import os
+import ffmpeg
+import argparse
 import math
+import os
 
-# Function for calculating the appropriate bitrate to use during conversion
 def get_bitrate(duration, filesize, audio_br):
-	br = math.floor(filesize/duration - audio_br)
-	return br, br * 0.50, br * 1.45
-
-def encode(ffmpeg_string, output_name, fs):
-	os.system(ffmpeg_string)
-	end_size = os.path.getsize("/usr/app/out/{output_name}".format(output_name = output_name)) * 0.00000095367432
-	if end_size < fs:
-		print(ffmpeg_string.replace("\t","") + '\nThe FFMPEG string above has yielded a file whose size is ' + str(end_size) + 'MB.\n{output_name} is ready for Discord.\n'.format(output_name = output_name))
-		return False
-	else:
-		print(ffmpeg_string.replace("\t","") + '\nThe FFMPEG string above has yielded a file whose size is ' + str(end_size) + 'MB.\n{output_name} is NOT ready for Discord, and will be re-run.\nMy bad.'.format(output_name = output_name))
-		return True
+    br = math.floor(filesize/duration - audio_br) * 1000
+    return br, br * 0.50, br * 1.45
 
 def time_calculations(fname, length):
-	startstring = fname[0:2] + ':' + fname[2:4] + ':' + fname[4:6]
-	endstring = fname[7:9] + ':' + fname[9:11] + ':' + fname[11:13]
+    startstring = fname[0:2] + ':' + fname[2:4] + ':' + fname[4:6]
+    endstring = fname[7:9] + ':' + fname[9:11] + ':' + fname[11:13]
+    times = {}
 
-	try:
-		int(fname[0:6])
-		startseconds = int(fname[0:2])*60*60 + int(fname[2:4])*60 + int(fname[4:6])
-		try:
-			int(fname[11:13])
-			endseconds = int(fname[7:9])*60*60 + int(fname[9:11])*60 + int(fname[11:13])
-			duration = endseconds - startseconds
-			timestamped_section = f'-ss {startstring} -to {endstring}'
-		except:
-			duration = length - startseconds
-			timestamped_section = f'-ss {startstring}'
-	except:
-		duration = length
-		timestamped_section = ''
+    try:
+        int(fname[0:6])
+        startseconds = int(fname[0:2])*60*60 + int(fname[2:4])*60 + int(fname[4:6])
+        times['ss'] = startstring
+        try:
+            int(fname[11:13])
+            endseconds = int(fname[7:9])*60*60 + int(fname[9:11])*60 + int(fname[11:13])
+            duration = endseconds - startseconds
+            times['to'] = endstring
+        except:
+            duration = length - startseconds
+    except:
+        duration = length
 
-	return duration, timestamped_section
+    return duration, times
 
-fname = os.listdir("/usr/app/in/")[0]
-os.rename("/usr/app/in/" + fname, "/usr/app/in/" + fname.replace(" ", ""))
-fname = fname.replace(" ", "")
+def first_pass(inputPath, params, times):
+    ffInput = ffmpeg.input(inputPath, **times)
+    video = ffInput.video.filter('scale', args.resolution)
+    ffOutput = ffmpeg.output(video, 'pipe:', **params)
+    std_out, std_err = ffOutput.run(capture_stdout=True)
 
-# ffprobe to calculate the total duration of the clip.
-length = math.floor(float(os.popen("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 /usr/app/in/{fname}".format(fname = fname)).read()))
+def second_pass(inputPath, outputPath, params, times):
+    ffInput = ffmpeg.input(inputPath, **times)
+    audio = ffInput.audio
+    video = ffInput.video.filter('scale', args.resolution)
+    ffOutput = ffmpeg.output(video, audio, outputPath,**params)
+    ffOutput.run(overwrite_output=True)
 
-duration, timestamped_section = time_calculations(fname, length)
+def get_new_fs(target_fs, output_filename):
+    return target_fs <= os.path.getsize(output_filename) * 0.00000095367432
+
+# args work
+parser = argparse.ArgumentParser(prog='ffmpeg4discord', description='Video compression script.', epilog='Compress those sick clips, boi.')
+parser.add_argument('filename', help='The full file path of the file that you wish to compress.')
+parser.add_argument('-o', '--output', default='', help='The desired output directory where the file will land.')
+parser.add_argument('-c', '--codec', choices=['libx264'], default='libx264', help='The codec that will be used during this conversion. libx264 is the most common and compatible codec.')
+parser.add_argument('-r', '--resolution', default='1280x720', help='The output resolution of your final video.')
+parser.add_argument('-s', '--filesize', default=8.0, type=float, help='The output file size in MB. Free Discord accepts a max of 8MB.')
+parser.add_argument('-a', '--audio-br', default=96, type=float, help='Audio bitrate in kbps.')
+# parser.add_argument('-x', '--crop', help="Cropping dimensions. Example: 255x0x1410x1080")
+args = parser.parse_args()
+
+fname = args.filename.replace("\\", "/").split('/')[-1]
+print(fname)
+target_fs = args.filesize
+
+probe = ffmpeg.probe(args.filename)
+duration = math.floor(float(probe['format']['duration']))
+
+duration, times = time_calculations(fname, duration)
 
 run = True
 
-reso = os.getenv('reso')
-codec = os.getenv('codec')
-audio_br = int(os.getenv('audio_br'))
-fs = float(os.getenv('fs'))
-target_fs = fs
-
-codecs = {
-	'vp9':{
-		'pass1':f'-vf scale={reso} -g 240 -threads 8 -speed 4 -row-mt 1 -tile-columns 2 -vsync cfr -c:v libvpx-vp9 -pass 1 -an',
-		'pass2':f'-vf scale={reso} -g 240 -threads 8 -speed 2 -row-mt 1 -tile-columns 2 -c:v libvpx-vp9 -c:a libopus -pass 2',
-		'output_name':'small_' + fname.replace(".mp4",".webm")
-	},
-	'x264':{
-		'pass1':f'-vf scale={reso} -vsync cfr -c:v libx264 -pass 1 -an',
-		'pass2':f'-vf scale={reso} -c:v libx264 -c:a aac -pass 2 ',
-		'output_name':'small_' + fname
-	},
-	'x265':{
-		'pass1':f'-vf scale={reso} -c:v libx265 -vsync cfr -x265-params pass=1 -an',
-		'pass2':f'-vf scale={reso} -c:v libx265 -x265-params pass=2 -c:a aac',
-		'output_name':'small_' + fname
-	}
-}
-
-
 while run:
-	# Conversion to KiB
-	end_fs = fs * 8192
-	br, minbr, maxbr = get_bitrate(duration = duration, filesize = end_fs, audio_br = audio_br)
-	ffmpeg_string = f'''
-		ffmpeg {timestamped_section} -i /usr/app/in/{fname} -y \
-			{codecs[codec]['pass1']} \
-			-b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
-			-f null /dev/null && \
-		ffmpeg {timestamped_section} -i /usr/app/in/{fname} \
-			{codecs[codec]['pass2']} \
-			-b:a {audio_br}k -b:v {br}k -minrate {minbr}k -maxrate {maxbr}k \
-			/usr/app/out/{codecs[codec]['output_name']} -y
-	'''
+    end_fs = args.filesize * 8192
+    br, minbr, maxbr = get_bitrate(duration=duration, filesize=end_fs, audio_br=args.audio_br)
 
-	run = encode(ffmpeg_string, output_name = codecs[codec]['output_name'], fs = target_fs)
-	
-	if run:
-		fs = fs - 0.2
+    pass_one_params = {
+        'pass': 1,
+        'f': 'null',
+        'vsync': 'cfr',
+        'c:v': args.codec,
+        'b:v': br,
+        'minrate': minbr,
+        'maxrate': maxbr,
+        'bufsize': br * 2
+    }
+
+    pass_two_params = {
+        'pass': 2,
+        'c:v': args.codec,
+        'c:a': 'aac',
+        'b:a': args.audio_br * 1000,
+        'b:v': br,
+        'minrate': minbr,
+        'maxrate': maxbr,
+        'bufsize': br * 2
+    }
+
+    output_filename = args.output + 'small_' + fname
+
+    first_pass(args.filename, pass_one_params, times)
+    second_pass(args.filename, output_filename, pass_two_params, times)
+
+    run = get_new_fs(target_fs, output_filename)
+
+    if run:
+        args.filesize -= 0.2
