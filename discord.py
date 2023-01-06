@@ -106,6 +106,7 @@ while run:
 
     if run:
         print(f'Resultant file size still above the target of {target_fs}MB.\nRestarting.\n')
+        os.remove(output_filename)
         args.filesize -= 0.2
     else:
         print(f'Smaller file located at {output_filename}')
