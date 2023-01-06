@@ -12,9 +12,7 @@ and then you can finally call the script with:
 
 ```python "C:/path/to/discord.py" cool_clip.mp4```
 
-The included Batch file for Windows users, `encode.bat`,  allows for drag and drop functionality. Be sure to edit the Batch file before using it.
-
-![](encode_gif.gif)
+The included Batch file for Windows users, `encode.bat`, allows for drag and drop functionality. Be sure to edit the Batch file before dragging your video files on top of it.
 
 ## File name formatting
 1) `000020.mp4`
