@@ -24,7 +24,7 @@ The included Batch file for Windows users, `encode.bat`,  allows for drag and dr
 3) `SomethingElse.mp4`
     - Compresses the entire video. As long as the first six characters of your file's name aren't all numeric (basically, the first six characters in #1's file name), you're good.
 
-### Optional Arguments
+## Optional Arguments
 - `-o`, `--output`
   - default: `current working directory`
   - If there is a folder that you want all of your smaller clips to land in, specify it with this argument.
