@@ -32,6 +32,7 @@ def first_pass(inputPath, params, times):
     ffInput = ffmpeg.input(inputPath, **times)
     video = ffInput.video.filter('scale', args.resolution)
     ffOutput = ffmpeg.output(video, 'pipe:', **params)
+    ffOutput = ffOutput.global_args('-loglevel', 'quiet', '-stats')
     std_out, std_err = ffOutput.run(capture_stdout=True)
 
 def second_pass(inputPath, outputPath, params, times):
@@ -39,6 +40,7 @@ def second_pass(inputPath, outputPath, params, times):
     audio = ffInput.audio
     video = ffInput.video.filter('scale', args.resolution)
     ffOutput = ffmpeg.output(video, audio, outputPath,**params)
+    ffOutput = ffOutput.global_args('-loglevel', 'quiet', '-stats')
     ffOutput.run(overwrite_output=True)
 
 def get_new_fs(target_fs, output_filename):
@@ -55,15 +57,12 @@ parser.add_argument('-a', '--audio-br', default=96, type=float, help='Audio bitr
 # parser.add_argument('-x', '--crop', help="Cropping dimensions. Example: 255x0x1410x1080")
 args = parser.parse_args()
 
+# pre-run variables
 fname = args.filename.replace("\\", "/").split('/')[-1]
-print(fname)
 target_fs = args.filesize
-
 probe = ffmpeg.probe(args.filename)
 duration = math.floor(float(probe['format']['duration']))
-
 duration, times = time_calculations(fname, duration)
-
 run = True
 
 while run:
@@ -94,10 +93,18 @@ while run:
 
     output_filename = args.output + 'small_' + fname
 
+    print('Performing first pass.')
     first_pass(args.filename, pass_one_params, times)
+    print('First pass complete.\n')
+
+    print('Performing second pass.')
     second_pass(args.filename, output_filename, pass_two_params, times)
+    print('Second pass complete.\n')
 
     run = get_new_fs(target_fs, output_filename)
 
     if run:
+        print(f'Resultant file size still above the target of {target_fs}MB.\nRestarting.\n')
         args.filesize -= 0.2
+    else:
+        print(f'Smaller file located at {output_filename}')
