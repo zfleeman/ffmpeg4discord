@@ -1,6 +1,8 @@
 # ffmpeg video conversion for Discord
 This is a Python script that takes an `.mp4` file as its input and encodes it to be less than 8MB unless specified otherwise. You can change the file's name to trim the clip to a desired section. This is especially useful in conjunction with large NVIDIA ShadowPlay clips.
 
+This script showcases 2-pass encoding for `ffmpeg-python` library, which has historically not been well-documented on the web.
+
 ## Usage
 You must first have `ffmpeg` installed on your system. `ffmpeg` also needs to be registered in your PATH.
 
