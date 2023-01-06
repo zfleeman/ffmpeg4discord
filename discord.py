@@ -2,6 +2,7 @@ import ffmpeg
 import argparse
 import math
 import os
+from datetime import datetime
 
 def get_bitrate(duration, filesize, audio_br):
     br = math.floor(filesize/duration - audio_br) * 1000
@@ -91,7 +92,7 @@ while run:
         'bufsize': br * 2
     }
 
-    output_filename = args.output + 'small_' + fname
+    output_filename = args.output + 'small_' + datetime.strftime(datetime.now(), '%Y%m%d%H%M%S_') + fname
 
     print('Performing first pass.')
     first_pass(args.filename, pass_one_params, times)
