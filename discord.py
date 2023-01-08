@@ -33,9 +33,9 @@ def apply_video_filters(ffInput):
     video = ffInput.video
 
     if args.crop:
-        dim = args.crop.split('x')
-        video = video.crop(x=dim[0], y=dim[1], width=dim[2], height=dim[3])
-        args.inputratio = int(dim[2])/int(dim[3])
+        crop = args.crop.split('x')
+        video = video.crop(x=crop[0], y=crop[1], width=crop[2], height=crop[3])
+        args.inputratio = int(crop[2])/int(crop[3])
    
     if args.resolution:
         video = video.filter('scale', args.resolution)
