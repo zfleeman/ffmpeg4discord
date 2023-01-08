@@ -35,6 +35,9 @@ The included Batch file for Windows users, `encode.bat`, allows for drag and dro
   - default: `96`
   - You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate.
 - `-r`, `--resolution`
-  - default: `1280x720`
-  - Modify this value to change the output resolution of your video file. Currently, the script only works with 16:9 aspect ratios.
+  - Modify this value to change the output resolution of your video file. I'd recommend lowering your output resolution by 1.5 or 2x. Example: `1920x1080` video should get an output resolution of `1280x720`
+- `-c`, `--crop`
+  - Example: `255x0x1410x1080`
+  - From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video.
+  - [ffmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61)
 
