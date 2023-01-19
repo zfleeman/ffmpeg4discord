@@ -44,7 +44,7 @@ The included Batch file for Windows users, `encode.bat`, allows for drag and dro
 
 ## Docker Usage
 
-Using the docker image is very similar to the basic python example, above. You need to volume mount your input file and the output directory. The output directory is hard coded into the Dockerfile's `ENTRYPOINT` line as the `/usr/app/out/` directory in the container.
+Using the docker image is very similar to the basic python example, above. You need to volume mount your input file and the output directory. The output directory is hard coded into the Dockerfile's `ENTRYPOINT` line as the `/usr/app/out/` directory in the container. After the `docker run` options and flags, you need to specify your filename and the optional flags specified in the Python example, above.
 
 ```
 docker run \
