@@ -42,3 +42,14 @@ The included Batch file for Windows users, `encode.bat`, allows for drag and dro
   - From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video.
   - [ffmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61)
 
+## Docker Usage
+
+Using the docker image is very similar to the basic python example, above. You need to volume mount your input file and the output directory. The output directory is hard coded into the Dockerfile's `ENTRYPOINT` line as the `/usr/app/out/` directory in the container.
+
+```
+docker run \
+    -v /Users/zfleeman/Desktop/000100.mp4:/usr/app/000100.mp4 \
+    -v /Users/zfleeman/Desktop:/usr/app/out \
+    --rm zachfleeman/ffmpeg4discord:latest \
+    000100.mp4 -s 20 -r 1280x720
+```
