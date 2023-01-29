@@ -1,10 +1,10 @@
 # ffmpeg video conversion for Discord
-This is a Python script that takes an `.mp4` file as its input and encodes it to be less than 8MB unless specified otherwise. You can change the file's name in a way that trims the file to a timestamped section. This script is useful when sharing large NVIDIA ShadowPlay clips quickly, without the need for a visual editor.
+This is a Python script that takes a video file as its input and encodes it to be less than 8MB unless specified otherwise. You can change the file's name in a way that trims the file to a timestamped section. This script is useful when sharing large NVIDIA ShadowPlay clips quickly, without the need for a visual editor.
 
-This script showcases a 2-pass encoding methodology for the `ffmpeg-python` library, which is not well-documented on the web.
+This script supports a few ffmpeg video filters, like cropping and resolution scaling. It can be used in a variety of different audio/video workflows. It also showcases a 2-pass encoding methodology for the `ffmpeg-python` library, which is not well-documented on the web.
 
 ## Usage
-You must first have `ffmpeg` installed on your system. `ffmpeg` also needs to be registered in your PATH.
+You must first have `ffmpeg` installed on your system. `ffmpeg` needs to be registered in your PATH.
 
 Install the required Python package, `ffmpeg-python` with:
 
@@ -37,7 +37,7 @@ The included Batch file for Windows users, `encode.bat`, allows for drag and dro
 - `-r`, `--resolution`
   - Example: `"1280x720"`
   - Modify this value to change the output resolution of your video file. I'd recommend lowering your output resolution by 1.5x or 2x. Example: `1920x1080` video should get an output resolution of `1280x720`
-- `-x`, `--crop`
+- `-c`, `--crop`
   - Example: `255x0x1410x1080`
   - From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video.
   - [ffmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61)
@@ -53,3 +53,13 @@ docker run \
     --rm zachfleeman/ffmpeg4discord:latest \
     000100.mp4 -s 20 -r 1280x720
 ```
+
+## Detailed Example
+
+```
+python D:/ffmpeg4discord/discord.py 000050-000145.mp4 -c 1280x0x2560x1440 -r 1920x1080 -s 50 -a 48 -o D:/shadowplay/
+```
+
+The example above takes a 5120x1440 resolution video as its input. The script trims the video from 00:00:50 to 00:01:45 (specified in the [filename](https://github.com/zfleeman/ffmpeg4discord#file-name-formatting)). It crops a 2560x1440 section starting at 1280 pixels from the top-left and 0 pixels down (`-c`). The output file will be located in `D:/shadowplay/` (`-o`) with a new resolution of 1920x1080 (`-r`), and it will be 50MB (`-s`). The audio bitrate will be reduced to 48k (`-a`) as well, but that's probably going to sound terrible.
+
+![](https://i.imgur.com/WJXA723.png)
