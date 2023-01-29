@@ -96,13 +96,6 @@ parser.add_argument(
     help="The desired output directory where the file will land.",
 )
 parser.add_argument(
-    "-c",
-    "--codec",
-    choices=["libx264"],
-    default="libx264",
-    help="The codec that will be used during this conversion. libx264 is the most common and compatible codec.",
-)
-parser.add_argument(
     "-s",
     "--filesize",
     default=8.0,
@@ -114,7 +107,7 @@ parser.add_argument(
 )
 # video filters
 parser.add_argument(
-    "-x", "--crop", help="Cropping dimensions. Example: 255x0x1410x1080"
+    "-c", "--crop", help="Cropping dimensions. Example: 255x0x1410x1080"
 )
 parser.add_argument(
     "-r", "--resolution", help="The output resolution of your final video."
@@ -133,8 +126,7 @@ output_filename = (
     args.output
     + "small_"
     + split_fname[0].replace(" ", "_")
-    + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.")
-    + split_fname[1]
+    + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
 )
 run = True
 
@@ -148,7 +140,7 @@ while run:
         "pass": 1,
         "f": "null",
         "vsync": "cfr",
-        "c:v": args.codec,
+        "c:v": "libx264",
         "b:v": br,
         "minrate": minbr,
         "maxrate": maxbr,
@@ -157,7 +149,7 @@ while run:
 
     pass_two_params = {
         "pass": 2,
-        "c:v": args.codec,
+        "c:v": "libx264",
         "c:a": "aac",
         "b:a": args.audio_br * 1000,
         "b:v": br,
