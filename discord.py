@@ -5,12 +5,12 @@ import os
 from datetime import datetime
 
 
-def get_bitrate(duration, filesize, audio_br):
-    br = math.floor(filesize / duration - audio_br) * 1000
+def get_bitrate(length, filesize, audio_br):
+    br = math.floor(filesize / length - audio_br) * 1000
     return br, br * 0.50, br * 1.45
 
 
-def time_calculations(fname, length):
+def time_calculations(fname, duration):
     startstring = fname[0:2] + ":" + fname[2:4] + ":" + fname[4:6]
     endstring = fname[7:9] + ":" + fname[9:11] + ":" + fname[11:13]
     times = {}
@@ -26,14 +26,14 @@ def time_calculations(fname, length):
             endseconds = (
                 int(fname[7:9]) * 60 * 60 + int(fname[9:11]) * 60 + int(fname[11:13])
             )
-            duration = endseconds - startseconds
+            length = endseconds - startseconds
             times["to"] = endstring
         except:
-            duration = length - startseconds
+            length = duration - startseconds
     except:
-        duration = length
+        length = duration
 
-    return duration, times
+    return length, times
 
 
 def apply_video_filters(ffInput):
@@ -120,7 +120,13 @@ target_fs = args.filesize
 probe = ffmpeg.probe(args.filename)
 args.inputratio = probe["streams"][0]["width"] / probe["streams"][0]["height"]
 duration = math.floor(float(probe["format"]["duration"]))
-duration, times = time_calculations(fname, duration)
+length, times = time_calculations(fname, duration)
+
+if length <= 0:
+    raise Exception(
+        f"Your video is {duration / 60} minutes long, but you wanted to start clpping at {times['ss']}"
+    )
+
 split_fname = fname.split(".")
 output_filename = (
     args.output
@@ -133,7 +139,7 @@ run = True
 while run:
     end_fs = args.filesize * 8192
     br, minbr, maxbr = get_bitrate(
-        duration=duration, filesize=end_fs, audio_br=args.audio_br
+        length=length, filesize=end_fs, audio_br=args.audio_br
     )
 
     pass_one_params = {
@@ -170,7 +176,7 @@ while run:
 
     if run:
         print(
-            f"Resultant file size still above the target of {target_fs}MB.\nRestarting.\n"
+            f"Resultant file size still above the target of {target_fs}MB.\nRestarting...\n"
         )
         os.remove(output_filename)
         args.filesize -= 0.2
