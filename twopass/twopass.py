@@ -12,19 +12,22 @@ class TwoPass:
         self,
         filename: str,
         output_dir: str,
-        filesize: float = 8.0,
+        target_filesize: float,
         audio_br: float = 96,
+        codec: str = "libx264",
         crop: str = "",
         resolution: str = "",
         config_file: str = "",
     ) -> None:
+        self.codec = codec
         self.filename = filename
+        self.file_info = ffmpeg.probe(filename=self.filename)
         self.output_dir = output_dir
 
         if config_file:
             self.init_from_config(config_file=config_file)
         else:
-            self.filesize = filesize
+            self.target_filesize = target_filesize
             self.audio_br = audio_br
             self.crop = crop
             self.resolution = resolution
@@ -39,50 +42,46 @@ class TwoPass:
             + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
         )
 
-        self.target_fs = self.filesize
-        self.probe()
         self.input_ratio = self.file_info["streams"][0]["width"] / self.file_info["streams"][0]["height"]
         self.duration = math.floor(float(self.file_info["format"]["duration"]))
-
         self.time_calculations()
-
-        bitrate_dict = self.get_bitrate()
-
-        self.pass_one_params = {
-            "pass": 1,
-            "f": "null",
-            "vsync": "cfr",
-            "c:v": "libx264",
-        }
-        self.pass_one_params.update(**bitrate_dict)
-
-        self.pass_two_params = {
-            "pass": 2,
-            "c:v": "libx264",
-            "c:a": "aac",
-            "b:a": self.audio_br * 1000,
-        }
-        self.pass_two_params.update(**bitrate_dict)
 
     def init_from_config(self, config_file: str) -> None:
         with open(config_file) as f:
             config = json.load(f)
         self.__dict__.update(**config)
 
-    def probe(self) -> None:
-        self.file_info = ffmpeg.probe(filename=self.filename)
+    def generate_params(self, codec: str):
+        params = {
+            "pass1": {
+                "pass": 1,
+                "f": "null",
+                "vsync": "cfr",  # not sure if this is unique to x264 or not
+                "c:v": codec,
+            },
+            "pass2": {"pass": 2, "b:a": self.audio_br * 1000, "c:v": codec},
+        }
 
-    def get_bitrate(self, filesize=None) -> float:
-        if not filesize:
-            filesize = self.filesize
-        br = math.floor(filesize / self.length - self.audio_br) * 1000
-        br_dict = {
+        if codec == "libx264":
+            params["pass2"]["c:a"] = "aac"
+        elif codec == "vp9":
+            # still a lot of work here
+            params["pass2"]["c:a"] = "libopus"
+
+        params["pass1"].update(**self.bitrate_dict)
+        params["pass2"].update(**self.bitrate_dict)
+
+        return params
+
+    def create_bitrate_dict(self) -> None:
+        br = math.floor((self.target_filesize * 8192) / self.length - self.audio_br) * 1000
+        bitrate_dict = {
             "b:v": br,
             "minrate": br * 0.5,
             "maxrate": br * 1.45,
             "bufsize": br * 2,
         }
-        return br_dict
+        self.bitrate_dict = bitrate_dict
 
     def time_calculations(self):
         fname = self.fname
@@ -112,8 +111,8 @@ class TwoPass:
         self.length = length
         self.times = times
 
-    def apply_video_filters(self, ffInput):
-        video = ffInput.video
+    def apply_video_filters(self, ffinput):
+        video = ffinput.video
 
         if self.crop:
             crop = self.crop.split("x")
@@ -133,21 +132,24 @@ class TwoPass:
 
         return video
 
-    def first_pass(self, params=None):
-        if not params:
-            params = self.pass_one_params
-        ffInput = ffmpeg.input(self.filename, **self.times)
-        video = self.apply_video_filters(ffInput)
-        ffOutput = ffmpeg.output(video, "pipe:", **params)
+    def run(self):
+        # generate run parameters
+        self.create_bitrate_dict()
+        params = self.generate_params(codec=self.codec)
+
+        # separate streams from ffinput
+        ffinput = ffmpeg.input(self.filename, **self.times)
+        video = self.apply_video_filters(ffinput)
+        audio = ffinput.audio
+
+        # First Pass
+        ffOutput = ffmpeg.output(video, "pipe:", **params["pass1"])
         ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
+        print("Performing first pass")
         std_out, std_err = ffOutput.run(capture_stdout=True)
 
-    def second_pass(self, params=None):
-        if not params:
-            params = self.pass_one_params
-        ffInput = ffmpeg.input(self.filename, **self.times)
-        audio = ffInput.audio
-        video = self.apply_video_filters(ffInput)
-        ffOutput = ffmpeg.output(video, audio, self.output_filename, **params)
+        # Second Pass
+        ffOutput = ffmpeg.output(video, audio, self.output_filename, **params["pass2"])
         ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
+        print("\nPerforming second pass")
         ffOutput.run(overwrite_output=True)

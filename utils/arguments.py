@@ -18,7 +18,7 @@ def get_args() -> Namespace:
     )
     parser.add_argument(
         "-s",
-        "--filesize",
+        "--target-filesize",
         default=8,
         type=float,
         help="The output file size in MB. Free Discord accepts a max of 8MB.",
