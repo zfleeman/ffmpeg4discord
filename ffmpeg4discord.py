@@ -2,22 +2,20 @@ import os
 from utils.arguments import get_args
 from twopass import TwoPass
 
+# get args from the command line
 args = get_args()
+
+# instantiate the TwoPass class and save our target file size for comparison in the loop
 twopass = TwoPass(**args)
 end_fs = args["target_filesize"]
 
-run = True
+while twopass.run() >= end_fs:
+    print(
+        f"\nThe output file size ({round(twopass.output_filesize, 2)}MB) is still above the target of {end_fs}MB.\nRestarting...\n"
+    )
+    os.remove(twopass.output_filename)
 
-while run:
-    twopass.run()
+    # adjust the class's target file size to set a lower bitrate for the next run
+    twopass.target_filesize -= 0.2
 
-    output_fs = os.path.getsize(twopass.output_filename) * 0.00000095367432
-    run = end_fs <= output_fs
-    output_fs = round(output_fs, 2)
-
-    if run:
-        print(f"Output file size ({output_fs}MB) still above the target of {end_fs}MB.\nRestarting...\n")
-        os.remove(twopass.output_filename)
-        twopass.target_filesize -= 0.2
-    else:
-        print(f"\nSUCCESS!!\nThe smaller file ({output_fs}MB) is located at {twopass.output_filename}")
+print(f"\nSUCCESS!!\nThe smaller file ({round(twopass.output_filesize, 2)}MB) is located at {twopass.output_filename}")

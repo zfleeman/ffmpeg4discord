@@ -2,6 +2,7 @@ import ffmpeg
 import math
 import logging
 import json
+import os
 from datetime import datetime
 
 logging.getLogger().setLevel(logging.INFO)
@@ -13,7 +14,7 @@ class TwoPass:
         filename: str,
         output_dir: str,
         target_filesize: float,
-        audio_br: float = 96,
+        audio_br: float = None,
         codec: str = "libx264",
         crop: str = "",
         resolution: str = "",
@@ -21,16 +22,33 @@ class TwoPass:
     ) -> None:
         self.codec = codec
         self.filename = filename
-        self.file_info = ffmpeg.probe(filename=self.filename)
+        self.probe = ffmpeg.probe(filename=self.filename)
         self.output_dir = output_dir
 
         if config_file:
             self.init_from_config(config_file=config_file)
         else:
             self.target_filesize = target_filesize
-            self.audio_br = audio_br
             self.crop = crop
             self.resolution = resolution
+
+        if len(self.probe["streams"]) > 2:
+            logging.warning(
+                "This media file has more than two streams, which could cause errors during the encoding job."
+            )
+
+        for stream in self.probe["streams"]:
+            ix = stream["index"]
+            if stream["codec_type"] == "video":
+                display_aspect_ratio = self.probe["streams"][ix]["display_aspect_ratio"].split(":")
+                self.ratio = int(display_aspect_ratio[0]) / int(display_aspect_ratio[1])
+            elif stream["codec_type"] == "audio":
+                audio_stream = ix
+
+        if not audio_br:
+            self.audio_br = self.probe["streams"][audio_stream]["bit_rate"]
+        else:
+            self.audio_br = audio_br * 1000
 
         self.fname = self.filename.replace("\\", "/").split("/")[-1]
         self.split_fname = self.fname.split(".")
@@ -42,8 +60,7 @@ class TwoPass:
             + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
         )
 
-        self.input_ratio = self.file_info["streams"][0]["width"] / self.file_info["streams"][0]["height"]
-        self.duration = math.floor(float(self.file_info["format"]["duration"]))
+        self.duration = math.floor(float(self.probe["format"]["duration"]))
         self.time_calculations()
 
     def init_from_config(self, config_file: str) -> None:
@@ -59,7 +76,7 @@ class TwoPass:
                 "vsync": "cfr",  # not sure if this is unique to x264 or not
                 "c:v": codec,
             },
-            "pass2": {"pass": 2, "b:a": self.audio_br * 1000, "c:v": codec},
+            "pass2": {"pass": 2, "b:a": self.audio_br, "c:v": codec},
         }
 
         if codec == "libx264":
@@ -71,7 +88,7 @@ class TwoPass:
         return params
 
     def create_bitrate_dict(self) -> None:
-        br = math.floor((self.target_filesize * 8192) / self.length - self.audio_br) * 1000
+        br = math.floor((self.target_filesize * 8192) / self.length - (self.audio_br / 1000)) * 1000
         self.bitrate_dict = {
             "b:v": br,
             "minrate": br * 0.5,
@@ -113,7 +130,7 @@ class TwoPass:
         if self.crop:
             crop = self.crop.split("x")
             video = video.crop(x=crop[0], y=crop[1], width=crop[2], height=crop[3])
-            self.input_ratio = int(crop[2]) / int(crop[3])
+            self.ratio = int(crop[2]) / int(crop[3])
 
         if self.resolution:
             video = video.filter("scale", self.resolution)
@@ -121,14 +138,17 @@ class TwoPass:
             y = int(self.resolution.split("x")[1])
             outputratio = x / y
 
-            if self.input_ratio != outputratio:
+            if self.ratio != outputratio:
                 logging.warning(
-                    "Your output resolution's aspect ratio does not match the\ninput resolution's or your croped resolution's aspect ratio."
+                    """
+                    Your output resolution's aspect ratio does not match the
+                    input resolution's or your croped resolution's aspect ratio.
+                    """
                 )
 
         return video
 
-    def run(self):
+    def run(self) -> float:
         # generate run parameters
         self.create_bitrate_dict()
         params = self.generate_params(codec=self.codec)
@@ -149,3 +169,8 @@ class TwoPass:
         ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
         print("\nPerforming second pass")
         ffOutput.run(overwrite_output=True)
+
+        # save the output file size and return it
+        self.output_filesize = os.path.getsize(self.output_filename) * 0.00000095367432
+
+        return self.output_filesize
