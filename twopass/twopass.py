@@ -64,9 +64,6 @@ class TwoPass:
 
         if codec == "libx264":
             params["pass2"]["c:a"] = "aac"
-        elif codec == "vp9":
-            # still a lot of work here
-            params["pass2"]["c:a"] = "libopus"
 
         params["pass1"].update(**self.bitrate_dict)
         params["pass2"].update(**self.bitrate_dict)
@@ -75,13 +72,12 @@ class TwoPass:
 
     def create_bitrate_dict(self) -> None:
         br = math.floor((self.target_filesize * 8192) / self.length - self.audio_br) * 1000
-        bitrate_dict = {
+        self.bitrate_dict = {
             "b:v": br,
             "minrate": br * 0.5,
             "maxrate": br * 1.45,
             "bufsize": br * 2,
         }
-        self.bitrate_dict = bitrate_dict
 
     def time_calculations(self):
         fname = self.fname
@@ -117,7 +113,7 @@ class TwoPass:
         if self.crop:
             crop = self.crop.split("x")
             video = video.crop(x=crop[0], y=crop[1], width=crop[2], height=crop[3])
-            self.inputratio = int(crop[2]) / int(crop[3])
+            self.input_ratio = int(crop[2]) / int(crop[3])
 
         if self.resolution:
             video = video.filter("scale", self.resolution)
@@ -125,7 +121,7 @@ class TwoPass:
             y = int(self.resolution.split("x")[1])
             outputratio = x / y
 
-            if self.inputratio != outputratio:
+            if self.input_ratio != outputratio:
                 logging.warning(
                     "Your output resolution's aspect ratio does not match the\ninput resolution's or your croped resolution's aspect ratio."
                 )
