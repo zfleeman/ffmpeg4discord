@@ -12,18 +12,31 @@ class TwoPass:
     def __init__(
         self,
         filename: str,
-        output_dir: str,
         target_filesize: float,
+        output_dir: str = "",
+        times: dict = {},
         audio_br: float = None,
         codec: str = "libx264",
         crop: str = "",
         resolution: str = "",
         config_file: str = "",
     ) -> None:
-        self.codec = codec
-        self.filename = filename
-        self.probe = ffmpeg.probe(filename=self.filename)
-        self.output_dir = output_dir
+        """
+        A Class to resize a video file to a specified MB target.
+        This class utilizes ffmpeg's two-pass encoding technique with the
+        ffmpeg-python wrapper package.
+        https://trac.ffmpeg.org/wiki/Encode/H.264#twopass
+
+        :param filename: video file that needs to be compressed
+        :param output_dir: directory that the new, compressed output is delivered to
+        :param times: dict containing "from" and "to" timestamp keys in the format 00:00:00
+        :param target_filesize: desired file size of the output file, in MB
+        :param audio_br: desired audio bitrate for the output file in kbps
+        :param codec: ffmpeg video codec to use when encoding the file
+        :param crop: coordinates for cropping the video to a different resolution
+        :param resolution: output file's final resolution e.g. 1280x720
+        :param config_file: json containing values for the above params
+        """
 
         if config_file:
             self.init_from_config(config_file=config_file)
@@ -31,6 +44,16 @@ class TwoPass:
             self.target_filesize = target_filesize
             self.crop = crop
             self.resolution = resolution
+            self.times = times
+            self.audio_br = audio_br
+
+        self.filename = filename
+        self.output_dir = output_dir
+        self.codec = codec
+
+        self.probe = ffmpeg.probe(filename=self.filename)
+        self.fname = self.filename.replace("\\", "/").split("/")[-1]
+        self.split_fname = self.fname.split(".")
 
         if len(self.probe["streams"]) > 2:
             logging.warning(
@@ -45,13 +68,10 @@ class TwoPass:
             elif stream["codec_type"] == "audio":
                 audio_stream = ix
 
-        if not audio_br:
-            self.audio_br = self.probe["streams"][audio_stream]["bit_rate"]
+        if not self.audio_br:
+            self.audio_br = float(self.probe["streams"][audio_stream]["bit_rate"])
         else:
             self.audio_br = audio_br * 1000
-
-        self.fname = self.filename.replace("\\", "/").split("/")[-1]
-        self.split_fname = self.fname.split(".")
 
         self.output_filename = (
             self.output_dir
@@ -61,14 +81,34 @@ class TwoPass:
         )
 
         self.duration = math.floor(float(self.probe["format"]["duration"]))
-        self.time_calculations()
+
+        if self.times:
+            self.times["ss"] = self.times.pop("from") if self.times.get("from") else "00:00:00"
+            from_seconds = seconds_from_ts_string(self.times["ss"])
+
+            if self.times.get("to"):
+                to_seconds = seconds_from_ts_string(self.times["to"])
+                self.length = to_seconds - from_seconds
+            else:
+                self.length = self.duration - from_seconds
+        else:
+            self.time_from_file_name()
 
     def init_from_config(self, config_file: str) -> None:
+        """
+        Set the Class values from a json file
+        :param config_file: path to a json file containing parameters for TwoPass()
+        """
         with open(config_file) as f:
             config = json.load(f)
         self.__dict__.update(**config)
 
     def generate_params(self, codec: str):
+        """
+        Create params for the ffmpeg.output() function
+        :param codec: ffmpeg video codec to use during encoding
+        :return: dictionary containing parameters for ffmpeg's first and second pass.
+        """
         params = {
             "pass1": {
                 "pass": 1,
@@ -88,6 +128,10 @@ class TwoPass:
         return params
 
     def create_bitrate_dict(self) -> None:
+        """
+        Perform the calculation specified in ffmpeg's documentation that generates
+        the video bitrates needed to achieve the target file size
+        """
         br = math.floor((self.target_filesize * 8192) / self.length - (self.audio_br / 1000)) * 1000
         self.bitrate_dict = {
             "b:v": br,
@@ -96,19 +140,22 @@ class TwoPass:
             "bufsize": br * 2,
         }
 
-    def time_calculations(self):
+    def time_from_file_name(self):
+        """
+        Create the -ss and -to fields from a file's name
+        """
         fname = self.fname
-        startstring = fname[0:2] + ":" + fname[2:4] + ":" + fname[4:6]
-        endstring = fname[7:9] + ":" + fname[9:11] + ":" + fname[11:13]
+        startstring = f"{fname[0:2]}:{fname[2:4]}:{fname[4:6]}"
+        endstring = f"{fname[7:9]}:{fname[9:11]}:{fname[11:13]}"
         times = {}
 
         try:
             int(fname[0:6])
-            startseconds = int(fname[0:2]) * 60 * 60 + int(fname[2:4]) * 60 + int(fname[4:6])
+            startseconds = seconds_from_ts_string(startstring)
             times["ss"] = startstring
             try:
                 int(fname[11:13])
-                endseconds = int(fname[7:9]) * 60 * 60 + int(fname[9:11]) * 60 + int(fname[11:13])
+                endseconds = seconds_from_ts_string(endstring)
                 length = endseconds - startseconds
                 times["to"] = endstring
             except:
@@ -124,8 +171,12 @@ class TwoPass:
         self.length = length
         self.times = times
 
-    def apply_video_filters(self, ffinput):
-        video = ffinput.video
+    def apply_video_filters(self, video):
+        """
+        Function to apply the crop and resolution parameters to a video object
+        :param video: the ffmpeg video object from the Class's input video file
+        :return: the video object after it has been cropped or resized
+        """
 
         if self.crop:
             crop = self.crop.split("x")
@@ -149,13 +200,17 @@ class TwoPass:
         return video
 
     def run(self) -> float:
+        """
+        Perform the CPU-intensive encoding job
+        :return: the output file's size
+        """
         # generate run parameters
         self.create_bitrate_dict()
         params = self.generate_params(codec=self.codec)
 
         # separate streams from ffinput
         ffinput = ffmpeg.input(self.filename, **self.times)
-        video = self.apply_video_filters(ffinput)
+        video = self.apply_video_filters(ffinput.video)
         audio = ffinput.audio
 
         # First Pass
@@ -174,3 +229,7 @@ class TwoPass:
         self.output_filesize = os.path.getsize(self.output_filename) * 0.00000095367432
 
         return self.output_filesize
+
+
+def seconds_from_ts_string(ts_string: str):
+    return int(ts_string[0:2]) * 60 * 60 + int(ts_string[3:5]) * 60 + int(ts_string[6:8])
