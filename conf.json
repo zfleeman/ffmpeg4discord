@@ -3,8 +3,9 @@
     "audio_br": 96,
     "crop": "",
     "resolution": "",
+    "codec": "libx264",
     "times": {
-        "from": "00:00:05",
-        "to": "00:00:38"
+        "from": "00:00:00",
+        "to": "00:00:40"
     }
 }

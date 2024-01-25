@@ -19,7 +19,7 @@ class TwoPass:
         codec: str = "libx264",
         crop: str = "",
         resolution: str = "",
-        config_file: str = "",
+        config: str = "",
     ) -> None:
         """
         A Class to resize a video file to a specified MB target.
@@ -35,25 +35,26 @@ class TwoPass:
         :param codec: ffmpeg video codec to use when encoding the file
         :param crop: coordinates for cropping the video to a different resolution
         :param resolution: output file's final resolution e.g. 1280x720
-        :param config_file: json containing values for the above params
+        :param config: json containing values for the above params
         """
 
-        if config_file:
-            self.init_from_config(config_file=config_file)
+        if config:
+            self.init_from_config(config_file=config)
         else:
             self.target_filesize = target_filesize
             self.crop = crop
             self.resolution = resolution
             self.times = times
             self.audio_br = audio_br
+            self.codec = codec
 
         self.filename = filename
-        self.output_dir = output_dir
-        self.codec = codec
-
-        self.probe = ffmpeg.probe(filename=self.filename)
         self.fname = self.filename.replace("\\", "/").split("/")[-1]
         self.split_fname = self.fname.split(".")
+        self.output_dir = output_dir
+
+        self.probe = ffmpeg.probe(filename=filename)
+        self.duration = math.floor(float(self.probe["format"]["duration"]))
 
         if len(self.probe["streams"]) > 2:
             logging.warning(
@@ -71,7 +72,7 @@ class TwoPass:
         if not self.audio_br:
             self.audio_br = float(self.probe["streams"][audio_stream]["bit_rate"])
         else:
-            self.audio_br = audio_br * 1000
+            self.audio_br = self.audio_br * 1000
 
         self.output_filename = (
             self.output_dir
@@ -80,10 +81,13 @@ class TwoPass:
             + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
         )
 
-        self.duration = math.floor(float(self.probe["format"]["duration"]))
-
         if self.times:
-            self.times["ss"] = self.times.pop("from") if self.times.get("from") else "00:00:00"
+            if self.times.get("from"):
+                self.times["ss"] = self.times["from"] or "00:00:00"
+                del self.times["from"]
+            else:
+                self.times["ss"] = "00:00:00"
+
             from_seconds = seconds_from_ts_string(self.times["ss"])
 
             if self.times.get("to"):
@@ -93,6 +97,20 @@ class TwoPass:
                 self.length = self.duration - from_seconds
         else:
             self.time_from_file_name()
+
+        if self.length <= 0:
+            raise Exception(
+                f"""
+                Time Paradox?
+
+                Something is wrong with your clipping times. Use this
+                information to further diagnose the problem:
+
+                - Your video is {self.duration / 60} minutes long
+                - You want to START clipping at {self.times["ss"]}
+                - You want to STOP clipping at {self.times["to"]}
+                """
+            )
 
     def init_from_config(self, config_file: str) -> None:
         """
@@ -162,11 +180,6 @@ class TwoPass:
                 length = self.duration - startseconds
         except:
             length = self.duration
-
-        if length <= 0:
-            raise Exception(
-                f"Your video is {self.duration / 60} minutes long, but you wanted to start clpping at {self.times['ss']}"
-            )
 
         self.length = length
         self.times = times
