@@ -8,15 +8,23 @@ The `TwoPass()` Class showcases a 2-pass encoding methodology for the `ffmpeg-py
 ## Usage
 You must first have `ffmpeg` installed on your system. `ffmpeg` needs to be registered in your PATH.
 
-Install the required Python package, `ffmpeg-python` with:
+Install the required Python packages, which includes `ffmpeg-python`, with:
 
-```pip install ffmpeg-python```
+```pip install -r requirements.txt```
 
 Call the script with:
 
 ```python "C:/path/to/ffmpeg4discord.py" cool_clip.mp4```
 
 The included Batch file for Windows users, `encode.bat`, allows for drag and drop functionality. Be sure to edit the Batch file before dragging your video files on top of it.
+
+### Special install instructions for Windows users
+
+If you do not have ffmpeg installed, you can use the included `windows_setup.py` file to do about 90% of the installation.
+
+```python windows_setup.py```
+
+This script downloads ffmpeg, extracts it into the current directory, and launches the Windows Environment Variable editor dialog. Follow the instructions printed out by the script. Don't worry, you got this.
 
 ## File name formatting
 1) `000020.mp4`
