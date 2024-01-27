@@ -12,8 +12,6 @@ Install the required Python packages, which includes `ffmpeg-python`, with:
 
 ```pip install -r requirements.txt```
 
-That command will
-
 Call the script with:
 
 ```python "C:/path/to/ffmpeg4discord.py" cool_clip.mp4```
