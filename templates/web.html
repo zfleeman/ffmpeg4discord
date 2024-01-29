@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Selection with Sliders</title>
+</head>
+<body>
+    <video id="myVideo" width="400" controls>
+        <source src="{{ filename }}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+
+    <br>
+
+    <label for="startTime">Start Time:</label>
+    <input type="range" id="startTime" min="0" value="0" step="1" max="0">
+    <span id="startTimeLabel">0</span> seconds
+
+    <br>
+
+    <label for="endTime">End Time:</label>
+    <input type="range" id="endTime" min="0" value="0" step="1" max="0">
+    <span id="endTimeLabel">0</span> seconds
+
+    <br>
+
+    <button onclick="setTime('start')">Set Start Time</button>
+    <button onclick="setTime('end')">Set End Time</button>
+    <button onclick="selectVideoPart()">Select</button>
+
+    <script>
+        const video = document.getElementById('myVideo');
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+        const startTimeLabel = document.getElementById('startTimeLabel');
+        const endTimeLabel = document.getElementById('endTimeLabel');
+
+        video.addEventListener('loadedmetadata', () => {
+            // Set the maximum value of the input elements to the video duration
+            startTimeInput.max = video.duration;
+            endTimeInput.max = video.duration;
+        });
+
+        startTimeInput.addEventListener('input', updateStartTimeLabel);
+        endTimeInput.addEventListener('input', updateEndTimeLabel);
+
+        function updateStartTimeLabel() {
+            startTimeLabel.textContent = startTimeInput.value + ' seconds';
+        }
+
+        function updateEndTimeLabel() {
+            endTimeLabel.textContent = endTimeInput.value + ' seconds';
+        }
+
+        function setTime(type) {
+            const currentTime = Math.floor(video.currentTime);
+            
+            if (type === 'start') {
+                startTimeInput.value = currentTime;
+                startTimeLabel.textContent = currentTime + ' seconds';
+            } else if (type === 'end') {
+                endTimeInput.value = currentTime;
+                endTimeLabel.textContent = currentTime + ' seconds';
+            }
+        }
+
+        function selectVideoPart() {
+            const startTime = parseInt(startTimeInput.value);
+            const endTime = parseInt(endTimeInput.value);
+
+            if (!isNaN(startTime) && !isNaN(endTime) && startTime < endTime) {
+                video.currentTime = startTime;
+                video.play();
+
+                setTimeout(() => {
+                    video.pause();
+                    video.currentTime = endTime;
+                }, (endTime - startTime) * 1000);
+            } else {
+                alert('Please enter valid start and end times.');
+            }
+        }
+    </script>
+</body>
+</html>
