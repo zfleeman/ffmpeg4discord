@@ -1,34 +1,77 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Selection with Sliders</title>
+    <title>The Ephemeral Web UI for ffmpeg4discord</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <style>
+        video {
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+    </style>
 </head>
 <body>
-    <video id="myVideo" width="400" controls>
-        <source src="{{ filename }}" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
-
-    <br>
-
-    <label for="startTime">Start Time:</label>
-    <input type="range" id="startTime" min="0" value="0" step="1" max="0">
-    <span id="startTimeLabel">0</span> seconds
-
-    <br>
-
-    <label for="endTime">End Time:</label>
-    <input type="range" id="endTime" min="0" value="0" step="1" max="0">
-    <span id="endTimeLabel">0</span> seconds
-
-    <br>
-
-    <button onclick="setTime('start')">Set Start Time</button>
-    <button onclick="setTime('end')">Set End Time</button>
-    <button onclick="selectVideoPart()">Select</button>
-
+    <div class="container">
+        <div class="row">
+            <video id="myVideo" controls>
+                <source src="{{ filename }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </div>
+        <form action="/encode" method="post">
+            <div class="row">
+                <div class="col">
+                    <button type="button" class="btn btn-primary" onclick="setTime('start')">Set Start Time</button>
+                    <br />
+                    <label for="startTime">Start Time:</label>
+                    <input type="range" id="startTime" min="0" value="0" step="1" max="0">
+                    <span id="startTimeLabel">0</span>
+                </div>
+                <div class="col">
+                    <button type="button" class="btn btn-primary" onclick="setTime('end')">Set End Time</button>
+                    <br />
+                    <label for="endTime">End Time:</label>
+                    <input type="range" id="endTime" min="0" value="0" step="1" max="0">
+                    <span id="endTimeLabel">0</span>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <br />
+                    <button type="button" class="btn btn-primary" onclick="selectVideoPart()">Preview Selection</button>
+                </div>
+            </div>
+            <div class="row">
+                <h3>Output Parameters</h3>
+                <div class="col">
+                    <label for="resolution">Resolution</label>
+                    <input id="resolution" type="text" placeholder="{{ resolution }}" />
+                </div>
+                <div class="col">
+                    <label for="target_filesize">Target File Size</label>
+                    <input id="target_filesize" type="text" placeholder="{{ target_filesize }}" />
+                </div>
+                <div class="col">
+                    <label for="audio_br">Audio Bitrate</label>
+                    <input id="audio_br" type="text" placeholder="{{ audio_br/1000 }}" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <label for="crop">Crop</label>
+                    <input id="crop" type="text" placeholder="{{ crop }}" />
+                </div>
+                <div class="col">
+                    <label for="output_dir">Output Directory</label>
+                    <input id="output_dir" type="text" placeholder="{{ output_dir }}" />
+                </div>
+            </div>
+            <br />
+            <button class="submission btn btn-primary" type="submit">Encode</button>
+        </form>
+    </div>
     <script>
         const video = document.getElementById('myVideo');
         const startTimeInput = document.getElementById('startTime');

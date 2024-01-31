@@ -16,9 +16,12 @@ path = Path(args["filename"]).resolve()
 args["filename"] = path
 app = Flask(__name__, static_folder=path.parent)
 
+# instantiate the TwoPass class
+twopass = TwoPass(**args)
+
 
 def twopass_loop(twopass: TwoPass):
-    while twopass.run() >= end_fs:
+    while twopass.run() >= args["target_filesize"]:
         print(
             f"\nThe output file size ({round(twopass.output_filesize, 2)}MB) is still above the target of {end_fs}MB.\nRestarting...\n"
         )
@@ -39,7 +42,15 @@ def open_browser():
 
 @app.route("/")
 def index():
-    return render_template("web.html", filename=url_for("static", filename=path.name))
+    return render_template(
+        "web.html",
+        filename=url_for("static", filename=path.name),
+        resolution=twopass.resolution,
+        target_filesize=twopass.target_filesize,
+        audio_br=twopass.audio_br,
+        crop=twopass.crop,
+        output_dir=twopass.output_dir,
+    )
 
 
 if web:
@@ -47,7 +58,4 @@ if web:
     threading.Thread(target=open_browser, name="Open Browser").start()
     app.run("0.0.0.0", port=port)
 else:
-    # instantiate the TwoPass class and save our target file size for comparison in the loop
-    twopass = TwoPass(**args)
-    end_fs = args["target_filesize"]
     twopass_loop(twopass=twopass)

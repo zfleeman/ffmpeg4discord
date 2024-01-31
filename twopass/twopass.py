@@ -78,7 +78,7 @@ class TwoPass:
         self.output_filename = (
             self.output_dir
             + "small_"
-            + self.split_fname[0].replace(" ", "_")
+            + self.filename.stem.replace(" ", "_")
             + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
         )
 
