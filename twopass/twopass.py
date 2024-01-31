@@ -4,6 +4,7 @@ import logging
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -11,7 +12,7 @@ logging.getLogger().setLevel(logging.INFO)
 class TwoPass:
     def __init__(
         self,
-        filename: str,
+        filename: Path,
         target_filesize: float,
         output_dir: str = "",
         times: dict = {},
@@ -49,7 +50,7 @@ class TwoPass:
             self.codec = codec
 
         self.filename = filename
-        self.fname = self.filename.replace("\\", "/").split("/")[-1]
+        self.fname = filename.name
         self.split_fname = self.fname.split(".")
         self.output_dir = output_dir
 

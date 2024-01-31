@@ -6,12 +6,15 @@ from flask import Flask, render_template, url_for
 from random import randint
 import time
 import threading
+from pathlib import Path
 
-app = Flask(__name__)
 
 # get args from the command line
 args = get_args()
 web = args.pop("web")
+path = Path(args["filename"]).resolve()
+args["filename"] = path
+app = Flask(__name__, static_folder=path.parent)
 
 
 def twopass_loop(twopass: TwoPass):
@@ -31,13 +34,12 @@ def twopass_loop(twopass: TwoPass):
 
 def open_browser():
     time.sleep(0.5)
-    webbrowser.open(f"localhost:{port}")
+    webbrowser.open(f"http://localhost:{port}")
 
 
 @app.route("/")
 def index():
-    os.symlink(args["filename"], f"static/{args['filename'].split('/')[-1]}")
-    return render_template("web.html", filename=url_for("static", filename=args['filename'].split('/')[-1]))
+    return render_template("web.html", filename=url_for("static", filename=path.name))
 
 
 if web:
