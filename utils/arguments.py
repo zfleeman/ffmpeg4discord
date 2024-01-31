@@ -1,4 +1,4 @@
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, Namespace, BooleanOptionalAction
 
 
 def get_args() -> Namespace:
@@ -7,7 +7,7 @@ def get_args() -> Namespace:
         description="Video compression script.",
         epilog="Compress those sick clips, boi.",
     )
-
+    parser.add_argument("--web", action=BooleanOptionalAction)
     parser.add_argument("filename", help="The full file path of the file that you wish to compress.")
     parser.add_argument(
         "-o",
