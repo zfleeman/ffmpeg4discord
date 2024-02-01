@@ -212,7 +212,7 @@ class TwoPass:
         :return: the output file's size
         """
 
-        output_filename = (
+        self.output_filename = (
             self.output_dir
             + "small_"
             + self.filename.stem.replace(" ", "_")
@@ -235,13 +235,13 @@ class TwoPass:
         std_out, std_err = ffOutput.run(capture_stdout=True)
 
         # Second Pass
-        ffOutput = ffmpeg.output(video, audio, output_filename, **params["pass2"])
+        ffOutput = ffmpeg.output(video, audio, self.output_filename, **params["pass2"])
         ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
         print("\nPerforming second pass")
         ffOutput.run(overwrite_output=True)
 
         # save the output file size and return it
-        self.output_filesize = os.path.getsize(output_filename) * 0.00000095367432
+        self.output_filesize = os.path.getsize(self.output_filename) * 0.00000095367432
 
         return self.output_filesize
 
