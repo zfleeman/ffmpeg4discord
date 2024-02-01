@@ -1,4 +1,5 @@
 import os
+from glob import glob
 from utils.arguments import get_args
 from twopass import TwoPass
 import webbrowser
@@ -81,6 +82,9 @@ if web:
         twopass.output_dir = request.form.get("output_dir")
 
         twopass_loop(target_filesize)
+
+        for file in glob("ffmpeg2pass*"):
+            os.remove(file)
 
         return f"Your compressed video file is located at <strong>{Path(twopass.output_filename).resolve()}</strong>"
 
