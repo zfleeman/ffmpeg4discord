@@ -22,11 +22,11 @@ def get_args() -> Namespace:
         type=float,
         help="The output file size in MB. Free Discord accepts a max of 8MB.",
     )
-    parser.add_argument("-a", "--audio-br", type=float, help="Audio bitrate in kbps.")
+    parser.add_argument("-a", "--audio-br", type=float, default=96, help="Audio bitrate in kbps.")
 
     # video filters
-    parser.add_argument("-x", "--crop", help="Cropping dimensions. Example: 255x0x1410x1080")
-    parser.add_argument("-r", "--resolution", help="The output resolution of your final video.")
+    parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
+    parser.add_argument("-r", "--resolution", default="", help="The output resolution of your final video.")
 
     # configuraiton json file
     parser.add_argument("--config", help="JSON file containing the run's configuration")
