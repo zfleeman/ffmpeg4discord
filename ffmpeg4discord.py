@@ -1,13 +1,16 @@
+import sys
 import os
 from glob import glob
-from utils.arguments import get_args
-from twopass import TwoPass
 import webbrowser
 from flask import Flask, render_template, url_for, request
 from random import randint
 import time
 import threading
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+from utils.arguments import get_args
+from twopass import TwoPass
 
 
 # get args from the command line
@@ -35,7 +38,7 @@ def twopass_loop(target_filesize: float):
     )
 
 
-def seconds_to_timestamp(seconds):
+def seconds_to_timestamp(seconds: int):
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
 

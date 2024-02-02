@@ -218,7 +218,7 @@ class TwoPass:
             + self.filename.stem.replace(" ", "_")
             + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
         )
-        
+
         # generate run parameters
         self.create_bitrate_dict()
         params = self.generate_params(codec=self.codec)
