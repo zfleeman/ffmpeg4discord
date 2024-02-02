@@ -18,6 +18,7 @@ args = get_args()
 web = args.pop("web")
 path = Path(args["filename"]).resolve()
 args["filename"] = path
+port = args.pop("port")
 
 # instantiate the TwoPass class
 twopass = TwoPass(**args)
@@ -91,7 +92,6 @@ if web:
 
         return f"Your compressed video file ({round(twopass.output_filesize, 2)}MB) is located at <strong>{Path(twopass.output_filename).resolve()}</strong>"
 
-    port = randint(5000, 6000)
     threading.Thread(target=open_browser, name="Open Browser").start()
     app.run("0.0.0.0", port=port)
 else:

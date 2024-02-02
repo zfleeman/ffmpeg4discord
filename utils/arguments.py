@@ -7,7 +7,6 @@ def get_args() -> Namespace:
         description="Video compression script.",
         epilog="Compress those sick clips, boi.",
     )
-    parser.add_argument("--web", action=BooleanOptionalAction)
     parser.add_argument("filename", help="The full file path of the file that you wish to compress.")
     parser.add_argument(
         "-o",
@@ -30,5 +29,9 @@ def get_args() -> Namespace:
 
     # configuraiton json file
     parser.add_argument("--config", help="JSON file containing the run's configuration")
+
+    # web
+    parser.add_argument("--web", action=BooleanOptionalAction)
+    parser.add_argument("-p", "--port", type=int, default=5333, help="Local port for the Flask application.")
 
     return vars(parser.parse_args())
