@@ -89,7 +89,7 @@ if web:
         for file in glob("ffmpeg2pass*"):
             os.remove(file)
 
-        return f"Your compressed video file is located at <strong>{Path(twopass.output_filename).resolve()}</strong>"
+        return f"Your compressed video file ({round(twopass.output_filesize, 2)}MB) is located at <strong>{Path(twopass.output_filename).resolve()}</strong>"
 
     port = randint(5000, 6000)
     threading.Thread(target=open_browser, name="Open Browser").start()
