@@ -5,7 +5,7 @@ The `ffmpeg4discord.py` script takes a video file as its input and encodes it to
 
 The `TwoPass()` Class showcases a 2-pass encoding methodology for the `ffmpeg-python` library, which is not well-documented on the web. The Class also supports a few ffmpeg video filters, like cropping and resolution scaling. It can be used in a variety of different audio/video workflows.
 
-## Usage
+## Installation and Usage
 You must first have `ffmpeg` installed on your system. `ffmpeg` needs to be registered in your PATH.
 
 Install the required Python packages, which includes `ffmpeg-python`, with:
@@ -18,7 +18,7 @@ Call the script with:
 
 The included Batch file for Windows users, `encode.bat`, allows for drag and drop functionality. Be sure to edit the Batch file before dragging your video files on top of it.
 
-### Special install instructions for Windows users
+### Special instructions for Windows users
 
 If you do not have ffmpeg installed, you can use the included `windows_setup.py` file to do about 90% of the installation.
 
@@ -50,6 +50,8 @@ This script downloads ffmpeg, extracts it into the current directory, and launch
   - Example: `255x0x1410x1080`
   - From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video.
   - [ffmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61)
+- `--web`
+  - A Boolean flag. No value is needed after the flag. See [Web UI](#web-ui) for more information on the Web UI.
 - `--config`
   - Example: `custom_run_config.json`
   - Path to a json file containing the configuration for the above parameters. This config file takes precedence over all of the other flags.
@@ -106,3 +108,25 @@ python D:/ffmpeg4discord/ffmpeg4discord.py 000050-000145.mp4 \
 The example above takes a 5120x1440 resolution video as its input. The script trims the video from 00:00:50 to 00:01:45 (specified in the [file name](https://github.com/zfleeman/ffmpeg4discord#file-name-formatting)). It crops a 2560x1440 section starting at 1280 pixels from the top-left and 0 pixels down (`-c`). The output file will be located in `D:/shadowplay/` (`-o`) with a new resolution of 1920x1080 (`-r`), and it will be 50MB (`-s`). The audio bitrate will be reduced to 48k (`-a`) as well, but that's probably going to sound terrible.
 
 ![](https://i.imgur.com/WJXA723.png)
+
+## Web UI
+
+The Web UI can be activated by adding `--web` to your `ffmpeg4discord.py` call.
+
+```
+python "C:/path/to/ffmpeg4discord.py" cool_clip.mp4 -r 1280x720 -s 20 --web
+```
+
+That command will spin up a Flask server on your local machine and launch a rendered webpage with the video as the centerpiece. The flags you provide to the `python` statement will fill in the defaults for the form. You can override/replace the values.
+
+You can drag the video playhead to different portions of the video and click the "Set Start/End Time" buttons to specify the section of the video you want to be clipped out. You can also use the range sliders underneath the buttons if you prefer. A "Preview Selection" button is provided for your convenience, and it does what it sounds like.
+
+https://github.com/zfleeman/ffmpeg4discord/assets/1808564/ff323bcb-4747-437b-808f-ce48b8c269ce
+
+The Flask server doesn't automatically stop itself, yet, so you'll have to handle that by closing the terminal it leaves hanging.
+
+## Thanks!
+
+Yes, this is a simple collection of Python files using FFmpeg tricks that is masquerading as a robust Audio/Video tool. But! I use this nearly every day to quickly share videos with people on various messaging apps that have built-in video players. I don't have to share a link that embeds a video player this way, and I guess that's important to me?
+
+I like working on this! Enjoy!

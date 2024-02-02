@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Ephemeral Web UI for ffmpeg4discord</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css">
+</head>
+<body>
+    <div class="container">
+        <div class="row mt-3">
+            <video id="myVideo" preload="auto" controls>
+                <source src="{{ filename }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+            <p class="text-muted"><em>Drag the video playhead, and use the buttons below to set the Start and End times.</em></p> 
+        </div>
+        <form id="encodeForm" action="/encode" method="post">
+            <div class="row mb-3">
+                <div class="col">
+                    <button type="button" class="btn btn-outline-primary" onclick="setTime('start')"><span class="bi-skip-start-fill"></span> Set Start Time</button>
+                </div>
+                <div class="col">
+                    <button type="button" class="btn btn-outline-primary" onclick="setTime('end')">Set End Time <span class="bi-skip-end-fill"></span></button>
+                </div>
+            </div>
+            <div class="row mb-3">
+                <div class="col">
+                    <label for="startTime" class="form-label padding-top">Start Time:</label>
+                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" defaultValue="0" step="1" max="0">
+                    <span id="startTimeLabel">0</span>
+                </div>
+                <div class="col">
+                    <label for="endTime" class="form-label">End Time:</label>
+                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" defaultValue="0" step="1" max="0">
+                    <span id="endTimeLabel">0</span>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <button type="button" class="btn btn-outline-primary" onclick="selectVideoPart()"><span class="bi-play"></span> Preview Selection</button>
+                </div>
+            </div>
+            <hr />
+            <div class="row mb-3">
+                <h3>Output Parameters</h3>
+                <div class="col">
+                    <label for="resolution" class="form-label">Resolution</label>
+                    <input class="form-control" name="resolution" id="resolution" type="text" value="{{ resolution }}" />
+                </div>
+                <div class="col">
+                    <label for="target_filesize" class="form-label">Target File Size (MB)</label>
+                    <input class="form-control" name="target_filesize" id="target_filesize" type="text" value="{{ target_filesize }}" />
+                </div>
+                <div class="col">
+                    <label for="audio_br" class="form-label">Audio Bitrate (kbps)</label>
+                    <input class="form-control" name="audio_br" id="audio_br" type="text" value="{{ audio_br/1000 }}" />
+                </div>
+                <div class="col">
+                    <label for="crop" class="form-label">Crop</label>
+                    <input class="form-control" name="crop" id="crop" type="text" value="{{ crop }}" />
+                </div>
+                <div class="col">
+                    <label for="output_dir" class="form-label">Output Directory</label>
+                    <input class="form-control" name="output_dir" id="output_dir" type="text" value="{{ output_dir }}" />
+                </div>
+            </div>
+            <div class="row mb-3">
+                <div class="col">
+                    <button id="spinButton" onclick="startSpin()" class="submission btn btn-primary btn-lg" type="submit">
+                        <span class="bi-film"></span> Encode
+                    </button>
+                    <span id="spinIcon" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" hidden></span>
+                </div>
+            </div>
+        </form>
+    </div>
+    <script>
+        const video = document.getElementById('myVideo');
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+        const startTimeLabel = document.getElementById('startTimeLabel');
+        const endTimeLabel = document.getElementById('endTimeLabel');
+
+        video.addEventListener('loadedmetadata', () => {
+            // Set the maximum value of the input elements to the video duration
+            startTimeInput.max = video.duration;
+            endTimeInput.max = video.duration;
+        });
+
+        startTimeInput.addEventListener('input', updateStartTimeLabel);
+        endTimeInput.addEventListener('input', updateEndTimeLabel);
+
+        function updateStartTimeLabel() {
+            startTimeLabel.textContent = startTimeInput.value + ' seconds';
+        }
+
+        function updateEndTimeLabel() {
+            endTimeLabel.textContent = endTimeInput.value + ' seconds';
+        }
+
+        function setTime(type) {
+            const currentTime = Math.floor(video.currentTime);
+            
+            if (type === 'start') {
+                startTimeInput.value = currentTime;
+                startTimeLabel.textContent = currentTime + ' seconds';
+            } else if (type === 'end') {
+                endTimeInput.value = currentTime;
+                endTimeLabel.textContent = currentTime + ' seconds';
+            }
+        }
+
+        function selectVideoPart() {
+            const startTime = parseInt(startTimeInput.value);
+            const endTime = parseInt(endTimeInput.value);
+
+            if (!isNaN(startTime) && !isNaN(endTime) && startTime < endTime) {
+                video.currentTime = startTime;
+                video.play();
+
+                setTimeout(() => {
+                    video.pause();
+                    video.currentTime = endTime;
+                }, (endTime - startTime) * 1000);
+            } else {
+                alert('Please enter valid start and end times.');
+            }
+        }
+
+        function startSpin() {
+            // Get the icon element
+            var icon = document.getElementById('spinIcon');
+            icon.hidden = false;
+
+            // Disable the button temporarily to prevent multiple clicks
+            document.getElementById('spinButton').disabled = true;
+            document.getElementById('encodeForm').submit();
+
+        }
+    </script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import logging
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -11,7 +12,7 @@ logging.getLogger().setLevel(logging.INFO)
 class TwoPass:
     def __init__(
         self,
-        filename: str,
+        filename: Path,
         target_filesize: float,
         output_dir: str = "",
         times: dict = {},
@@ -49,7 +50,7 @@ class TwoPass:
             self.codec = codec
 
         self.filename = filename
-        self.fname = self.filename.replace("\\", "/").split("/")[-1]
+        self.fname = filename.name
         self.split_fname = self.fname.split(".")
         self.output_dir = output_dir
 
@@ -73,13 +74,6 @@ class TwoPass:
             self.audio_br = float(self.probe["streams"][audio_stream]["bit_rate"])
         else:
             self.audio_br = self.audio_br * 1000
-
-        self.output_filename = (
-            self.output_dir
-            + "small_"
-            + self.split_fname[0].replace(" ", "_")
-            + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
-        )
 
         if self.times:
             if self.times.get("from"):
@@ -217,6 +211,14 @@ class TwoPass:
         Perform the CPU-intensive encoding job
         :return: the output file's size
         """
+
+        self.output_filename = (
+            self.output_dir
+            + "small_"
+            + self.filename.stem.replace(" ", "_")
+            + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
+        )
+
         # generate run parameters
         self.create_bitrate_dict()
         params = self.generate_params(codec=self.codec)
