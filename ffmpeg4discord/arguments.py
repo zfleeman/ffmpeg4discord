@@ -30,6 +30,9 @@ def get_args() -> Namespace:
     # configuraiton json file
     parser.add_argument("--config", help="JSON file containing the run's configuration")
 
+    # installer
+    parser.add_argument("--install", action=BooleanOptionalAction)
+
     # web
     parser.add_argument("--web", action=BooleanOptionalAction)
     parser.add_argument("-p", "--port", type=int, default=5333, help="Local port for the Flask application.")
