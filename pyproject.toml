@@ -14,7 +14,6 @@ description = "A tool to help convert an video file to a target file size."
 authors = [{ name = "Zach Fleeman", email = "zfleeman@gmail.com" }]
 dependencies = [
     "Flask==3.0.1",
-    "pyperclip==1.8.2",
     "ffmpeg-python==0.2.0"
 ]
 
