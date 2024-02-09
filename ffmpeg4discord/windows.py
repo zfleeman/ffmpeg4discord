@@ -31,22 +31,25 @@ def download_with_progress(url, save_path):
         percent = round(progress * 100, 2)
         print(f"\rDownloaded {downloaded}/{total_size} bytes ({percent}%)", end="")
 
+    save_dir = Path(save_path).parent
+    save_dir.mkdir(parents=True, exist_ok=True)
+
     urlretrieve(url, save_path, reporthook=report)
     print("\nDownload complete!")
 
 
 def setup():
-
     print("Downloading ffmpeg to ffmpeg.zip...")
-    download_with_progress("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip", "ffmpeg.zip")
+    download_with_progress("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip", "ffmpeg/ffmpeg.zip")
 
     print("Unzipping ffmpeg.zip...")
-    with zipfile.ZipFile("ffmpeg.zip", "r") as zip_ref:
-        zip_ref.extractall()
-        source = Path(f"{zip_ref.namelist()[0]}/bin").resolve()
+    with zipfile.ZipFile("ffmpeg/ffmpeg.zip", "r") as zip_ref:
+        zip_ref.extractall("ffmpeg/")
+        source = Path(f"ffmpeg/{zip_ref.namelist()[0]}/bin").resolve()
     print("Done!\n")
 
     copy_directory_contents(source=source, target=target)
+    shutil.rmtree("ffmpeg/")
 
     print("\nffmpeg installation complete.")
     print("\nOpen a new Terminal window and type ffmpeg and hit enter to verify that the installation succeeded.")
