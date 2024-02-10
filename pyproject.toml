@@ -19,7 +19,7 @@ dependencies = [
 
 [project.scripts]
 ffmpeg4discord = "ffmpeg4discord.app:main"
-install-ffmpeg = "ffmpeg4discord.windows:setup"
+install-ffmpeg-windows = "ffmpeg4discord.windows:setup"
 
 [tool.setuptools.package-data]
 ffmpeg4discord = ["templates/*.html"]
