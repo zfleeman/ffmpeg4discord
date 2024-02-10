@@ -212,11 +212,9 @@ class TwoPass:
         :return: the output file's size
         """
 
-        self.output_filename = (
-            self.output_dir
-            + "small_"
-            + self.filename.stem.replace(" ", "_")
-            + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
+        self.output_filename = str(
+            Path(self.output_dir)
+            / ("small_" + self.filename.stem.replace(" ", "_") + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4"))
         )
 
         # generate run parameters

@@ -1,12 +1,28 @@
-# I know this is sloppy and kind of sucks, but I figured it would help installation at least a little bit.
-
 import sys
+import os
 from urllib.request import urlretrieve
 import zipfile
 from pathlib import Path
 import shutil
+import logging
 
-target = Path(sys.executable).parent
+logging.getLogger().setLevel(logging.INFO)
+
+path = os.environ.get("PATH", "")
+target = Path(sys.executable).parent / "Scripts"
+target.mkdir(parents=True, exist_ok=True)
+
+if str(target) not in path:
+    logging.warning(
+        """
+        The directory we are installing ffmpeg into is not in your 
+        system's PATH. Windows will not be able to find ffmpeg when 
+        trying to run ffmpeg4discord. Please ensure that you installed 
+        Python with the "Add Python to PATH" option selected.
+        
+        More information: https://docs.python.org/3/using/windows.html#finding-the-python-executable
+        """
+    )
 
 
 def copy_directory_contents(source, target):
@@ -27,9 +43,11 @@ def copy_directory_contents(source, target):
 def download_with_progress(url, save_path):
     def report(block_num, block_size, total_size):
         downloaded = block_num * block_size
+        downloaded_mb = downloaded / (1024 * 1024)
+        total_size_mb = total_size / (1024 * 1024)
         progress = min(downloaded / total_size, 1.0)
         percent = round(progress * 100, 2)
-        print(f"\rDownloaded {downloaded}/{total_size} bytes ({percent}%)", end="")
+        print(f"\rDownloaded {downloaded_mb:.2f}/{total_size_mb:.2f} MB ({percent}%)", end="")
 
     save_dir = Path(save_path).parent
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -42,7 +60,7 @@ def setup():
     print("Downloading ffmpeg to ffmpeg.zip...")
     download_with_progress("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip", "ffmpeg/ffmpeg.zip")
 
-    print("Unzipping ffmpeg.zip...")
+    print("\nUnzipping ffmpeg.zip...")
     with zipfile.ZipFile("ffmpeg/ffmpeg.zip", "r") as zip_ref:
         zip_ref.extractall("ffmpeg/")
         source = Path(f"ffmpeg/{zip_ref.namelist()[0]}/bin").resolve()

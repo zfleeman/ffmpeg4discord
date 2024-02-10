@@ -8,16 +8,15 @@ import threading
 from pathlib import Path
 
 sys.dont_write_bytecode = True
-from ffmpeg4discord import arguments, windows
+from ffmpeg4discord import arguments
 from ffmpeg4discord.twopass import TwoPass
 
 # get args from the command line
 args = arguments.get_args()
 web = args.pop("web")
-install = args.pop("install")
+port = args.pop("port")
 path = Path(args["filename"]).resolve()
 args["filename"] = path
-port = args.pop("port")
 
 # instantiate the TwoPass class
 twopass = TwoPass(**args)
@@ -94,8 +93,5 @@ def main():
 
         threading.Thread(target=open_browser, name="Open Browser").start()
         app.run("0.0.0.0", port=port)
-
-    elif install:
-        windows.setup()
     else:
         twopass_loop(args["target_filesize"])
