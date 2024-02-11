@@ -4,10 +4,10 @@ from argparse import ArgumentParser, Namespace, BooleanOptionalAction
 def get_args() -> Namespace:
     parser = ArgumentParser(
         prog="ffmpeg4discord",
-        description="Video compression script.",
-        epilog="Compress those sick clips, boi.",
+        description="This script takes a video file as its input and encodes to a target file size.",
+        epilog="For more helpL: https://github.com/zfleeman/ffmpeg4discord\nCompress those sick clips, son!",
     )
-    parser.add_argument("filename", help="The full file path of the file that you wish to compress.")
+    parser.add_argument("filename", help="The  file path of the file that you wish to compress.")
     parser.add_argument(
         "-o",
         "--output-dir",
@@ -19,7 +19,7 @@ def get_args() -> Namespace:
         "--target-filesize",
         default=8,
         type=float,
-        help="The output file size in MB. Free Discord accepts a max of 8MB.",
+        help="The output file size in MB.",
     )
     parser.add_argument("-a", "--audio-br", type=float, default=96, help="Audio bitrate in kbps.")
 
@@ -31,7 +31,7 @@ def get_args() -> Namespace:
     parser.add_argument("--config", help="JSON file containing the run's configuration")
 
     # web
-    parser.add_argument("--web", action=BooleanOptionalAction)
+    parser.add_argument("--web", action=BooleanOptionalAction, help="Launch The Ephemeral Web UI in your browser.")
     parser.add_argument("-p", "--port", type=int, default=5333, help="Local port for the Flask application.")
 
     return vars(parser.parse_args())

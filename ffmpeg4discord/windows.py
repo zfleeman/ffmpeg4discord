@@ -1,3 +1,4 @@
+# THIS SCRIPT ONLY SUPPORTS WINDOWS AT THE MOMENT
 import sys
 import os
 from urllib.request import urlretrieve
@@ -56,7 +57,7 @@ def download_with_progress(url, save_path):
     print("\nDownload complete!")
 
 
-def setup():
+def install():
     print("Downloading ffmpeg to ffmpeg.zip...")
     download_with_progress("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip", "ffmpeg/ffmpeg.zip")
 
@@ -74,4 +75,4 @@ def setup():
 
 
 if __name__ == "__main__":
-    setup()
+    install()
