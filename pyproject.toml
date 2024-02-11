@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [dependencies]
 Flask = "3.0.1"
-pyperclip = "1.8.2"
 ffmpeg-python = "0.2.0"
 
 [project]
