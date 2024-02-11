@@ -2,10 +2,6 @@
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[dependencies]
-Flask = "3.0.1"
-ffmpeg-python = "0.2.0"
-
 [project]
 name = "ffmpeg4discord"
 version = "0.1.0"
