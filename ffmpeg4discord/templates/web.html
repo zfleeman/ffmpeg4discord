@@ -10,8 +10,14 @@
 <body>
     <div class="container">
         <div class="row mt-3">
+            <div class="alert alert-light" role="alert" {{ "hidden" if alert_hidden else "" }}>
+                <p>{{ alert }}</p>
+                <span class="text-danger">Remember to terminate this server before starting another job.</span>
+            </div>
+        </div>        
+        <div class="row mt-3">
             <video id="myVideo" preload="auto" controls>
-                <source src="{{ filename }}" type="video/mp4">
+                <source src="{{ file_url }}" type="video/mp4">
                 Your browser does not support the video tag.
             </video>
             <p class="text-muted"><em>Drag the video playhead, and use the buttons below to set the Start and End times.</em></p> 
@@ -28,13 +34,13 @@
             <div class="row mb-3">
                 <div class="col">
                     <label for="startTime" class="form-label padding-top">Start Time:</label>
-                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" defaultValue="0" step="1" max="0">
-                    <span id="startTimeLabel">0</span>
+                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="1" max="0">
+                    <span id="startTimeLabel">{{ twopass.from_seconds|string + " seconds" if twopass.from_seconds else "0 seconds" }}</span>
                 </div>
                 <div class="col">
                     <label for="endTime" class="form-label">End Time:</label>
-                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" defaultValue="0" step="1" max="0">
-                    <span id="endTimeLabel">0</span>
+                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="1" max="0">
+                    <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.length|string + " seconds" }}</span>
                 </div>
             </div>
             <div class="row">
@@ -47,23 +53,23 @@
                 <h3>Output Parameters</h3>
                 <div class="col">
                     <label for="resolution" class="form-label">Resolution</label>
-                    <input class="form-control" name="resolution" id="resolution" type="text" value="{{ resolution }}" />
+                    <input class="form-control" name="resolution" id="resolution" type="text" value="{{ twopass.resolution }}" />
                 </div>
                 <div class="col">
                     <label for="target_filesize" class="form-label">Target File Size (MB)</label>
-                    <input class="form-control" name="target_filesize" id="target_filesize" type="text" value="{{ target_filesize }}" />
+                    <input class="form-control" name="target_filesize" id="target_filesize" type="text" value="{{ twopass.target_filesize }}" />
                 </div>
                 <div class="col">
                     <label for="audio_br" class="form-label">Audio Bitrate (kbps)</label>
-                    <input class="form-control" name="audio_br" id="audio_br" type="text" value="{{ audio_br/1000 }}" />
+                    <input class="form-control" name="audio_br" id="audio_br" type="text" value="{{ twopass.audio_br/1000 }}" />
                 </div>
                 <div class="col">
                     <label for="crop" class="form-label">Crop</label>
-                    <input class="form-control" name="crop" id="crop" type="text" value="{{ crop }}" />
+                    <input class="form-control" name="crop" id="crop" type="text" value="{{ twopass.crop }}" />
                 </div>
                 <div class="col">
                     <label for="output_dir" class="form-label">Output Directory</label>
-                    <input class="form-control" name="output_dir" id="output_dir" type="text" value="{{ output_dir }}" />
+                    <input class="form-control" name="output_dir" id="output_dir" type="text" value="{{ twopass.output_dir }}" />
                 </div>
             </div>
             <div class="row mb-3">
@@ -87,6 +93,8 @@
             // Set the maximum value of the input elements to the video duration
             startTimeInput.max = video.duration;
             endTimeInput.max = video.duration;
+            startTimeInput.value = "{{ twopass.from_seconds if twopass.from_seconds else 0 }}"
+            endTimeInput.value = "{{ twopass.to_seconds if twopass.to_seconds else twopass.length }}"
         });
 
         startTimeInput.addEventListener('input', updateStartTimeLabel);

@@ -17,7 +17,7 @@ def get_args() -> Namespace:
     parser.add_argument(
         "-s",
         "--target-filesize",
-        default=8,
+        default=25,
         type=float,
         help="The output file size in MB.",
     )

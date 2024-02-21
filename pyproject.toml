@@ -8,13 +8,13 @@ version = "0.1.0"
 description = "A tool to help convert a video file to a target file size."
 readme = {file = "README.md", content-type = "text/markdown"}
 authors = [{ name = "Zach Fleeman", email = "zfleeman@gmail.com" }]
+requires-python = ">= 3.8"
 dependencies = [
     "Flask==3.0.1",
     "ffmpeg-python==0.2.0"
 ]
 classifiers = [
     "License :: OSI Approved :: MIT License",
-    "Development Status :: 3 - Alpha",
 ]
 
 [project.urls]
@@ -22,7 +22,7 @@ Homepage = "https://github.com/zfleeman/ffmpeg4discord"
 Issues = "https://github.com/zfleeman/ffmpeg4discord/issues"
 
 [project.scripts]
-ffmpeg4discord = "ffmpeg4discord.app:main"
+ff4d = "ffmpeg4discord.app:main"
 install-ffmpeg-windows = "ffmpeg4discord.windows:install"
 
 [tool.setuptools.package-data]

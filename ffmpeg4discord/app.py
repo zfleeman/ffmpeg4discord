@@ -22,7 +22,7 @@ args["filename"] = path
 twopass = TwoPass(**args)
 
 
-def twopass_loop(target_filesize: float):
+def twopass_loop(target_filesize: float) -> str:
     while twopass.run() >= target_filesize:
         print(
             f"\nThe output file size ({round(twopass.output_filesize, 2)}MB) is still above the target of {target_filesize}MB.\nRestarting...\n"
@@ -32,12 +32,13 @@ def twopass_loop(target_filesize: float):
         # adjust the class's target file size to set a lower bitrate for the next run
         twopass.target_filesize -= 0.2
 
-    print(
-        f"\nSUCCESS!!\nThe smaller file ({round(twopass.output_filesize, 2)}MB) is located at {twopass.output_filename}"
-    )
+    success_message = f"Your compressed video file ({round(twopass.output_filesize, 2)}MB) is located at {Path(twopass.output_filename).resolve()}"
+    print(success_message)
+
+    return success_message
 
 
-def seconds_to_timestamp(seconds: int):
+def seconds_to_timestamp(seconds: int) -> str:
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
 
@@ -47,25 +48,19 @@ def seconds_to_timestamp(seconds: int):
     return timestamp
 
 
-def open_browser():
+def open_browser() -> None:
     time.sleep(0.5)
     webbrowser.open(f"http://localhost:{port}")
 
 
-def main():
+def main() -> None:
     if web:
         app = Flask(__name__, static_folder=path.parent)
 
         @app.route("/")
         def index():
             return render_template(
-                "web.html",
-                filename=url_for("static", filename=path.name),
-                resolution=twopass.resolution,
-                target_filesize=twopass.target_filesize,
-                audio_br=twopass.audio_br,
-                crop=twopass.crop,
-                output_dir=twopass.output_dir,
+                "web.html", file_url=url_for("static", filename=path.name), twopass=twopass, alert_hidden=True
             )
 
         @app.route("/encode", methods=["POST"])
@@ -84,14 +79,23 @@ def main():
             twopass.crop = request.form.get("crop")
             twopass.output_dir = request.form.get("output_dir")
 
-            twopass_loop(target_filesize)
+            success_message = twopass_loop(target_filesize)
 
             for file in glob("ffmpeg2pass*"):
                 os.remove(file)
 
-            return f"Your compressed video file ({round(twopass.output_filesize, 2)}MB) is located at <strong>{Path(twopass.output_filename).resolve()}</strong>"
+            return render_template(
+                "web.html",
+                file_url=url_for("static", filename=path.name),
+                twopass=twopass,
+                alert=success_message,
+            )
 
         threading.Thread(target=open_browser, name="Open Browser").start()
         app.run("0.0.0.0", port=port)
     else:
-        twopass_loop(args["target_filesize"])
+        twopass_loop(twopass.target_filesize)
+
+
+if __name__ == "__main__":
+    main()
