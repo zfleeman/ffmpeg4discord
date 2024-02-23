@@ -31,7 +31,7 @@ def get_args() -> Namespace:
     parser.add_argument("--config", help="JSON file containing the run's configuration")
 
     # web
-    parser.add_argument("--web", action=BooleanOptionalAction, help="Launch The Ephemeral Web UI in your browser.")
+    parser.add_argument("--web", action=BooleanOptionalAction, help="Launch ffmpeg4discord's Web UI in your browser.")
     parser.add_argument("-p", "--port", type=int, default=5333, help="Local port for the Flask application.")
 
     return vars(parser.parse_args())

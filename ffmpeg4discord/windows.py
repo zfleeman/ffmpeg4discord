@@ -1,4 +1,3 @@
-# THIS SCRIPT ONLY SUPPORTS WINDOWS AT THE MOMENT
 import sys
 import os
 from urllib.request import urlretrieve
@@ -6,11 +5,35 @@ import zipfile
 from pathlib import Path
 import shutil
 import logging
+import platform
+
+if platform.system() != "Windows":
+    logging.warning(
+        """
+        THIS SCRIPT IS INTENDED FOR WINDOWS USERS
+
+        If you are running this script on macOS, consider installing ffmpeg with
+        Homebrew: https://formulae.brew.sh/formula/ffmpeg
+
+        If you are running this script on some Linux, learn more about your options
+        to install ffmpeg on its website: https://ffmpeg.org/download.html#build-linux
+        """
+    )
+
+    sys.exit()
 
 logging.getLogger().setLevel(logging.INFO)
 
 path = os.environ.get("PATH", "")
-target = Path(sys.executable).parent / "Scripts"
+python_install = Path(sys.executable)
+
+if "WindowsApps" in str(python_install):
+    print("Microsoft Store Python installation detected.")
+    target = Path(sys.executable).parent.parent
+else:
+    print("https://python.org Python installation detected.")
+    target = Path(sys.executable).parent / "Scripts"
+
 target.mkdir(parents=True, exist_ok=True)
 
 if str(target) not in path:
@@ -26,9 +49,9 @@ if str(target) not in path:
     )
 
 
-def copy_directory_contents(source, target):
-    source_path = Path(source)
-    target_path = Path(target)
+def copy_directory_contents(source: Path, target: Path) -> None:
+    source_path = source
+    target_path = target
 
     # Iterate over files in the source directory
     for item in source_path.iterdir():
@@ -41,7 +64,7 @@ def copy_directory_contents(source, target):
             print(f"Copied file: {item} -> {target_item}")
 
 
-def download_with_progress(url, save_path):
+def download_with_progress(url: str, save_path: str) -> None:
     def report(block_num, block_size, total_size):
         downloaded = block_num * block_size
         downloaded_mb = downloaded / (1024 * 1024)
@@ -57,7 +80,7 @@ def download_with_progress(url, save_path):
     print("\nDownload complete!")
 
 
-def install():
+def install() -> None:
     print("Downloading ffmpeg to ffmpeg.zip...")
     download_with_progress("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip", "ffmpeg/ffmpeg.zip")
 
