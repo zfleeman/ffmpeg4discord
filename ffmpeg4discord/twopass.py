@@ -82,13 +82,13 @@ class TwoPass:
             else:
                 self.times["ss"] = "00:00:00"
 
-            from_seconds = seconds_from_ts_string(self.times["ss"])
+            self.from_seconds = seconds_from_ts_string(self.times["ss"])
 
             if self.times.get("to"):
-                to_seconds = seconds_from_ts_string(self.times["to"])
-                self.length = to_seconds - from_seconds
+                self.to_seconds = seconds_from_ts_string(self.times["to"])
+                self.length = self.to_seconds - self.from_seconds
             else:
-                self.length = self.duration - from_seconds
+                self.length = self.duration - self.from_seconds
         else:
             self.time_from_file_name()
 
@@ -111,7 +111,8 @@ class TwoPass:
         Set the Class values from a json file
         :param config_file: path to a json file containing parameters for TwoPass()
         """
-        with open(config_file) as f:
+        file_path = Path(config_file).resolve()
+        with open(file_path) as f:
             config = json.load(f)
         self.__dict__.update(**config)
 
@@ -163,15 +164,16 @@ class TwoPass:
 
         try:
             int(fname[0:6])
-            startseconds = seconds_from_ts_string(startstring)
+            self.from_seconds = seconds_from_ts_string(startstring)
             times["ss"] = startstring
             try:
                 int(fname[11:13])
-                endseconds = seconds_from_ts_string(endstring)
-                length = endseconds - startseconds
+                self.to_seconds = seconds_from_ts_string(endstring)
+                length = self.to_seconds - self.from_seconds
                 times["to"] = endstring
             except:
-                length = self.duration - startseconds
+                length = self.duration - self.from_seconds
+                self.to_seconds = self.duration
         except:
             length = self.duration
 
@@ -212,11 +214,9 @@ class TwoPass:
         :return: the output file's size
         """
 
-        self.output_filename = (
-            self.output_dir
-            + "small_"
-            + self.filename.stem.replace(" ", "_")
-            + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
+        self.output_filename = str(
+            Path(self.output_dir)
+            / ("small_" + self.filename.stem.replace(" ", "_") + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4"))
         )
 
         # generate run parameters
