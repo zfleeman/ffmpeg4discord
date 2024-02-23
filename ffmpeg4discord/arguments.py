@@ -5,7 +5,7 @@ def get_args() -> Namespace:
     parser = ArgumentParser(
         prog="ffmpeg4discord",
         description="This script takes a video file as its input and encodes to a target file size.",
-        epilog="For more helpL: https://github.com/zfleeman/ffmpeg4discord\nCompress those sick clips, son!",
+        epilog="For more help: https://github.com/zfleeman/ffmpeg4discord",
     )
     parser.add_argument("filename", help="The  file path of the file that you wish to compress.")
     parser.add_argument(
