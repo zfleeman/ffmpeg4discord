@@ -4,10 +4,10 @@ from argparse import ArgumentParser, Namespace, BooleanOptionalAction
 def get_args() -> Namespace:
     parser = ArgumentParser(
         prog="ffmpeg4discord",
-        description="This script takes a video file as its input and encodes to a target file size.",
+        description="This script takes a video file and compresses it to a target file size.",
         epilog="For more help: https://github.com/zfleeman/ffmpeg4discord",
     )
-    parser.add_argument("filename", help="The  file path of the file that you wish to compress.")
+    parser.add_argument("filename", help="The file path of the file that you wish to compress.", required=True)
     parser.add_argument(
         "-o",
         "--output-dir",

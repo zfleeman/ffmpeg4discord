@@ -50,7 +50,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
   - default: the current working directory
   - If there is a folder that you want all of your smaller clips to land in, specify it with this argument.
 - `-s`, `--filesize`
-  - default: `8.0`
+  - default: `25.0`
   - Increase or decrease this value if you want to compress your video to something other than the 8MB Discord limit.
 - `-a`, `--audio-br`
   - You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate.
