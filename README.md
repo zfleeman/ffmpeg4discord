@@ -35,7 +35,7 @@ Run the program with:
 ff4d cool_clip.mp4
 ```
 
-The included Batch file for Windows users, `encode.bat`, allows for drag and drop functionality. Be sure to edit the Batch file before dragging your video files on top of it.
+I've had a good time using this command with a Batch file on Windows. Refer to the [Sample Batch File](https://github.com/zfleeman/ffmpeg4discord#sample-batch-file) section for more information.
 
 ### File name formatting
 1) `000020.mp4`
@@ -89,7 +89,7 @@ Notes:
   - `"times": {}` -> if you do not wish to trim the start and stop time of the file. This falls back to the [file name formatting](https://github.com/zfleeman/ffmpeg4discord#file-name-formatting).
   - `"times": {"from": "00:00:10"}` -> trim the clip from `00:00:10` to the end of the file
   - `"times": {"to": "00:00:20"}` -> trim the clip from the beginning of the file up to `00:00:20`
-- You can set `audio_br` to `null` if you want to maintain the clips audio bitrate.
+- You can set `audio_br` to `null` if you want to maintain the clip's audio bitrate.
 
 ## Detailed Example
 
@@ -108,7 +108,7 @@ The example above takes a 5120x1440 resolution video as its input. The script tr
 
 ## Web UI
 
-The Web UI can be activated by adding `--web` to your `ff4d` call.
+The web UI can be activated by adding `--web` to your `ff4d` call.
 
 ```
 ff4d cool_clip.mp4 -r 1280x720 -s 20 --web
@@ -120,7 +120,7 @@ You can drag the video playhead to different portions of the video and click the
 
 https://github.com/zfleeman/ffmpeg4discord/assets/1808564/ff323bcb-4747-437b-808f-ce48b8c269ce
 
-The Flask server doesn't automatically stop itself, yet, so you'll have to handle that by closing the terminal it leaves hanging.
+The Flask server doesn't automatically stop itself, so you'll have to terminate it manually by closing the terminal it leaves hanging.
 
 ## Sample Batch File
 
