@@ -5,7 +5,7 @@ This repository houses scripts and applications to assist with compressing a vid
 
 The `TwoPass()` Class showcases a 2-pass encoding methodology for the `ffmpeg-python` library, which is not well-documented on the web. The Class also supports a few FFmpeg video filters, like cropping and resolution scaling. It can be used in a variety of different audio/video workflows.
 
-## Installation and Usage
+## Installation
 
 This package works with Python >= 3.8. For Windows users, ensure that Python is added to your system's PATH.
 
@@ -38,10 +38,13 @@ ff4d cool_clip.mp4
 I've had a good time using this command with a Batch file on Windows. Refer to the [Sample Batch File](https://github.com/zfleeman/ffmpeg4discord#sample-batch-file) section for more information.
 
 ### File name formatting
+
+You can edit the name of your video file if you need to trim it to a specific section. Here are a few examples.
+
 1) `000020.mp4`
-    - This clips and compresses the video from 00:00:20 to the end of the clip.
+    - This trims and compresses the video from 00:00:20 to the end of the clip.
 2) `000020-000145.mp4`
-    - This clips and compresses the video from 00:00:20 to 00:01:45.
+    - This trims and compresses the video from 00:00:20 to 00:01:45.
 3) `SomethingElse.mp4`
     - Compresses the entire video if the first six characters of the file's name aren't numeric.
 
@@ -51,7 +54,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
   - If there is a folder that you want all of your smaller clips to land in, specify it with this argument.
 - `-s`, `--filesize`
   - default: `25.0`
-  - Increase or decrease this value if you want to compress your video to something other than the 8MB Discord limit.
+  - Increase or decrease this value if you want to compress your video to something other than the 25MB Discord limit.
 - `-a`, `--audio-br`
   - You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate.
 - `-r`, `--resolution`
