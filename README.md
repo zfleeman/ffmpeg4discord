@@ -98,14 +98,14 @@ Notes:
 
 ```
 ff4d 000050-000145.mp4 \
-    -c 1280x0x2560x1440 \
+    -x 1280x0x2560x1440 \
     -r 1920x1080 \
     -s 50 \
     -a 48 \
     -o D:/shadowplay/
 ```
 
-The example above takes a 5120x1440 resolution video as its input. The script trims the video from 00:00:50 to 00:01:45 (specified in the [file name](https://github.com/zfleeman/ffmpeg4discord#file-name-formatting)). It crops a 2560x1440 section starting at 1280 pixels from the top-left and 0 pixels down (`-c`). The output file will be located in `D:/shadowplay/` (`-o`) with a new resolution of 1920x1080 (`-r`), and it will be 50MB (`-s`). The audio bitrate will be reduced to 48k (`-a`) as well, but that's probably going to sound terrible.
+The example above takes a 5120x1440 resolution video as its input. The script trims the video from 00:00:50 to 00:01:45 (specified in the [file name](https://github.com/zfleeman/ffmpeg4discord#file-name-formatting)). It crops a 2560x1440 section starting at 1280 pixels from the top-left and 0 pixels down (`-x`). The output file will be located in `D:/shadowplay/` (`-o`) with a new resolution of 1920x1080 (`-r`), and it will be 50MB (`-s`). The audio bitrate will be reduced to 48k (`-a`) as well, but that's probably going to sound terrible.
 
 ![](https://i.imgur.com/WJXA723.png)
 
