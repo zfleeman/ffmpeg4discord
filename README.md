@@ -65,7 +65,10 @@ You can edit the name of your video file if you need to trim it to a specific se
   - From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video.
   - [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61)
 - `--web`
-  - A Boolean flag. No value is needed after the flag. See [Web UI](#web-ui) for more information on the Web UI.
+  - Launch the Web UI for this job. A Boolean flag. No value is needed after the flag. See [Web UI](#web-ui) for more information on the Web UI.
+- `-p`, `--port`
+  - Example: `5333`
+  - Run the Web UI on a specifc port.
 - `--config`
   - Example: `custom_run_config.json`
   - Path to a json file containing the configuration for the above parameters. This config file takes precedence over all of the other flags.
