@@ -171,6 +171,7 @@ class TwoPass:
                 length = self.to_seconds - self.from_seconds
                 times["to"] = endstring
             except:
+                times["to"] = seconds_to_timestamp(self.duration)
                 length = self.duration - self.from_seconds
                 self.to_seconds = self.duration
         except:
@@ -247,3 +248,13 @@ class TwoPass:
 
 def seconds_from_ts_string(ts_string: str):
     return int(ts_string[0:2]) * 60 * 60 + int(ts_string[3:5]) * 60 + int(ts_string[6:8])
+
+
+def seconds_to_timestamp(seconds: int) -> str:
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    # Use f-strings to format the timestamp
+    timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    return timestamp
