@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 from ffmpeg4discord import arguments
-from ffmpeg4discord.twopass import TwoPass
+from ffmpeg4discord.twopass import TwoPass, seconds_to_timestamp
 
 
 def twopass_loop(twopass: TwoPass, target_filesize: float) -> None:
@@ -23,16 +23,6 @@ def twopass_loop(twopass: TwoPass, target_filesize: float) -> None:
         twopass.target_filesize -= 0.2
 
     twopass.message = f"Your compressed video file ({round(twopass.output_filesize, 2)}MB) is located at {Path(twopass.output_filename).resolve()}"
-
-
-def seconds_to_timestamp(seconds: int) -> str:
-    hours, remainder = divmod(seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-
-    # Use f-strings to format the timestamp
-    timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
-    return timestamp
 
 
 def open_browser(port: int) -> None:
