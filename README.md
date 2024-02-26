@@ -7,7 +7,7 @@ The `TwoPass()` Class showcases a 2-pass encoding methodology for the `ffmpeg-py
 
 ## Installation
 
-This package works with Python >= 3.8. For Windows users, ensure that Python is added to your system's PATH.
+This package works with Python >= 3.8. For Windows users, ensure that Python is added to your system's PATH. I highly recommend that you use the [python.org](https://python.org) Python installation.
 
 Install this package with the following command.
 
