@@ -1,4 +1,12 @@
 from argparse import ArgumentParser, Namespace, BooleanOptionalAction
+import socket
+import logging
+from random import randint
+
+
+def is_port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("localhost", port)) == 0
 
 
 def get_args() -> Namespace:
@@ -32,6 +40,24 @@ def get_args() -> Namespace:
 
     # web
     parser.add_argument("--web", action=BooleanOptionalAction, help="Launch ffmpeg4discord's Web UI in your browser.")
-    parser.add_argument("-p", "--port", type=int, default=5333, help="Local port for the Flask application.")
+    parser.add_argument("-p", "--port", type=int, help="Local port for the Flask application.")
 
-    return vars(parser.parse_args())
+    args = vars(parser.parse_args())
+
+    # do some work regarding the port
+    if args["web"]:
+        port = args.pop("port")
+        port = port if port else randint(5000, 6000)
+
+        while True:
+            if not is_port_in_use(port):
+                break
+            logging.warning(f"Port {port} is already in use. Retrying with a new port.")
+            port = randint(5000, 6000)
+
+        args["port"] = port
+
+    else:
+        del args["port"]
+
+    return args

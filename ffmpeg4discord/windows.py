@@ -28,10 +28,12 @@ path = os.environ.get("PATH", "")
 python_install = Path(sys.executable)
 
 if "WindowsApps" in str(python_install):
-    print("Microsoft Store Python installation detected.")
+    print(
+        "Microsoft Store Python installation detected. If you run into problems, consider using the https://python.org installation instead!"
+    )
     target = Path(sys.executable).parent.parent
 else:
-    print("https://python.org Python installation detected.")
+    print("python.org Python installation detected.")
     target = Path(sys.executable).parent / "Scripts"
 
 target.mkdir(parents=True, exist_ok=True)

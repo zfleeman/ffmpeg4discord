@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ffmpeg4discord"
-version = "0.1.1"
+version = "0.1.2"
 description = "A tool to help convert a video file to a target file size."
 readme = {file = "README.md", content-type = "text/markdown"}
 authors = [{ name = "Zach Fleeman", email = "zfleeman@gmail.com" }]
@@ -22,7 +22,7 @@ Homepage = "https://github.com/zfleeman/ffmpeg4discord"
 Issues = "https://github.com/zfleeman/ffmpeg4discord/issues"
 
 [project.scripts]
-ff4d = "ffmpeg4discord.app:main"
+ff4d = "ffmpeg4discord.__main__:main"
 install-ffmpeg-windows = "ffmpeg4discord.windows:install"
 
 [tool.setuptools.package-data]

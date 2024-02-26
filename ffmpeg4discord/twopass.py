@@ -101,8 +101,7 @@ class TwoPass:
                 information to further diagnose the problem:
 
                 - Your video is {self.duration / 60} minutes long
-                - You want to START clipping at {self.times["ss"]}
-                - You want to STOP clipping at {self.times["to"]}
+                - Your clipping times are {self.times}
                 """
             )
 
