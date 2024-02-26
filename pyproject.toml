@@ -22,7 +22,7 @@ Homepage = "https://github.com/zfleeman/ffmpeg4discord"
 Issues = "https://github.com/zfleeman/ffmpeg4discord/issues"
 
 [project.scripts]
-ff4d = "ffmpeg4discord.app:main"
+ff4d = "ffmpeg4discord.__main__:main"
 install-ffmpeg-windows = "ffmpeg4discord.windows:install"
 
 [tool.setuptools.package-data]
