@@ -14,7 +14,7 @@ class TwoPass:
         self,
         filename: Path,
         target_filesize: float,
-        output_dir: str = "",
+        output: str = "",
         times: dict = {},
         audio_br: float = None,
         codec: str = "libx264",
@@ -29,7 +29,7 @@ class TwoPass:
         https://trac.ffmpeg.org/wiki/Encode/H.264#twopass
 
         :param filename: video file that needs to be compressed
-        :param output_dir: directory that the new, compressed output is delivered to
+        :param output: file or directory that the new, compressed output is delivered to
         :param times: dict containing "from" and "to" timestamp keys in the format 00:00:00
         :param target_filesize: desired file size of the output file, in MB
         :param audio_br: desired audio bitrate for the output file in kbps
@@ -52,7 +52,7 @@ class TwoPass:
         self.filename = filename
         self.fname = filename.name
         self.split_fname = self.fname.split(".")
-        self.output_dir = output_dir
+        self.output = Path(output).resolve()
 
         self.probe = ffmpeg.probe(filename=filename)
         self.duration = math.floor(float(self.probe["format"]["duration"]))
@@ -214,10 +214,17 @@ class TwoPass:
         :return: the output file's size
         """
 
-        self.output_filename = str(
-            Path(self.output_dir)
-            / ("small_" + self.filename.stem.replace(" ", "_") + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4"))
-        )
+        if self.output.is_dir():
+            self.output_filename = str(
+                self.output
+                / (
+                    "small_"
+                    + self.filename.stem.replace(" ", "_")
+                    + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4")
+                )
+            )
+        else:
+            self.output_filename = str(self.output)
 
         # generate run parameters
         self.create_bitrate_dict()

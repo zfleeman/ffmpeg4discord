@@ -18,7 +18,7 @@ def get_args() -> Namespace:
     parser.add_argument("filename", help="The file path of the file that you wish to compress.")
     parser.add_argument(
         "-o",
-        "--output-dir",
+        "--output",
         default="",
         help="The desired output directory where the file will land.",
     )
