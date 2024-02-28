@@ -14,7 +14,7 @@ dependencies = [
     "ffmpeg-python==0.2.0"
 ]
 classifiers = [
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
 ]
 
 [project.urls]
