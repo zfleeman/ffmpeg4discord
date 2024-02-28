@@ -30,6 +30,9 @@ def get_args() -> Namespace:
         help="The output file size in MB.",
     )
     parser.add_argument("-a", "--audio-br", type=float, default=96, help="Audio bitrate in kbps.")
+    parser.add_argument(
+        "-c", "--codec", type=str, default="libx264", choices=["libx264", "libvpx-vp9"], help="Video codec."
+    )
 
     # video filters
     parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
