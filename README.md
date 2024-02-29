@@ -37,17 +37,6 @@ ff4d cool_clip.mp4
 
 I've had a good time using this command with a Batch file on Windows. Refer to the [Sample Batch File](https://github.com/zfleeman/ffmpeg4discord#sample-batch-file) section for more information.
 
-### File name formatting
-
-You can edit the name of your video file if you need to trim it to a specific section. Here are a few examples.
-
-1) `000020.mp4`
-    - This trims and compresses the video from 00:00:20 to the end of the clip.
-2) `000020-000145.mp4`
-    - This trims and compresses the video from 00:00:20 to 00:01:45.
-3) `SomethingElse.mp4`
-    - Compresses the entire video if the first six characters of the file's name aren't numeric.
-
 ### Optional Arguments
 - `-o`, `--output`
   - Default: the current working directory
@@ -77,6 +66,17 @@ You can edit the name of your video file if you need to trim it to a specific se
 - `--config`
   - Example: `custom_run_config.json`
   - Path to a json file containing the configuration for the above parameters. This config file takes precedence over all of the other flags.
+
+### File Name Formatting
+
+You can edit the name of your video file if you need to trim it to a specific section. Here are a few examples.
+
+1) `000020.mp4`
+    - This trims and compresses the video from 00:00:20 to the end of the clip.
+2) `000020-000145.mp4`
+    - This trims and compresses the video from 00:00:20 to 00:01:45.
+3) `SomethingElse.mp4`
+    - Compresses the entire video if the first six characters of the file's name aren't numeric.
 
 ### JSON Configuration
 If your encoding job will always be the same, you can reference a JSON configuration file instead of passing a long list of arguments to the command line.
