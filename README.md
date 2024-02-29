@@ -50,10 +50,10 @@ You can edit the name of your video file if you need to trim it to a specific se
 
 ### Optional Arguments
 - `-o`, `--output`
-  - default: the current working directory
-  - If there is a folder that you want all of your smaller clips to land in, specify it with this argument.
+  - Default: the current working directory
+  - If you want your smaller clips to go to a specific folder, use this option. You can also choose a custom output filename, just make sure to include the correct file extension for your video codec.
 - `-s`, `--filesize`
-  - default: `25.0`
+  - Default: `25.0`
   - Increase or decrease this value if you want to compress your video to something other than the 25MB Discord limit.
 - `-a`, `--audio-br`
   - You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate.
@@ -64,6 +64,11 @@ You can edit the name of your video file if you need to trim it to a specific se
   - Example: `255x0x1410x1080`
   - From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video.
   - [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61)
+- `-c`, `--codec`
+  - Options: `libx264` or `libvpx-vp9`
+  - Default: `libx264`
+  - Specify the video codec that you want to use. The default option creates `.mp4` files, while `libvpx-vp9` creates `.webm` video files.
+  - `libvpx-vp9` creates better looking video files with the same bitrates, but it takes significantly longer to encode. VP9 is also not as compatible with as many devices or browsers. I can view `.webm` videos on the desktop installtion of Discord, but they are not viewable on my iOS Discord installation.
 - `--web`
   - Launch the Web UI for this job. A Boolean flag. No value is needed after the flag. See [Web UI](#web-ui) for more information on the Web UI.
 - `-p`, `--port`

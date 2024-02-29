@@ -136,14 +136,8 @@ class TwoPass:
         elif codec == "libvpx-vp9":
             params["pass1"]["row-mt"] = 1
             params["pass2"]["row-mt"] = 1
-            # params["pass1"]["tile-columns"] = 6
-            # params["pass2"]["tile-columns"] = 6
-            # threads = get_cpu_threads()
-            # params["pass1"]["threads"] = threads
-            # params["pass2"]["threads"] = threads
-            # params["pass1"]["cpu-used"] = 2
-            # params["pass2"]["cpu-used"] = 8
-            # params["pass2"]["deadline"] = "realtime"
+            params["pass2"]["cpu-used"] = 2
+            params["pass2"]["deadline"] = "good"
             params["pass2"]["c:a"] = "libopus"
 
         params["pass1"].update(**self.bitrate_dict)
@@ -227,12 +221,13 @@ class TwoPass:
         """
 
         if self.output.is_dir():
+            ext: str = "webm" if self.codec == "libvpx-vp9" else "mp4"
             self.output_filename = str(
                 self.output
                 / (
                     "small_"
                     + self.filename.stem.replace(" ", "_")
-                    + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4") # mp4 or webm
+                    + datetime.strftime(datetime.now(), f"_%Y%m%d%H%M%S.{ext}")
                 )
             )
         else:
@@ -277,20 +272,3 @@ def seconds_to_timestamp(seconds: int) -> str:
     timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     return timestamp
-
-
-# def get_cpu_threads() -> int:
-#     try:
-#         # For Linux and Unix-like systems
-#         if hasattr(os, "sched_getaffinity"):
-#             return len(os.sched_getaffinity(0))
-#         # For Windows
-#         elif 'NUMBER_OF_PROCESSORS' in os.environ:
-#             return int(os.environ['NUMBER_OF_PROCESSORS'])
-#         # For other platforms, use multiprocessing module
-#         else:
-#             import multiprocessing
-#             return multiprocessing.cpu_count()
-#     except:
-#         return None
-
