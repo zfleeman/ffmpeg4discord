@@ -125,7 +125,7 @@ You can drag the video playhead to different portions of the video and click the
 
 https://github.com/zfleeman/ffmpeg4discord/assets/1808564/ff323bcb-4747-437b-808f-ce48b8c269ce
 
-The Flask server doesn't automatically stop itself, so you'll have to terminate it manually by closing the terminal it leaves hanging.
+Note that the Flask server doesn't automatically shut down, so you'll need to manually terminate it by closing the terminal window where it's running.
 
 ## Sample Batch File
 
