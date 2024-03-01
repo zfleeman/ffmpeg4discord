@@ -21,6 +21,7 @@ class TwoPass:
         crop: str = "",
         resolution: str = "",
         config: str = "",
+        **kwargs,
     ) -> None:
         """
         A Class to resize a video file to a specified MB target.
@@ -75,7 +76,12 @@ class TwoPass:
         else:
             self.audio_br = self.audio_br * 1000
 
-        if self.times:
+        # times are supplied by the file's name
+        if kwargs.get("filename_times"):
+            self.time_from_file_name()
+
+        # times are provided
+        elif self.times:
             if self.times.get("from"):
                 self.times["ss"] = self.times["from"] or "00:00:00"
                 del self.times["from"]
@@ -89,8 +95,12 @@ class TwoPass:
                 self.length = self.to_seconds - self.from_seconds
             else:
                 self.length = self.duration - self.from_seconds
+                self.times["to"] = seconds_to_timestamp(self.duration)
+
+        # no trimming times were provided
         else:
-            self.time_from_file_name()
+            self.times = {"ss": "00:00:00", "to": seconds_to_timestamp(self.duration)}
+            self.length = self.duration
 
         if self.length <= 0:
             raise Exception(
@@ -220,17 +230,26 @@ class TwoPass:
         :return: the output file's size
         """
 
+        ext: str = ".webm" if self.codec == "libvpx-vp9" else ".mp4"
         if self.output.is_dir():
-            ext: str = "webm" if self.codec == "libvpx-vp9" else "mp4"
             self.output_filename = str(
                 self.output
                 / (
                     "small_"
                     + self.filename.stem.replace(" ", "_")
-                    + datetime.strftime(datetime.now(), f"_%Y%m%d%H%M%S.{ext}")
+                    + datetime.strftime(datetime.now(), f"_%Y%m%d%H%M%S{ext}")
                 )
             )
         else:
+            if ext != self.output.suffix:
+                logging.warning(f"You specified {self.codec}, but your output file name ends with {self.output.suffix}. I've corrected this.")
+
+                # correct the file suffix
+                if self.codec == "libvpx-vp9":
+                    self.output = self.output.with_suffix(".webm")
+                else:
+                    self.output = self.output.with_suffix(".mp4")
+
             self.output_filename = str(self.output)
 
         # generate run parameters

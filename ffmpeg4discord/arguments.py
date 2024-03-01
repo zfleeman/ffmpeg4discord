@@ -23,6 +23,13 @@ def get_args() -> Namespace:
         help="The desired output directory where the file will land.",
     )
     parser.add_argument(
+        "--filename-times",
+        action=BooleanOptionalAction,
+        help="Generate From/To timestamps from the clip's file name.",
+    )
+    parser.add_argument("--from", help="Start clipping at this timestamp, e.g. 00:00:10")
+    parser.add_argument("--to", help="Stop clipping at this timestamp, e.g. 00:00:20")
+    parser.add_argument(
         "-s",
         "--target-filesize",
         default=25,
@@ -59,8 +66,15 @@ def get_args() -> Namespace:
             port = randint(5000, 6000)
 
         args["port"] = port
-
     else:
         del args["port"]
+
+    args["times"] = {}
+
+    if args["from"]:
+        args["times"]["from"] = args["from"]
+
+    if args["to"]:
+        args["times"]["to"] = args["to"]
 
     return args

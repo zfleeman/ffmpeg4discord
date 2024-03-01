@@ -40,7 +40,7 @@
                 <div class="col">
                     <label for="endTime" class="form-label">End Time:</label>
                     <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="1" max="0">
-                    <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.length|string + " seconds" }}</span>
+                    <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.duration|string + " seconds" }}</span>
                 </div>
             </div>
             <div class="row">
@@ -103,7 +103,7 @@
             startTimeInput.max = video.duration;
             endTimeInput.max = video.duration;
             startTimeInput.value = "{{ twopass.from_seconds if twopass.from_seconds else 0 }}"
-            endTimeInput.value = "{{ twopass.to_seconds if twopass.to_seconds else twopass.length }}"
+            endTimeInput.value = "{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}"
         });
 
         startTimeInput.addEventListener('input', updateStartTimeLabel);

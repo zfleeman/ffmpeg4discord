@@ -49,7 +49,7 @@ class TestTwoPass(unittest.TestCase):
 
         # Check attributes
         self.assertEqual(twopass.from_seconds, 60)
-        self.assertEqual(twopass.times, {"ss": "00:01:00"})
+        self.assertEqual(twopass.times, {"ss": "00:01:00", "to": "01:00:00"})
 
     @patch("ffmpeg4discord.twopass.ffmpeg.probe")
     def test_create_bitrate_dict(self, mock_probe: MagicMock):
@@ -69,10 +69,10 @@ class TestTwoPass(unittest.TestCase):
         twopass.create_bitrate_dict()
 
         # Check bitrate_dict attribute
-        self.assertEqual(twopass.bitrate_dict["b:v"], 6698000)
-        self.assertEqual(twopass.bitrate_dict["minrate"], 3349000)
-        self.assertEqual(twopass.bitrate_dict["maxrate"], 9712100)
-        self.assertEqual(twopass.bitrate_dict["bufsize"], 13396000)
+        self.assertEqual(twopass.bitrate_dict["b:v"], 3285000)
+        self.assertEqual(twopass.bitrate_dict["minrate"], 1642500)
+        self.assertEqual(twopass.bitrate_dict["maxrate"], 4763250)
+        self.assertEqual(twopass.bitrate_dict["bufsize"], 6570000)
 
     @patch("ffmpeg4discord.twopass.os.path.getsize")
     @patch("ffmpeg4discord.twopass.ffmpeg.probe")
