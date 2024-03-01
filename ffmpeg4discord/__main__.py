@@ -22,6 +22,10 @@ def twopass_loop(twopass: TwoPass, target_filesize: float) -> None:
         # adjust the class's target file size to set a lower bitrate for the next run
         twopass.target_filesize -= 0.2
 
+    # clean up
+    for file in glob("ffmpeg2pass*"):
+        os.remove(file)
+
     twopass.message = f"Your compressed video file ({round(twopass.output_filesize, 2)}MB) is located at {Path(twopass.output_filename).resolve()}"
 
 
@@ -71,9 +75,6 @@ def main() -> None:
             twopass.codec = request.form.get("codec")
 
             twopass_loop(twopass=twopass, target_filesize=target_filesize)
-
-            for file in glob("ffmpeg2pass*"):
-                os.remove(file)
 
             return render_template(
                 "web.html",

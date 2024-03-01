@@ -135,7 +135,6 @@ To enable "drag and drop" functionality for this package, Windows users can crea
 @echo off
 Set filename=%1
 ff4d %filename% -o "C:/output/folder/" --web
-DEL "ffmpeg2*"
 PAUSE
 ```
 

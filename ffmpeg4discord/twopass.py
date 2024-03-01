@@ -242,7 +242,9 @@ class TwoPass:
             )
         else:
             if ext != self.output.suffix:
-                logging.warning(f"You specified {self.codec}, but your output file name ends with {self.output.suffix}. I've corrected this.")
+                logging.warning(
+                    f"You specified {self.codec}, but your output file name ends with {self.output.suffix}. I've corrected this."
+                )
 
                 # correct the file suffix
                 if self.codec == "libvpx-vp9":
