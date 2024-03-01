@@ -67,7 +67,8 @@ def main() -> None:
             twopass.target_filesize = target_filesize
             twopass.audio_br = float(request.form.get("audio_br")) * 1000
             twopass.crop = request.form.get("crop")
-            twopass.output_dir = request.form.get("output_dir")
+            twopass.output = Path(request.form.get("output"))
+            twopass.codec = request.form.get("codec")
 
             twopass_loop(twopass=twopass, target_filesize=target_filesize)
 

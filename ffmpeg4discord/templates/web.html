@@ -40,7 +40,7 @@
                 <div class="col">
                     <label for="endTime" class="form-label">End Time:</label>
                     <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="1" max="0">
-                    <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.length|string + " seconds" }}</span>
+                    <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.duration|string + " seconds" }}</span>
                 </div>
             </div>
             <div class="row">
@@ -49,8 +49,8 @@
                 </div>
             </div>
             <hr />
-            <div class="row mb-3">
-                <h3>Output Parameters</h3>
+            <h3>Output Parameters</h3>
+            <div class="row mb-3 row-cols-5">
                 <div class="col">
                     <label for="resolution" class="form-label">Resolution</label>
                     <input class="form-control" name="resolution" id="resolution" type="text" value="{{ twopass.resolution }}" />
@@ -68,8 +68,17 @@
                     <input class="form-control" name="crop" id="crop" type="text" value="{{ twopass.crop }}" />
                 </div>
                 <div class="col">
-                    <label for="output_dir" class="form-label">Output Directory</label>
-                    <input class="form-control" name="output_dir" id="output_dir" type="text" value="{{ twopass.output_dir }}" />
+                    <label for="output" class="form-label">Output Folder/File</label>
+                    <input class="form-control" name="output" id="output" type="text" value="{{ twopass.output }}" />
+                </div>
+            </div>
+            <div class="row mb-3 row-cols-5">
+                <div class="col">
+                    <label for="codec" class="form-label">Video Codec</label>
+                    <select name="codec" id="codec" class="form-select">
+                        <option {{ "selected" if twopass.codec == "libx264" else "" }} value="libx264">MP4 / libx264</option>
+                        <option {{ "selected" if twopass.codec == "libvpx-vp9" else "" }} value="libvpx-vp9">WEBM / libvpx-vp9</option>
+                    </select>
                 </div>
             </div>
             <div class="row mb-3">
@@ -94,7 +103,7 @@
             startTimeInput.max = video.duration;
             endTimeInput.max = video.duration;
             startTimeInput.value = "{{ twopass.from_seconds if twopass.from_seconds else 0 }}"
-            endTimeInput.value = "{{ twopass.to_seconds if twopass.to_seconds else twopass.length }}"
+            endTimeInput.value = "{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}"
         });
 
         startTimeInput.addEventListener('input', updateStartTimeLabel);

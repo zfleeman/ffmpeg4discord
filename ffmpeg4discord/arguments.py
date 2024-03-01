@@ -18,10 +18,17 @@ def get_args() -> Namespace:
     parser.add_argument("filename", help="The file path of the file that you wish to compress.")
     parser.add_argument(
         "-o",
-        "--output-dir",
+        "--output",
         default="",
         help="The desired output directory where the file will land.",
     )
+    parser.add_argument(
+        "--filename-times",
+        action=BooleanOptionalAction,
+        help="Generate From/To timestamps from the clip's file name.",
+    )
+    parser.add_argument("--from", help="Start clipping at this timestamp, e.g. 00:00:10")
+    parser.add_argument("--to", help="Stop clipping at this timestamp, e.g. 00:00:20")
     parser.add_argument(
         "-s",
         "--target-filesize",
@@ -30,6 +37,9 @@ def get_args() -> Namespace:
         help="The output file size in MB.",
     )
     parser.add_argument("-a", "--audio-br", type=float, default=96, help="Audio bitrate in kbps.")
+    parser.add_argument(
+        "-c", "--codec", type=str, default="libx264", choices=["libx264", "libvpx-vp9"], help="Video codec."
+    )
 
     # video filters
     parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
@@ -56,8 +66,15 @@ def get_args() -> Namespace:
             port = randint(5000, 6000)
 
         args["port"] = port
-
     else:
         del args["port"]
+
+    args["times"] = {}
+
+    if args["from"]:
+        args["times"]["from"] = args["from"]
+
+    if args["to"]:
+        args["times"]["to"] = args["to"]
 
     return args

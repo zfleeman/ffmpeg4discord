@@ -14,13 +14,14 @@ class TwoPass:
         self,
         filename: Path,
         target_filesize: float,
-        output_dir: str = "",
+        output: str = "",
         times: dict = {},
         audio_br: float = None,
         codec: str = "libx264",
         crop: str = "",
         resolution: str = "",
         config: str = "",
+        **kwargs,
     ) -> None:
         """
         A Class to resize a video file to a specified MB target.
@@ -29,7 +30,7 @@ class TwoPass:
         https://trac.ffmpeg.org/wiki/Encode/H.264#twopass
 
         :param filename: video file that needs to be compressed
-        :param output_dir: directory that the new, compressed output is delivered to
+        :param output: file or directory that the new, compressed output is delivered to
         :param times: dict containing "from" and "to" timestamp keys in the format 00:00:00
         :param target_filesize: desired file size of the output file, in MB
         :param audio_br: desired audio bitrate for the output file in kbps
@@ -52,7 +53,7 @@ class TwoPass:
         self.filename = filename
         self.fname = filename.name
         self.split_fname = self.fname.split(".")
-        self.output_dir = output_dir
+        self.output = Path(output).resolve()
 
         self.probe = ffmpeg.probe(filename=filename)
         self.duration = math.floor(float(self.probe["format"]["duration"]))
@@ -75,7 +76,12 @@ class TwoPass:
         else:
             self.audio_br = self.audio_br * 1000
 
-        if self.times:
+        # times are supplied by the file's name
+        if kwargs.get("filename_times"):
+            self.time_from_file_name()
+
+        # times are provided
+        elif self.times:
             if self.times.get("from"):
                 self.times["ss"] = self.times["from"] or "00:00:00"
                 del self.times["from"]
@@ -89,8 +95,12 @@ class TwoPass:
                 self.length = self.to_seconds - self.from_seconds
             else:
                 self.length = self.duration - self.from_seconds
+                self.times["to"] = seconds_to_timestamp(self.duration)
+
+        # no trimming times were provided
         else:
-            self.time_from_file_name()
+            self.times = {"ss": "00:00:00", "to": seconds_to_timestamp(self.duration)}
+            self.length = self.duration
 
         if self.length <= 0:
             raise Exception(
@@ -133,6 +143,12 @@ class TwoPass:
 
         if codec == "libx264":
             params["pass2"]["c:a"] = "aac"
+        elif codec == "libvpx-vp9":
+            params["pass1"]["row-mt"] = 1
+            params["pass2"]["row-mt"] = 1
+            params["pass2"]["cpu-used"] = 2
+            params["pass2"]["deadline"] = "good"
+            params["pass2"]["c:a"] = "libopus"
 
         params["pass1"].update(**self.bitrate_dict)
         params["pass2"].update(**self.bitrate_dict)
@@ -214,10 +230,27 @@ class TwoPass:
         :return: the output file's size
         """
 
-        self.output_filename = str(
-            Path(self.output_dir)
-            / ("small_" + self.filename.stem.replace(" ", "_") + datetime.strftime(datetime.now(), "_%Y%m%d%H%M%S.mp4"))
-        )
+        ext: str = ".webm" if self.codec == "libvpx-vp9" else ".mp4"
+        if self.output.is_dir():
+            self.output_filename = str(
+                self.output
+                / (
+                    "small_"
+                    + self.filename.stem.replace(" ", "_")
+                    + datetime.strftime(datetime.now(), f"_%Y%m%d%H%M%S{ext}")
+                )
+            )
+        else:
+            if ext != self.output.suffix:
+                logging.warning(f"You specified {self.codec}, but your output file name ends with {self.output.suffix}. I've corrected this.")
+
+                # correct the file suffix
+                if self.codec == "libvpx-vp9":
+                    self.output = self.output.with_suffix(".webm")
+                else:
+                    self.output = self.output.with_suffix(".mp4")
+
+            self.output_filename = str(self.output)
 
         # generate run parameters
         self.create_bitrate_dict()
