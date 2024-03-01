@@ -1,9 +1,9 @@
 # ffmpeg4discord (`ff4d`) -- Target File Size Video Compression for Discord with FFmpeg
 This repository houses scripts and applications to assist with compressing a video file to a desired size. 
 
-`ff4d` takes a video file as its input and encodes it to be less than 25MB unless specified otherwise. Discord's free-tier file size sharing limit is 25MB. You can change the file's name in a way that trims the file to a timestamped section. I created this package to share large NVIDIA ShadowPlay clips on Discord quickly, without the need for a visual editor. 
+`ff4d` takes a video file as its input and encodes it to be less than a target file size. Discord's free-tier file size sharing limit is 25MB. You can change the file's name in a way that trims the file to a timestamped section. I developed this package specifically for swift sharing of large NVIDIA ShadowPlay clips on Discord, eliminating the need for a visual editor.
 
-The `TwoPass()` Class showcases a 2-pass encoding methodology for the `ffmpeg-python` library, which is not well-documented on the web. The Class also supports a few FFmpeg video filters, like cropping and resolution scaling. It can be used in a variety of different audio/video workflows.
+The `TwoPass()` class presents a 2-pass encoding approach for the `ffmpeg-python` library, which is not showcased in that package's documentation. Additionally, the class extends support to various FFmpeg video filters such as cropping and resolution scaling, making it adaptable to a range of audio/video workflows.
 
 ## Installation
 
