@@ -29,19 +29,23 @@ This will place `ffmpeg.exe`, `ffprobe.exe`, and `ffplay.exe` into the same loca
 
 ## Usage
 
-Run the program with:
+Use `ff4d` in your favorite terminal like this:
+
+```
+ff4d <path-to-file.mp4> <optional-flags>
+```
+
+This command tries to compress the whole video file down to the default output file size of 25MB:
 
 ```
 ff4d cool_clip.mp4
 ```
 
-This tries to compress the whole video file down to the default output file size of 25MB.
+This will trim a 20 second section out of `cool_clip.mp4` starting at 10 seconds in and ending at 30 seconds. [More on the optional flags](#optional-flags).
 
 ```
 ff4d cool_clip.mp4 --from 00:00:10 --to 00:00:30
 ```
-
-This will trim a 20 second section out of `cool_clip.mp4` starting at 10 seconds in and ending at 30 seconds. [More on the optional flags](#optional-flags).
 
 I've had a good time using this command with a Batch file on Windows. Refer to the [Sample Batch File](#sample-batch-file) section for more information.
 
