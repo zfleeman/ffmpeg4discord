@@ -64,6 +64,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--from` | No default | `--from 00:01:00` | Start time for trimming the video file to a desired section. |
 | `--to` | No default | `--to 00:01:20` | End time for trimming the video file to a desired section. |
 | `--filename-times` | No default. Boolean flag. | `--filename-times` | Generate From/To timestamps from the clip's file name. See [File Name Formatting](#file-name-formatting) |
+| `--approx` | No default. Boolean flag. | `--approx` | Approximate file size. The job will not loop to output the file under the target size. It will get close enough to the target on the first run. |
 
 ### File Name Formatting
 Enable this feature with `--filename-times`. You can edit the name of your video file if you need to trim it to a specific section. Here are a few examples.
