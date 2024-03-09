@@ -27,6 +27,11 @@ def get_args() -> Namespace:
         action=BooleanOptionalAction,
         help="Generate From/To timestamps from the clip's file name.",
     )
+    parser.add_argument(
+        "--approx",
+        action=BooleanOptionalAction,
+        help="Approximate file size. The job will not loop to output the file under the target size. It will get close enough to the target on the first run.",
+    )
     parser.add_argument("--from", help="Start clipping at this timestamp, e.g. 00:00:10")
     parser.add_argument("--to", help="Stop clipping at this timestamp, e.g. 00:00:20")
     parser.add_argument(

@@ -56,8 +56,12 @@
                     <input class="form-control" name="resolution" id="resolution" type="text" value="{{ twopass.resolution }}" />
                 </div>
                 <div class="col">
-                    <label for="target_filesize" class="form-label">Target File Size (MB)</label>
-                    <input class="form-control" name="target_filesize" id="target_filesize" type="text" value="{{ twopass.target_filesize }}" />
+                    <label for="target_filesize" class="form-label"><span id="targetApprox">Target</span> File Size (MB)</label>
+                    <input class="form-control mb-2" name="target_filesize" id="target_filesize" type="text" value="{{ twopass.target_filesize }}" />
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="approx" value="True" name="approx" id="approx" {{ "checked" if approx else "" }}>
+                        <label class="form-check-label" for="approx">Approximate file size</label>
+                    </div>
                 </div>
                 <div class="col">
                     <label for="audio_br" class="form-label">Audio Bitrate (kbps)</label>
@@ -156,6 +160,21 @@
             document.getElementById('encodeForm').submit();
 
         }
+
+        const checkbox = document.getElementById('approx');
+        const span = document.getElementById('targetApprox');
+
+        // Add event listener to the checkbox
+        checkbox.addEventListener('change', function() {
+            // Check if the checkbox is checked
+            if (this.checked) {
+                // Update the text inside the span
+                span.textContent = 'Approximate';
+            } else {
+                // Update the text inside the span
+                span.textContent = 'Target';
+            }
+        });
     </script>
 </body>
 </html>

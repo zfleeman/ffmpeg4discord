@@ -12,8 +12,8 @@ from ffmpeg4discord import arguments
 from ffmpeg4discord.twopass import TwoPass, seconds_to_timestamp
 
 
-def twopass_loop(twopass: TwoPass, target_filesize: float) -> None:
-    while twopass.run() >= target_filesize:
+def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False) -> None:
+    while twopass.run() >= target_filesize and not approx:
         print(
             f"\nThe output file size ({round(twopass.output_filesize, 2)}MB) is still above the target of {target_filesize}MB.\nRestarting...\n"
         )
@@ -38,6 +38,7 @@ def main() -> None:
     # get args from the command line
     args = arguments.get_args()
     web = args.pop("web")
+    approx = bool(args.pop("approx"))
 
     if web:
         port = args.pop("port")
@@ -54,7 +55,11 @@ def main() -> None:
         @app.route("/")
         def index():
             return render_template(
-                "web.html", file_url=url_for("static", filename=path.name), twopass=twopass, alert_hidden=True
+                "web.html",
+                file_url=url_for("static", filename=path.name),
+                twopass=twopass,
+                alert_hidden=True,
+                approx=approx,
             )
 
         @app.route("/encode", methods=["POST"])
@@ -74,18 +79,22 @@ def main() -> None:
             twopass.output = Path(request.form.get("output"))
             twopass.codec = request.form.get("codec")
 
-            twopass_loop(twopass=twopass, target_filesize=target_filesize)
+            # to loop or not to loop
+            approx = bool(request.form.getlist("approx"))
+
+            twopass_loop(twopass=twopass, target_filesize=target_filesize, approx=approx)
 
             return render_template(
                 "web.html",
                 file_url=url_for("static", filename=path.name),
                 twopass=twopass,
+                approx=approx,
             )
 
         threading.Thread(target=open_browser, args=[port], name="Open Browser").start()
         app.run("0.0.0.0", port=port)
     else:
-        twopass_loop(twopass=twopass, target_filesize=twopass.target_filesize)
+        twopass_loop(twopass=twopass, target_filesize=twopass.target_filesize, approx=approx)
         print(twopass.message)
 
 
