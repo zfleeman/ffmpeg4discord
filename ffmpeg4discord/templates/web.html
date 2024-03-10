@@ -56,7 +56,7 @@
                     <input class="form-control" name="resolution" id="resolution" type="text" value="{{ twopass.resolution }}" />
                 </div>
                 <div class="col">
-                    <label for="target_filesize" class="form-label"><span id="targetApprox">Target</span> File Size (MB)</label>
+                    <label for="target_filesize" class="form-label"><span id="targetApprox">{{ "Approximate" if approx else "Target" }}</span> File Size (MB)</label>
                     <input class="form-control mb-2" name="target_filesize" id="target_filesize" type="text" value="{{ twopass.target_filesize }}" />
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" role="switch" id="approx" value="True" name="approx" id="approx" {{ "checked" if approx else "" }}>
