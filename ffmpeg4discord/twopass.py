@@ -66,8 +66,9 @@ class TwoPass:
         for stream in self.probe["streams"]:
             ix = stream["index"]
             if stream["codec_type"] == "video":
-                display_aspect_ratio = self.probe["streams"][ix]["display_aspect_ratio"].split(":")
-                self.ratio = int(display_aspect_ratio[0]) / int(display_aspect_ratio[1])
+                width = self.probe["streams"][ix]["width"]
+                height = self.probe["streams"][ix]["height"]
+                self.ratio = width / height
             elif stream["codec_type"] == "audio":
                 audio_stream = ix
 
@@ -265,13 +266,13 @@ class TwoPass:
 
         # First Pass
         ffOutput = ffmpeg.output(video, "pipe:", **params["pass1"])
-        ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
+        # ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
         print("Performing first pass")
         std_out, std_err = ffOutput.run(capture_stdout=True)
 
         # Second Pass
         ffOutput = ffmpeg.output(video, audio, self.output_filename, **params["pass2"])
-        ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
+        # ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
         print("\nPerforming second pass")
         ffOutput.run(overwrite_output=True)
 
