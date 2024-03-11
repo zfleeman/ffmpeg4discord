@@ -266,13 +266,13 @@ class TwoPass:
 
         # First Pass
         ffOutput = ffmpeg.output(video, "pipe:", **params["pass1"])
-        # ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
+        ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
         print("Performing first pass")
         std_out, std_err = ffOutput.run(capture_stdout=True)
 
         # Second Pass
         ffOutput = ffmpeg.output(video, audio, self.output_filename, **params["pass2"])
-        # ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
+        ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
         print("\nPerforming second pass")
         ffOutput.run(overwrite_output=True)
 
