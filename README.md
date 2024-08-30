@@ -32,7 +32,7 @@ This will place `ffmpeg.exe`, `ffprobe.exe`, and `ffplay.exe` into the same loca
 Use `ff4d` in your favorite terminal like this:
 
 ```
-ff4d path-to-file.mp4 <optional-flags>
+ff4d path-to-file.mp4 [optional-flags]
 ```
 
 This command tries to compress the whole video file down to the default output file size of 25MB:
