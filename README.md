@@ -1,7 +1,7 @@
 # ffmpeg4discord (`ff4d`) -- Target File Size Video Compression for Discord with FFmpeg
 [![PyPI version](https://img.shields.io/pypi/v/ffmpeg4discord.svg)](https://pypi.org/project/ffmpeg4discord/)
 
-`ff4d` takes a video file as its input and encodes it to be less than a target file size. Discord's free-tier file size sharing limit is 25MB. You can change the file's name in a way that trims the file to a timestamped section. I developed this package specifically for swift sharing of large NVIDIA ShadowPlay clips on Discord, eliminating the need for a visual editor.
+`ff4d` takes a video file as its input and encodes it to be less than a target file size. Discord's free-tier file size sharing limit is 10MB. You can change the file's name in a way that trims the file to a timestamped section. I developed this package specifically for swift sharing of large NVIDIA ShadowPlay clips on Discord, eliminating the need for a visual editor.
 
 The `TwoPass()` class presents a 2-pass encoding approach for the `ffmpeg-python` library, which is not showcased in that package's documentation. Additionally, the class extends support to various FFmpeg video filters such as cropping and resolution scaling, making it adaptable to a range of audio/video workflows.
 
@@ -35,16 +35,16 @@ Use `ff4d` in your favorite terminal like this:
 ff4d path-to-file.mp4 [optional-flags]
 ```
 
-This command tries to compress the whole video file down to the default output file size of 25MB:
+This command tries to compress the whole video file down to the an output file size of 10MB:
 
 ```
-ff4d cool_clip.mp4
+ff4d cool_clip.mp4 -s 10
 ```
 
-This will trim a 20 second section out of `cool_clip.mp4` starting at 10 seconds in and ending at 30 seconds. [More on the optional flags](#optional-flags).
+This will trim a 20 second section out of `cool_clip.mp4` starting at 10 seconds in and ending at 30 seconds. The output will be less than 10MB. [More on the optional flags](#optional-flags).
 
 ```
-ff4d cool_clip.mp4 --from 00:00:10 --to 00:00:30
+ff4d cool_clip.mp4 --from 00:00:10 --to 00:00:30 -s 10
 ```
 
 I've had a good time using this command with a Batch file on Windows. Refer to the [Sample Batch File](#sample-batch-file) section for more information.
@@ -53,7 +53,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | Flag | Default | Example | Description |
 |---|---|---|---|
 | `-o`<br>`--output` | current working directory | `-o "C:/Users/zflee/A Folder"`<br>`-o "C:/Users/zflee/Desktop/A Folder/filename.mp4"` | If you want your smaller clips to go to a specific folder, use this option. You can also choose a custom output filename, just make sure to include the correct file extension for your video codec. |
-| `-s`<br>`--filesize` | 25 | `-s 50` | Increase or decrease this value if you want to compress your video to something other than the 25MB Discord limit. |
+| `-s`<br>`--filesize` | 25 | `-s 50` | Change this value if you want to compress your video to something other than the 10MB Discord limit. |
 | `-a`<br>`--audio-br` | 96 | `-a 128` | You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate. |
 | `-r`<br>`--resolution` | No default | `-r 1280x720` | Modify this value to change the output resolution of your video file. |
 | `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video. |
