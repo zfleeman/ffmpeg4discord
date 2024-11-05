@@ -9,7 +9,7 @@ description = "A tool to help convert a video file to a target file size."
 readme = {file = "README.md", content-type = "text/markdown"}
 authors = [{ name = "Zach Fleeman", email = "zfleeman@gmail.com" }]
 license = {file = "LICENSE"}
-requires-python = ">= 3.8"
+requires-python = ">= 3.9"
 dependencies = [
     "Flask==3.0.1",
     "ffmpeg-python==0.2.0"

@@ -37,7 +37,7 @@ def get_args() -> Namespace:
     parser.add_argument(
         "-s",
         "--target-filesize",
-        default=25,
+        default=10,
         type=float,
         help="The output file size in MB.",
     )
@@ -81,5 +81,8 @@ def get_args() -> Namespace:
 
     if args["to"]:
         args["times"]["to"] = args["to"]
+
+    del args["from"]
+    del args["to"]
 
     return args
