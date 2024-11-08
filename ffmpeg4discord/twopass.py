@@ -178,41 +178,43 @@ class TwoPass:
             "bufsize": br * 2,
         }
 
-    def time_from_file_name(self) -> dict:
+    def time_from_file_name(self):
         """
-        Extracts start (`-ss`) and end (`-to`) timestamps from the file name and updates the instance's
-        time-related attributes. Assumes the file name contains time codes in the format 'HHMMSS-HHMMSS'.
+        Extracts start (`-ss`) and optional end (`-to`) timestamps from the file name and updates the instance's
+        time-related attributes. Assumes the file name is in one of two formats:
+        - 'HHMMSS' (start time only)
+        - 'HHMMSS-HHMMSS' (start and end times)
 
-        This method calculates `from_seconds` and `to_seconds` from the filename and adjusts the duration
-        accordingly if the end time is missing. Updates the `self.times` dictionary with `-ss` and `-to` values
-        and computes `self.length`.
+        If the end time is not provided, the function defaults the end time to the full video duration.
         """
         fname = self.fname
         times = {}
 
         try:
-            # Parse start time from filename
+            # Parse start time from the first six characters
             start_time_str = f"{fname[0:2]}:{fname[2:4]}:{fname[4:6]}"
             self.from_seconds = seconds_from_ts_string(start_time_str)
             times["ss"] = start_time_str
 
-            # Parse end time from filename if it exists
-            end_time_str = f"{fname[7:9]}:{fname[9:11]}:{fname[11:13]}"
-            if fname[7:13].isdigit():
+            # Check if there is an additional six digits for end time
+            if len(fname) > 6 and fname[7:13].isdigit():
+                end_time_str = f"{fname[7:9]}:{fname[9:11]}:{fname[11:13]}"
                 self.to_seconds = seconds_from_ts_string(end_time_str)
                 times["to"] = end_time_str
                 self.length = self.to_seconds - self.from_seconds
             else:
-                # If end time is missing, set `to` to video duration
+                # Default to the full duration if end time is not provided
                 times["to"] = seconds_to_timestamp(self.duration)
                 self.length = self.duration - self.from_seconds
                 self.to_seconds = self.duration
 
         except ValueError:
-            # If parsing fails, default length to full duration
+            # Handle any issues with timestamp parsing by defaulting to full duration
             self.length = self.duration
+            self.times = {"ss": "00:00:00", "to": seconds_to_timestamp(self.duration)}
+            logging.warning("Warning: Invalid time format in filename. Defaulting to full duration.")
 
-        # Update time dictionary
+        # Update instance attributes with calculated times
         self.times = times
 
     def apply_video_filters(self, video):
