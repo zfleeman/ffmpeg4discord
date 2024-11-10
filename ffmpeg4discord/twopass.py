@@ -161,9 +161,14 @@ class TwoPass:
         }
 
         # assign the output framerate
-        if self.framerate and self.framerate < self.init_framerate:
-            params["pass1"]["r"] = self.framerate
-            params["pass2"]["r"] = self.framerate
+        if self.framerate:
+            if self.framerate < self.init_framerate:
+                params["pass1"]["r"] = self.framerate
+                params["pass2"]["r"] = self.framerate
+            else:
+                logging.warning(
+                    f"Your output framerate ({self.framerate}) is more than the original framerate ({self.init_framerate}). Keeping the original framerate..."
+                )
 
         if codec == "libx264":
             params["pass2"]["c:a"] = "aac"
