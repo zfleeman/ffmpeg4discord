@@ -47,6 +47,7 @@ class TwoPass:
         resolution: str = "",
         config: Optional[str] = None,
         filename_times: bool = False,
+        framerate: Optional[int] = None,
     ) -> None:
         if config:
             self.init_from_config(config_file=config)
@@ -57,6 +58,7 @@ class TwoPass:
             self.times = times or {}
             self.audio_br = audio_br
             self.codec = codec
+            self.framerate = framerate
 
         self.filename = filename
         self.fname = filename.name
@@ -71,6 +73,7 @@ class TwoPass:
                 "This media file has more than two streams, which could cause errors during the encoding job."
             )
 
+        # Extract some information from the probe.
         for stream in self.probe["streams"]:
             ix = stream["index"]
             codec_type = stream["codec_type"]
@@ -78,6 +81,11 @@ class TwoPass:
                 width = self.probe["streams"][ix]["width"]
                 height = self.probe["streams"][ix]["height"]
                 self.ratio = width / height
+
+                # Get the framerate for later comparisons
+                framerate_ratio: str = self.probe["streams"][ix].get("r_frame_rate")
+                self.init_framerate = round(int(framerate_ratio.split("/")[0]) / int(framerate_ratio.split("/")[1]))
+
             elif codec_type == "audio":
                 audio_stream = ix
 
@@ -141,6 +149,7 @@ class TwoPass:
         :param codec: ffmpeg video codec to use during encoding
         :return: dictionary containing parameters for ffmpeg's first and second pass.
         """
+
         params = {
             "pass1": {
                 "pass": 1,
@@ -150,6 +159,11 @@ class TwoPass:
             },
             "pass2": {"pass": 2, "b:a": self.audio_br, "c:v": codec},
         }
+
+        # assign the output framerate
+        if self.framerate and self.framerate < self.init_framerate:
+            params["pass1"]["r"] = self.framerate
+            params["pass2"]["r"] = self.framerate
 
         if codec == "libx264":
             params["pass2"]["c:a"] = "aac"

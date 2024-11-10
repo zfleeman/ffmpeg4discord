@@ -49,6 +49,7 @@ def get_args() -> Namespace:
     # video filters
     parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
     parser.add_argument("-r", "--resolution", default="", help="The output resolution of your final video.")
+    parser.add_argument("-f", "--framerate", type=int, help="The desired output frames per second.")
 
     # configuraiton json file
     parser.add_argument("--config", help="JSON file containing the run's configuration")
