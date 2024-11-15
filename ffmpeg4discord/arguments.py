@@ -1,6 +1,8 @@
-from argparse import ArgumentParser, Namespace, BooleanOptionalAction
-import socket
+import json
 import logging
+import socket
+
+from argparse import ArgumentParser, Namespace, BooleanOptionalAction
 from random import randint
 
 
@@ -45,6 +47,12 @@ def get_args() -> Namespace:
     parser.add_argument(
         "-c", "--codec", type=str, default="libx264", choices=["libx264", "libvpx-vp9"], help="Video codec."
     )
+    parser.add_argument(
+        "--vp9-opts",
+        type=str,
+        default=None,
+        help="""JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding. (e.g., --vp9-opts \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\')')""",
+    )
 
     # video filters
     parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
@@ -85,5 +93,19 @@ def get_args() -> Namespace:
 
     del args["from"]
     del args["to"]
+
+    if args["vp9_opts"]:
+        logging.info(f"Received VP9 options: {args['vp9_opts']}")
+        try:
+            args["vp9_opts"] = json.loads(args["vp9_opts"])
+            if not isinstance(args["vp9_opts"], dict):
+                logging.error("The `vp9-opts` input must be a dictionary. Using default parameters.")
+                args["vp9_opts"] = None
+        except json.JSONDecodeError:
+            print(args["vp9_opts"])
+            logging.error(
+                """Invalid JSON format. Format your input string like this: \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\'. Using default parameters."""
+            )
+            args["vp9_opts"] = None
 
     return args

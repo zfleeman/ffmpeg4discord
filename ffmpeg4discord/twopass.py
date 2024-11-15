@@ -48,6 +48,7 @@ class TwoPass:
         config: Optional[str] = None,
         filename_times: bool = False,
         framerate: Optional[int] = None,
+        vp9_opts: Optional[dict] = None,
     ) -> None:
         if config:
             self.init_from_config(config_file=config)
@@ -60,6 +61,7 @@ class TwoPass:
             self.codec = codec
             self.framerate = framerate
             self.output = Path(output).resolve()
+            self.vp9_opts = vp9_opts or {}
 
         self.filename = filename
         self.fname = filename.name
@@ -173,10 +175,14 @@ class TwoPass:
         if codec == "libx264":
             params["pass2"]["c:a"] = "aac"
         elif codec == "libvpx-vp9":
-            params["pass1"]["row-mt"] = 1
-            params["pass2"]["row-mt"] = 1
-            params["pass2"]["cpu-used"] = 2
-            params["pass2"]["deadline"] = "good"
+            row_mt = self.vp9_opts.get("row-mt", 1)
+            cpu_used = self.vp9_opts.get("cpu-used", 2)
+            deadline = self.vp9_opts.get("deadline", "good")
+
+            params["pass1"]["row-mt"] = row_mt
+            params["pass2"]["row-mt"] = row_mt
+            params["pass2"]["cpu-used"] = cpu_used
+            params["pass2"]["deadline"] = deadline
             params["pass2"]["c:a"] = "libopus"
 
         params["pass1"].update(**self.bitrate_dict)
