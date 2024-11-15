@@ -57,7 +57,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `-a`<br>`--audio-br` | 96 | `-a 128` | You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate. |
 | `-r`<br>`--resolution` | No default | `-r 1280x720` | Modify this value to change the output resolution of your video file. |
 | `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video. |
-| `-c`<br>`--codec` | libx264 | `-c libvpx-vp9` | Options: `libx264` or `libvpx-vp9`<br>Specify the video codec that you want to use. The default option creates `.mp4` files, while `libvpx-vp9` creates `.webm` video files.<br>`libvpx-vp9` creates better looking video files with the same bitrates, but it takes significantly longer to encode. VP9 is also not as compatible with as many devices or browsers. I can view `.webm` videos on the desktop installtion of Discord, but they are not viewable on my iOS Discord installation. |
+| `-c`<br>`--codec` | libx264 | `-c libvpx-vp9` | Options: `libx264` or `libvpx-vp9`<br>Specify the video codec that you want to use. The default option creates `.mp4` files, while `libvpx-vp9` creates `.webm` video files.<br>`libvpx-vp9` creates better looking video files with the same bitrates, but it takes significantly longer to encode. VP9 is also not as compatible with as many devices or browsers. I can view `.webm` videos on the desktop installation of Discord, but they are not viewable on my iOS Discord installation. |
 | `--web` | No default. Boolean flag. | `--web` | Launch the Web UI for this job. A Boolean flag. No value is needed after the flag. See [Web UI](#web-ui) for more information on the Web UI. |
 | `-p`<br>`--port` | No default. Picks a random port if not specified. | `-p 5333` | Run the Web UI on a specific port. |
 | `--config` | No default | `--config config.json` | Path to a JSON file containing the configuration for the above parameters. This config file takes precedence over all of the other flags. See [JSON Configuration](#json-configuration). |
@@ -65,6 +65,8 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--to` | No default | `--to 00:01:20` | End time for trimming the video file to a desired section. |
 | `--filename-times` | No default. Boolean flag. | `--filename-times` | Generate From/To timestamps from the clip's file name. See [File Name Formatting](#file-name-formatting) |
 | `--approx` | No default. Boolean flag. | `--approx` | Approximate file size. The job will not loop to output the file under the target size. It will get close enough to the target on the first run. |
+| `-f`<br>`--framerate` | No default. | `-f 30` | Adjust the output's frame rate. Specify a value lower than the input video's frame rate. |
+| `--vp9-opts` | No default. | `--vp9-opts '{"row-mt":1,"deadline":"good","cpu-used":2}'` | Specify options to tweak VP9 encoding speed. `row-mt`, `deadline`, and `cpu-used` are the only values supported at the moment. This can only be set with the command line or JSON configuration file. It is not configurable with the Web UI. |
 
 ### File Name Formatting
 Enable this feature with `--filename-times`. You can edit the name of your video file if you need to trim it to a specific section. Here are a few examples.
@@ -84,6 +86,7 @@ If your encoding job will always be the same, you can reference a JSON configura
     "target_filesize": 8.0,
     "audio_br": 96,
     "crop": "",
+    "output": "",
     "resolution": "",
     "codec": "libx264",
     "times": {

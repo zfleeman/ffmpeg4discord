@@ -1,59 +1,71 @@
-import ffmpeg
-import math
-import logging
 import json
+import logging
+import math
 import os
+
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
+
+import ffmpeg
 
 logging.getLogger().setLevel(logging.INFO)
 
 
 class TwoPass:
+    """
+    Encodes and resizes video files using ffmpeg's two-pass encoding to meet a specified target file size.
+
+    The TwoPass class leverages the ffmpeg-python library to compress video files while allowing control
+    over attributes such as codec, resolution, and target file size. It performs two-pass encoding
+    to achieve optimal video quality at the desired size.
+
+    Two-Pass encoding documentation: https://trac.ffmpeg.org/wiki/Encode/H.264#twopass
+
+    Attributes:
+        filename (Path): Path to the input video file that needs compression.
+        target_filesize (float): Desired target filesize in megabytes (MB).
+        output (str): Output file path or directory where the compressed video will be saved.
+        times (dict): Dictionary with keys "from" and "to" specifying timestamps (in seconds) for encoding a segment.
+        audio_br (float): Audio bitrate in kilobits per second (kbps), if specified. Defaults to automatic calculation.
+        codec (str): Video codec to use for compression, e.g., 'libx264' (default).
+        crop (str): Crop settings (if any) for the video.
+        resolution (str): Target resolution for the output video.
+        config (str): Path to an optional configuration file for advanced ffmpeg settings.
+        filename_times (bool): Flag to include timestamps in the output filename.
+    """
+
     def __init__(
         self,
         filename: Path,
         target_filesize: float,
         output: str = "",
-        times: dict = {},
-        audio_br: float = None,
+        times: Optional[dict] = None,
+        audio_br: Optional[float] = None,
         codec: str = "libx264",
         crop: str = "",
         resolution: str = "",
-        config: str = "",
-        **kwargs,
+        config: Optional[str] = None,
+        filename_times: bool = False,
+        framerate: Optional[int] = None,
+        vp9_opts: Optional[dict] = None,
     ) -> None:
-        """
-        A Class to resize a video file to a specified MB target.
-        This class utilizes ffmpeg's two-pass encoding technique with the
-        ffmpeg-python wrapper package.
-        https://trac.ffmpeg.org/wiki/Encode/H.264#twopass
-
-        :param filename: video file that needs to be compressed
-        :param output: file or directory that the new, compressed output is delivered to
-        :param times: dict containing "from" and "to" timestamp keys in the format 00:00:00
-        :param target_filesize: desired file size of the output file, in MB
-        :param audio_br: desired audio bitrate for the output file in kbps
-        :param codec: ffmpeg video codec to use when encoding the file
-        :param crop: coordinates for cropping the video to a different resolution
-        :param resolution: output file's final resolution e.g. 1280x720
-        :param config: json containing values for the above params
-        """
-
         if config:
             self.init_from_config(config_file=config)
         else:
             self.target_filesize = target_filesize
             self.crop = crop
             self.resolution = resolution
-            self.times = times
+            self.times = times or {}
             self.audio_br = audio_br
             self.codec = codec
+            self.framerate = framerate
+            self.output = Path(output).resolve()
+            self.vp9_opts = vp9_opts or {}
 
         self.filename = filename
         self.fname = filename.name
         self.split_fname = self.fname.split(".")
-        self.output = Path(output).resolve()
 
         self.probe = ffmpeg.probe(filename=filename)
         self.duration = math.floor(float(self.probe["format"]["duration"]))
@@ -63,13 +75,20 @@ class TwoPass:
                 "This media file has more than two streams, which could cause errors during the encoding job."
             )
 
+        # Extract some information from the probe.
         for stream in self.probe["streams"]:
             ix = stream["index"]
-            if stream["codec_type"] == "video":
+            codec_type = stream["codec_type"]
+            if codec_type == "video":
                 width = self.probe["streams"][ix]["width"]
                 height = self.probe["streams"][ix]["height"]
                 self.ratio = width / height
-            elif stream["codec_type"] == "audio":
+
+                # Get the framerate for later comparisons
+                framerate_ratio: str = self.probe["streams"][ix].get("r_frame_rate")
+                self.init_framerate = round(int(framerate_ratio.split("/")[0]) / int(framerate_ratio.split("/")[1]))
+
+            elif codec_type == "audio":
                 audio_stream = ix
 
         if not self.audio_br:
@@ -78,10 +97,10 @@ class TwoPass:
             self.audio_br = self.audio_br * 1000
 
         # times are supplied by the file's name
-        if kwargs.get("filename_times"):
+        if filename_times:
             self.time_from_file_name()
 
-        # times are provided
+        # times are provided by the flags or config file
         elif self.times:
             if self.times.get("from"):
                 self.times["ss"] = self.times["from"] or "00:00:00"
@@ -126,12 +145,13 @@ class TwoPass:
             config = json.load(f)
         self.__dict__.update(**config)
 
-    def generate_params(self, codec: str):
+    def generate_params(self, codec: str) -> dict:
         """
         Create params for the ffmpeg.output() function
         :param codec: ffmpeg video codec to use during encoding
         :return: dictionary containing parameters for ffmpeg's first and second pass.
         """
+
         params = {
             "pass1": {
                 "pass": 1,
@@ -142,13 +162,27 @@ class TwoPass:
             "pass2": {"pass": 2, "b:a": self.audio_br, "c:v": codec},
         }
 
+        # assign the output framerate
+        if self.framerate:
+            if self.framerate < self.init_framerate:
+                params["pass1"]["r"] = self.framerate
+                params["pass2"]["r"] = self.framerate
+            else:
+                logging.warning(
+                    f"Your output framerate ({self.framerate}) is more than the original framerate ({self.init_framerate}). Keeping the original framerate..."
+                )
+
         if codec == "libx264":
             params["pass2"]["c:a"] = "aac"
         elif codec == "libvpx-vp9":
-            params["pass1"]["row-mt"] = 1
-            params["pass2"]["row-mt"] = 1
-            params["pass2"]["cpu-used"] = 2
-            params["pass2"]["deadline"] = "good"
+            row_mt = self.vp9_opts.get("row-mt", 1)
+            cpu_used = self.vp9_opts.get("cpu-used", 2)
+            deadline = self.vp9_opts.get("deadline", "good")
+
+            params["pass1"]["row-mt"] = row_mt
+            params["pass2"]["row-mt"] = row_mt
+            params["pass2"]["cpu-used"] = cpu_used
+            params["pass2"]["deadline"] = deadline
             params["pass2"]["c:a"] = "libopus"
 
         params["pass1"].update(**self.bitrate_dict)
@@ -171,30 +205,41 @@ class TwoPass:
 
     def time_from_file_name(self):
         """
-        Create the -ss and -to fields from a file's name
+        Extracts start (`-ss`) and optional end (`-to`) timestamps from the file name and updates the instance's
+        time-related attributes. Assumes the file name is in one of two formats:
+        - 'HHMMSS' (start time only)
+        - 'HHMMSS-HHMMSS' (start and end times)
+
+        If the end time is not provided, the function defaults the end time to the full video duration.
         """
         fname = self.fname
-        startstring = f"{fname[0:2]}:{fname[2:4]}:{fname[4:6]}"
-        endstring = f"{fname[7:9]}:{fname[9:11]}:{fname[11:13]}"
         times = {}
 
         try:
-            int(fname[0:6])
-            self.from_seconds = seconds_from_ts_string(startstring)
-            times["ss"] = startstring
-            try:
-                int(fname[11:13])
-                self.to_seconds = seconds_from_ts_string(endstring)
-                length = self.to_seconds - self.from_seconds
-                times["to"] = endstring
-            except:
-                times["to"] = seconds_to_timestamp(self.duration)
-                length = self.duration - self.from_seconds
-                self.to_seconds = self.duration
-        except:
-            length = self.duration
+            # Parse start time from the first six characters
+            start_time_str = f"{fname[0:2]}:{fname[2:4]}:{fname[4:6]}"
+            self.from_seconds = seconds_from_ts_string(start_time_str)
+            times["ss"] = start_time_str
 
-        self.length = length
+            # Check if there is an additional six digits for end time
+            if len(fname) > 6 and fname[7:13].isdigit():
+                end_time_str = f"{fname[7:9]}:{fname[9:11]}:{fname[11:13]}"
+                self.to_seconds = seconds_from_ts_string(end_time_str)
+                times["to"] = end_time_str
+                self.length = self.to_seconds - self.from_seconds
+            else:
+                # Default to the full duration if end time is not provided
+                times["to"] = seconds_to_timestamp(self.duration)
+                self.length = self.duration - self.from_seconds
+                self.to_seconds = self.duration
+
+        except ValueError:
+            # Handle any issues with timestamp parsing by defaulting to full duration
+            self.length = self.duration
+            self.times = {"ss": "00:00:00", "to": seconds_to_timestamp(self.duration)}
+            logging.warning("Warning: Invalid time format in filename. Defaulting to full duration.")
+
+        # Update instance attributes with calculated times
         self.times = times
 
     def apply_video_filters(self, video):

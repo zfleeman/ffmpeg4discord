@@ -75,8 +75,10 @@
                     <label for="output" class="form-label">Output Folder/File</label>
                     <input class="form-control" name="output" id="output" type="text" value="{{ twopass.output }}" />
                 </div>
-            </div>
-            <div class="row mb-3 row-cols-5">
+                <div class="col">
+                    <label for="framerate" class="form-label">Framerate</label>
+                    <input class="form-control" name="framerate" id="framerate" type="text" value="{{ twopass.framerate if twopass.framerate else '' }}" />
+                </div>
                 <div class="col">
                     <label for="codec" class="form-label">Video Codec</label>
                     <select name="codec" id="codec" class="form-select">

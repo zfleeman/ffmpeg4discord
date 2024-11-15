@@ -78,6 +78,7 @@ def main() -> None:
             twopass.crop = request.form.get("crop")
             twopass.output = Path(request.form.get("output"))
             twopass.codec = request.form.get("codec")
+            twopass.framerate = int(request.form.get("framerate"))
 
             # to loop or not to loop
             approx = bool(request.form.getlist("approx"))
