@@ -59,11 +59,11 @@ class TwoPass:
             self.audio_br = audio_br
             self.codec = codec
             self.framerate = framerate
+            self.output = Path(output).resolve()
 
         self.filename = filename
         self.fname = filename.name
         self.split_fname = self.fname.split(".")
-        self.output = Path(output).resolve()
 
         self.probe = ffmpeg.probe(filename=filename)
         self.duration = math.floor(float(self.probe["format"]["duration"]))

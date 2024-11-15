@@ -85,6 +85,7 @@ If your encoding job will always be the same, you can reference a JSON configura
     "target_filesize": 8.0,
     "audio_br": 96,
     "crop": "",
+    "output": "",
     "resolution": "",
     "codec": "libx264",
     "times": {
