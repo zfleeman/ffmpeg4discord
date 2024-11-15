@@ -102,7 +102,6 @@ def get_args() -> Namespace:
                 logging.error("The `vp9-opts` input must be a dictionary. Using default parameters.")
                 args["vp9_opts"] = None
         except json.JSONDecodeError:
-            print(args["vp9_opts"])
             logging.error(
                 """Invalid JSON format. Format your input string like this: \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\'. Using default parameters."""
             )
