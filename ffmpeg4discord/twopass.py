@@ -50,18 +50,16 @@ class TwoPass:
         framerate: Optional[int] = None,
         vp9_opts: Optional[dict] = None,
     ) -> None:
-        if config:
-            self.init_from_config(config_file=config)
-        else:
-            self.target_filesize = target_filesize
-            self.crop = crop
-            self.resolution = resolution
-            self.times = times or {}
-            self.audio_br = audio_br
-            self.codec = codec
-            self.framerate = framerate
-            self.output = output
-            self.vp9_opts = vp9_opts or {}
+
+        self.target_filesize = target_filesize
+        self.crop = crop
+        self.resolution = resolution
+        self.times = times or {}
+        self.audio_br = audio_br
+        self.codec = codec
+        self.framerate = framerate
+        self.output = output
+        self.vp9_opts = vp9_opts or {}
 
         self.filename = filename
         self.fname = filename.name
@@ -137,16 +135,6 @@ class TwoPass:
                 - Your clipping times are {self.times}
                 """
             )
-
-    def init_from_config(self, config_file: str) -> None:
-        """
-        Set the Class values from a json file
-        :param config_file: path to a json file containing parameters for TwoPass()
-        """
-        file_path = Path(config_file).resolve()
-        with open(file_path) as f:
-            config = json.load(f)
-        self.__dict__.update(**config)
 
     def generate_params(self, codec: str) -> dict:
         """

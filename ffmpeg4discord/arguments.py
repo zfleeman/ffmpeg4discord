@@ -3,6 +3,7 @@ import logging
 import socket
 
 from argparse import ArgumentParser, Namespace, BooleanOptionalAction
+from pathlib import Path
 from random import randint
 
 
@@ -68,6 +69,16 @@ def get_args() -> Namespace:
 
     args = vars(parser.parse_args())
 
+    # fill in from the config JSON
+    if args["config"]:
+        file_path = Path(args["config"]).resolve()
+        with open(file_path) as f:
+            config = json.load(f)
+
+        for k, v in config.items():
+            if not args[k]:
+                args[k] = v
+
     # do some work regarding the port
     if args["web"]:
         port = args.pop("port")
@@ -85,6 +96,7 @@ def get_args() -> Namespace:
 
     args["times"] = {}
 
+    # adjust times
     if args["from"]:
         args["times"]["from"] = args["from"]
 
@@ -94,6 +106,7 @@ def get_args() -> Namespace:
     del args["from"]
     del args["to"]
 
+    # work with vp9 options
     if args["vp9_opts"]:
         logging.info(f"Received VP9 options: {args['vp9_opts']}")
         try:

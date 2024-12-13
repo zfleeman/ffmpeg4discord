@@ -74,11 +74,13 @@ def main() -> None:
             # update TwoPass from web form
             twopass.resolution = request.form.get("resolution")
             twopass.target_filesize = target_filesize
-            twopass.audio_br = float(request.form.get("audio_br")) * 1000
             twopass.crop = request.form.get("crop")
             twopass.output = Path(request.form.get("output"))
             twopass.codec = request.form.get("codec")
-            twopass.framerate = int(request.form.get("framerate"))
+            twopass.framerate = int(framerate) if (framerate := request.form.get("framerate")) else None
+            twopass.audio_br = (
+                float(audio_br) * 1000 if (audio_br := request.form.get("audio_br")) else twopass.audio_br
+            )
 
             # to loop or not to loop
             approx = bool(request.form.getlist("approx"))

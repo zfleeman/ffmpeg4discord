@@ -53,7 +53,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | Flag | Default | Example | Description |
 |---|---|---|---|
 | `-o`<br>`--output` | current working directory | `-o "C:/Users/zflee/A Folder"`<br>`-o "C:/Users/zflee/Desktop/A Folder/filename.mp4"` | If you want your smaller clips to go to a specific folder, use this option. You can also choose a custom output filename, just make sure to include the correct file extension for your video codec. |
-| `-s`<br>`--filesize` | 25 | `-s 50` | Change this value if you want to compress your video to something other than the 10MB Discord limit. |
+| `-s`<br>`--target-filesize` | 10 | `-s 50` | Change this value if you want to compress your video to something other than the 10MB Discord limit. |
 | `-a`<br>`--audio-br` | 96 | `-a 128` | You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate. |
 | `-r`<br>`--resolution` | No default | `-r 1280x720` | Modify this value to change the output resolution of your video file. |
 | `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video. |
@@ -79,20 +79,15 @@ Enable this feature with `--filename-times`. You can edit the name of your video
     - Compresses the entire video if the first six characters of the file's name aren't numeric.
 
 ### JSON Configuration
-If your encoding job will always be the same, you can reference a JSON configuration file instead of passing a long list of arguments to the command line.
+If your encoding job will always be the same, you can reference a JSON configuration file instead of passing a long list of arguments to the command line. If you use the configuration JSON and supply a duplicate flag, the flag will be used over the JSON value. For example, if `"target_filesize"` is a key in your JSON _and_ `--target-filesize` (or `-s`) has been supplied in the command line, the value you give the command line will be used.
 
 ```
 {
-    "target_filesize": 8.0,
-    "audio_br": 96,
-    "crop": "",
-    "output": "",
-    "resolution": "",
+    "target_filesize": 10.0,
+    "resolution": "1280x720",
     "codec": "libx264",
-    "times": {
-        "from": "00:00:00",
-        "to": "00:00:40"
-    }
+    "from": "00:00:00",
+    "to": "00:00:40"
 }
 ```
 
