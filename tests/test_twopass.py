@@ -14,7 +14,7 @@ class TestTwoPass(unittest.TestCase):
         # Set up mock values for the probe
         mock_probe.return_value = {
             "streams": [
-                {"index": 0, "codec_type": "video", "width": 1280, "height": 720},
+                {"index": 0, "codec_type": "video", "width": 1280, "height": 720, "r_frame_rate": "60/1"},
                 {"index": 1, "codec_type": "audio", "bit_rate": "128000"},
             ],
             "format": {"duration": "3600"},
@@ -34,7 +34,7 @@ class TestTwoPass(unittest.TestCase):
         # Set up mock values for the probe
         mock_probe.return_value = {
             "streams": [
-                {"index": 0, "codec_type": "video", "width": 1280, "height": 720},
+                {"index": 0, "codec_type": "video", "width": 1280, "height": 720, "r_frame_rate": "60/1"},
                 {"index": 1, "codec_type": "audio", "bit_rate": "128000"},
             ],
             "format": {"duration": "3600"},
@@ -56,7 +56,7 @@ class TestTwoPass(unittest.TestCase):
         # Set up mock values for the probe
         mock_probe.return_value = {
             "streams": [
-                {"index": 0, "codec_type": "video", "width": 1280, "height": 720},
+                {"index": 0, "codec_type": "video", "width": 1280, "height": 720, "r_frame_rate": "60/1"},
                 {"index": 1, "codec_type": "audio", "bit_rate": "128000"},
             ],
             "format": {"duration": "120"},
@@ -81,7 +81,7 @@ class TestTwoPass(unittest.TestCase):
         # Set up mock values for the probe
         mock_probe.return_value = {
             "streams": [
-                {"index": 0, "codec_type": "video", "width": 1280, "height": 720},
+                {"index": 0, "codec_type": "video", "width": 1280, "height": 720, "r_frame_rate": "60/1"},
                 {"index": 1, "codec_type": "audio", "bit_rate": "128000"},
             ],
             "format": {"duration": "3600"},
