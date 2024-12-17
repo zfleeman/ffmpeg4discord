@@ -1,5 +1,4 @@
 import sys
-import os
 from glob import glob
 import webbrowser
 from flask import Flask, render_template, url_for, request
@@ -13,25 +12,40 @@ from ffmpeg4discord.twopass import TwoPass, seconds_to_timestamp
 
 
 def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False) -> None:
-    while twopass.run() >= target_filesize and not approx:
+    while True:
+        # clean up before each run
+        cleanup_files("ffmpeg2pass*")
+
+        # run the two-pass encoding
+        current_filesize = twopass.run()
+
+        # check if the filesize is within the target
+        if current_filesize < target_filesize or approx:
+            break
+
         print(
             f"\nThe output file size ({round(twopass.output_filesize, 2)}MB) is still above the target of {target_filesize}MB.\nRestarting...\n"
         )
-        os.remove(twopass.output_filename)
+        Path(twopass.output_filename).unlink()
 
         # adjust the class's target file size to set a lower bitrate for the next run
         twopass.target_filesize -= 0.2
 
-    # clean up
-    for file in glob("ffmpeg2pass*"):
-        os.remove(file)
+    # final cleanup
+    cleanup_files("ffmpeg2pass*")
 
+    # set the final message
     twopass.message = f"Your compressed video file ({round(twopass.output_filesize, 2)}MB) is located at {Path(twopass.output_filename).resolve()}"
 
 
 def open_browser(port: int) -> None:
     time.sleep(0.5)
     webbrowser.open(f"http://localhost:{port}")
+
+
+def cleanup_files(pattern: str) -> None:
+    for file in glob(pattern):
+        Path(file).unlink()
 
 
 def main() -> None:
