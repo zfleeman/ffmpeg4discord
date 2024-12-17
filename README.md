@@ -97,7 +97,6 @@ Create a new plain text JSON file (`my-config.json`) structured like this:
     "target_filesize": 10.0,
     "resolution": "1280x720",
     "codec": "libvpx-vp9",
-    "from": "00:00:00",
     "to": "00:00:40"
 }
 ```
