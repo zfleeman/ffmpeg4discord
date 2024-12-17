@@ -73,11 +73,15 @@ def get_args() -> Namespace:
     if args["config"]:
         file_path = Path(args["config"]).resolve()
         with open(file_path) as f:
-            config = json.load(f)
+            config: dict = json.load(f)
 
         for k, v in config.items():
             if not args[k]:
                 args[k] = v
+            elif args[k] == parser.get_default(k):
+                args[k] = v
+
+    del args["config"]
 
     # do some work regarding the port
     if args["web"]:
@@ -107,13 +111,10 @@ def get_args() -> Namespace:
     del args["to"]
 
     # work with vp9 options
-    if args["vp9_opts"]:
+    if args["vp9_opts"] and not isinstance(args["vp9_opts"], dict):
         logging.info(f"Received VP9 options: {args['vp9_opts']}")
         try:
             args["vp9_opts"] = json.loads(args["vp9_opts"])
-            if not isinstance(args["vp9_opts"], dict):
-                logging.error("The `vp9-opts` input must be a dictionary. Using default parameters.")
-                args["vp9_opts"] = None
         except json.JSONDecodeError:
             logging.error(
                 """Invalid JSON format. Format your input string like this: \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\'. Using default parameters."""
