@@ -80,7 +80,7 @@ def get_args() -> Namespace:
                 args[k] = v
             elif args[k] == parser.get_default(k):
                 args[k] = v
-    
+
     del args["config"]
 
     # do some work regarding the port

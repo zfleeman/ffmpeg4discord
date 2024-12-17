@@ -45,7 +45,6 @@ class TwoPass:
         codec: str = "libx264",
         crop: str = "",
         resolution: str = "",
-        config: Optional[str] = None,
         filename_times: bool = False,
         framerate: Optional[int] = None,
         vp9_opts: Optional[dict] = None,
