@@ -50,6 +50,7 @@ ff4d cool_clip.mp4 --from 00:00:10 --to 00:00:30 -s 10
 I've had a good time using this command with a Batch file on Windows. Refer to the [Sample Batch File](#sample-batch-file) section for more information.
 
 ### Optional Flags
+
 | Flag | Default | Example | Description |
 |---|---|---|---|
 | `-o`<br>`--output` | current working directory | `-o "C:/Users/zflee/A Folder"`<br>`-o "C:/Users/zflee/Desktop/A Folder/filename.mp4"` | If you want your smaller clips to go to a specific folder, use this option. You can also choose a custom output filename, just make sure to include the correct file extension for your video codec. |
@@ -69,6 +70,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--vp9-opts` | No default. | `--vp9-opts '{"row-mt":1,"deadline":"good","cpu-used":2}'` | Specify options to tweak VP9 encoding speed. `row-mt`, `deadline`, and `cpu-used` are the only values supported at the moment. This can only be set with the command line or JSON configuration file. It is not configurable with the Web UI. |
 
 ### File Name Formatting
+
 Enable this feature with `--filename-times`. You can edit the name of your video file if you need to trim it to a specific section. Here are a few examples.
 
 1) `000020.mp4`
@@ -79,24 +81,32 @@ Enable this feature with `--filename-times`. You can edit the name of your video
     - Compresses the entire video if the first six characters of the file's name aren't numeric.
 
 ### JSON Configuration
-If your encoding job will always be the same, you can reference a JSON configuration file instead of passing a long list of arguments to the command line. If you use the configuration JSON and supply a duplicate flag, the flag will be used over the JSON value. For example, if `"target_filesize"` is a key in your JSON _and_ `--target-filesize` (or `-s`) has been supplied in the command line, the value you give the command line will be used.
 
-```
+If your encoding job uses the same settings consistently, you can simplify your workflow by referencing a JSON configuration file instead of specifying multiple command-line arguments. This feature was designed for advanced users or "workflow people."
+
+When using both a JSON configuration file and command-line flags, the **command-line flag values take precedence** over the values defined in the JSON. For example, if `"target_filesize"` is specified in the JSON file and you include the `--target-filesize` (or `-s`) flag in your command, the command-line value will be used.
+
+If you supply a configuration JSON file, include only the settings that differ from the [default values](#optional-flags). Any omitted values will automatically use their defaults.
+
+#### Example JSON File Configuration
+
+Create a new plain text JSON file (`my-config.json`) structured like this:
+
+```json
 {
     "target_filesize": 10.0,
     "resolution": "1280x720",
-    "codec": "libx264",
+    "codec": "libvpx-vp9",
     "from": "00:00:00",
     "to": "00:00:40"
 }
 ```
 
-Notes:
-- All of the keys except for `"from"` and `"to"` must always be present. Those entries can be deleted if you do not have a timestamp entry for the given field. Examples: 
-  - `"times": {}` -> if you do not wish to trim the start and stop time of the file.
-  - `"times": {"from": "00:00:10"}` -> trim the clip from `00:00:10` to the end of the file
-  - `"times": {"to": "00:00:20"}` -> trim the clip from the beginning of the file up to `00:00:20`
-- You can set `audio_br` to `null` if you want to maintain the clip's audio bitrate.
+And then you would call `ff4d` like this:
+
+```bash
+ff4d my-video.mp4 --config my-config.json
+```
 
 ## Detailed Example
 
