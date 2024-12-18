@@ -17,6 +17,8 @@ pip install ffmpeg4discord
 
 You must first have FFmpeg installed on your system. `ffmpeg` needs to be registered in your PATH. macOS or Linux users can use their favorite package manager to do this, but this process is a little more tricky for Windows users.
 
+> **NOTE:** This package relies on the external FFmpeg binary, and updates to FFmpeg may cause unexpected errors; please raise an issue if you encounter any problems.
+
 ### Help for Windows users
 
 After installing this package, Windows users can run this command in a terminal to download the necessary `ffmpeg` binaries:
