@@ -2,25 +2,14 @@ import json
 import logging
 import math
 import os
-
 from datetime import datetime
 from pathlib import Path
+from textwrap import wrap
 from typing import Optional
 
 import ffmpeg
 
 logging.getLogger().setLevel(logging.INFO)
-
-
-from textwrap import wrap
-
-def prepare_wrapped_text(text, font_size, video_width, char_width=0.6):
-    # Estimate the maximum characters per line
-    max_chars = int(video_width / (font_size * char_width))
-    wrapped_lines = wrap(text, max_chars)
-    print("\n".join(wrapped_lines))
-    
-    return "\n".join(wrapped_lines)
 
 
 class TwoPass:
@@ -59,6 +48,7 @@ class TwoPass:
         filename_times: bool = False,
         framerate: Optional[int] = None,
         vp9_opts: Optional[dict] = None,
+        drawtext: Optional[list] = None,
     ) -> None:
 
         self.target_filesize = target_filesize
@@ -70,6 +60,7 @@ class TwoPass:
         self.framerate = framerate
         self.output = output
         self.vp9_opts = vp9_opts or {}
+        self.drawtext = drawtext or []
 
         self.filename = filename
         self.fname = filename.name
@@ -91,9 +82,9 @@ class TwoPass:
             ix = stream["index"]
             codec_type = stream["codec_type"]
             if codec_type == "video":
-                width = self.probe["streams"][ix]["width"]
-                height = self.probe["streams"][ix]["height"]
-                self.ratio = width / height
+                self.width = self.probe["streams"][ix]["width"]
+                self.height = self.probe["streams"][ix]["height"]
+                self.ratio = self.width / self.height
 
                 # Get the framerate for later comparisons
                 framerate_ratio: str = self.probe["streams"][ix].get("r_frame_rate")
@@ -268,12 +259,36 @@ class TwoPass:
                     input resolution's or your croped resolution's aspect ratio.
                     """
                 )
-        # Example usage
-        video_width = 1280
-        text = "Good morning and welcome to the Black Mesa Transit System. This automated train is provided for the security and convenience of employees of the Black Mesa Research Facility personnel. Please feel free to move about the train or simply sit back and enjoy the ride."
-        wrapped_text = prepare_wrapped_text(text, font_size=36, video_width=video_width)
 
-        video = video.drawtext(text=wrapped_text, x=10, y="h-text_h-10", fontcolor="white", fontsize=36, font='Monaco')
+        if self.drawtext:
+            video_width = x if self.resolution else self.width
+
+            for block in self.drawtext:
+
+                block["text"] = prepare_wrapped_text(
+                    block["text"], font_size=block.get("fontsize", 12), video_width=video_width
+                )
+                video = video.drawtext(font="monospace", **block)
+
+                # video = video.drawtext(text=wrapped_text, x=10, y="h-text_h-10", fontcolor="white", fontsize=36, font='monospace', enable="between(t,3,8)")
+                # video = video.drawtext(text=wrapped_text, x=100, y=500, fontcolor="white", fontsize=36, font='monospace', enable="lt(t,6)", borderw=4)
+                # video = video.drawtext(text=wrapped_text, x=100, y=500, fontcolor="white", fontsize=36, font='monospace', enable="lt(t,6)", borderw=4, box=1, boxborderw=10)
+                # video = video.drawtext(
+                #     text=wrapped_text,
+                #     x=5,
+                #     y="h-text_h-10",
+                #     fontcolor="white",
+                #     fontsize=36,
+                #     font="monospace",
+                #     enable="lt(t,6)",
+                #     # borderw=4,
+                #     # box=1,
+                #     # boxborderw=6,
+                #     # boxcolor="FFFFFF@0.15",
+                #     shadowx=-2,
+                #     shadowy=2,
+                #     shadowcolor="orange",
+                # )
 
         return video
 
@@ -346,3 +361,12 @@ def seconds_to_timestamp(seconds: int) -> str:
     timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     return timestamp
+
+
+def prepare_wrapped_text(text, font_size, video_width, char_width=0.6):
+    # Estimate the maximum characters per line
+    max_chars = int(video_width / (font_size * char_width))
+    wrapped_lines = wrap(text, max_chars)
+    print("\n".join(wrapped_lines))
+
+    return "\n".join(wrapped_lines)

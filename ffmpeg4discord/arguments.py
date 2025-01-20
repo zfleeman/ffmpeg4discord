@@ -12,6 +12,15 @@ def is_port_in_use(port: int) -> bool:
         return s.connect_ex(("localhost", port)) == 0
 
 
+def parse_json_option(option, option_name, default_value):
+    logging.info(f"Received {option_name}: {option}")
+    try:
+        return json.loads(option)
+    except json.JSONDecodeError:
+        logging.error(f"""Invalid JSON format for {option_name}. Using default parameters.""")
+        return default_value
+
+
 def get_args() -> Namespace:
     parser = ArgumentParser(
         prog="ffmpeg4discord",
@@ -52,7 +61,13 @@ def get_args() -> Namespace:
         "--vp9-opts",
         type=str,
         default=None,
-        help="""JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding. (e.g., --vp9-opts \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\')')""",
+        help="""JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding. (e.g., --vp9-opts \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\')""",
+    )
+    parser.add_argument(
+        "--drawtext",
+        type=str,
+        default=None,
+        help="""JSON string containing a list of configuration options for FFMpeg's "drawtext" filter. (e.g., --drawtext \'[{"text": "example text", x=10, y=50}]\')""",
     )
 
     # video filters
@@ -112,13 +127,10 @@ def get_args() -> Namespace:
 
     # work with vp9 options
     if args["vp9_opts"] and not isinstance(args["vp9_opts"], dict):
-        logging.info(f"Received VP9 options: {args['vp9_opts']}")
-        try:
-            args["vp9_opts"] = json.loads(args["vp9_opts"])
-        except json.JSONDecodeError:
-            logging.error(
-                """Invalid JSON format. Format your input string like this: \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\'. Using default parameters."""
-            )
-            args["vp9_opts"] = None
+        args["vp9_opts"] = parse_json_option(args["vp9_opts"], "VP9 options", None)
+
+    # work with drawtext
+    if args["drawtext"] and not isinstance(args["drawtext"], list):
+        args["drawtext"] = parse_json_option(args["drawtext"], "drawtext text blocks", None)
 
     return args
