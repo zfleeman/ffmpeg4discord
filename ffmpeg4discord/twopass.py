@@ -262,13 +262,39 @@ class TwoPass:
 
         if self.drawtext:
             video_width = x if self.resolution else self.width
+            drawtext_parameters = {
+                "fontfile",
+                "text",
+                "x",
+                "y",
+                "fontsize",
+                "fontcolor",
+                "box",
+                "boxcolor",
+                "shadowx",
+                "shadowy",
+                "shadowcolor",
+                "borderw",
+                "bordercolor",
+                "align",
+                "halign",
+                "valign",
+                "line_spacing" "alpha",
+                "enable",
+                "reload",
+                "rate",
+                "start_number" "fix_bounds",
+                "timecode",
+                "timecode_rate",
+            }
 
             for block in self.drawtext:
 
                 block["text"] = prepare_wrapped_text(
                     block["text"], font_size=block.get("fontsize", 12), video_width=video_width
                 )
-                video = video.drawtext(font="monospace", **block)
+                filtered_block = {k: v for k, v in block.items() if k in drawtext_parameters}
+                video = video.drawtext(**filtered_block)
 
                 # video = video.drawtext(text=wrapped_text, x=10, y="h-text_h-10", fontcolor="white", fontsize=36, font='monospace', enable="between(t,3,8)")
                 # video = video.drawtext(text=wrapped_text, x=100, y=500, fontcolor="white", fontsize=36, font='monospace', enable="lt(t,6)", borderw=4)
