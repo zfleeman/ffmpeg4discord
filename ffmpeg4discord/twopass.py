@@ -12,6 +12,17 @@ import ffmpeg
 logging.getLogger().setLevel(logging.INFO)
 
 
+from textwrap import wrap
+
+def prepare_wrapped_text(text, font_size, video_width, char_width=0.6):
+    # Estimate the maximum characters per line
+    max_chars = int(video_width / (font_size * char_width))
+    wrapped_lines = wrap(text, max_chars)
+    print("\n".join(wrapped_lines))
+    
+    return "\n".join(wrapped_lines)
+
+
 class TwoPass:
     """
     Encodes and resizes video files using ffmpeg's two-pass encoding to meet a specified target file size.
@@ -257,6 +268,12 @@ class TwoPass:
                     input resolution's or your croped resolution's aspect ratio.
                     """
                 )
+        # Example usage
+        video_width = 1280
+        text = "Good morning and welcome to the Black Mesa Transit System. This automated train is provided for the security and convenience of employees of the Black Mesa Research Facility personnel. Please feel free to move about the train or simply sit back and enjoy the ride."
+        wrapped_text = prepare_wrapped_text(text, font_size=36, video_width=video_width)
+
+        video = video.drawtext(text=wrapped_text, x=10, y="h-text_h-10", fontcolor="white", fontsize=36, font='Monaco')
 
         return video
 
