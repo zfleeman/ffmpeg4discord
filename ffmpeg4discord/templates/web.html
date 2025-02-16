@@ -95,6 +95,14 @@
                     <span id="spinIcon" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" hidden></span>
                 </div>
             </div>
+            <div class="row mb-3 row-cols-5">
+                <div class="col">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="verbose" value="True" name="verbose" id="verbose" {{ "checked" if twopass.verbose else "" }}>
+                        <label class="form-check-label" for="verbose">Verbose FFmpeg Logs</label>
+                    </div>
+                </div>
+            </div>
         </form>
     </div>
     <script>

@@ -1,8 +1,7 @@
 import json
 import logging
 import socket
-
-from argparse import ArgumentParser, Namespace, BooleanOptionalAction
+from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 from pathlib import Path
 from random import randint
 
@@ -53,6 +52,12 @@ def get_args() -> Namespace:
         type=str,
         default=None,
         help="""JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding. (e.g., --vp9-opts \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\')')""",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action=BooleanOptionalAction,
+        help="Add this flag to get more detailed logging out of FFmpeg. Useful for debugging an error.",
     )
 
     # video filters

@@ -1,11 +1,11 @@
-import sys
+import logging
 import os
-from urllib.request import urlretrieve
+import platform
+import shutil
+import sys
 import zipfile
 from pathlib import Path
-import shutil
-import logging
-import platform
+from urllib.request import urlretrieve
 
 if platform.system() != "Windows":
     logging.warning(
