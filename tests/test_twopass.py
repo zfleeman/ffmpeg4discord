@@ -1,7 +1,8 @@
 import unittest
-from unittest.mock import patch, MagicMock
-from ffmpeg4discord.twopass import TwoPass
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from ffmpeg4discord.twopass import TwoPass
 
 
 class TestTwoPass(unittest.TestCase):

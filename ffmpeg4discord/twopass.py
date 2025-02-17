@@ -2,7 +2,6 @@ import json
 import logging
 import math
 import os
-
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -46,6 +45,7 @@ class TwoPass:
         crop: str = "",
         resolution: str = "",
         filename_times: bool = False,
+        verbose: bool = False,
         framerate: Optional[int] = None,
         vp9_opts: Optional[dict] = None,
     ) -> None:
@@ -59,6 +59,7 @@ class TwoPass:
         self.framerate = framerate
         self.output = output
         self.vp9_opts = vp9_opts or {}
+        self.verbose = verbose
 
         self.filename = filename
         self.fname = filename.name
@@ -299,15 +300,18 @@ class TwoPass:
         video = self.apply_video_filters(ffinput.video)
         audio = ffinput.audio
 
+        # set our logging level
+        loglevel = "quiet" if not self.verbose else "verbose"
+
         # First Pass
         ffOutput = ffmpeg.output(video, "pipe:", **params["pass1"])
-        ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
+        ffOutput = ffOutput.global_args("-loglevel", loglevel, "-stats")
         print("Performing first pass")
         std_out, std_err = ffOutput.run(capture_stdout=True)
 
         # Second Pass
         ffOutput = ffmpeg.output(video, audio, self.output_filename, **params["pass2"])
-        ffOutput = ffOutput.global_args("-loglevel", "quiet", "-stats")
+        ffOutput = ffOutput.global_args("-loglevel", loglevel, "-stats")
         print("\nPerforming second pass")
         ffOutput.run(overwrite_output=True)
 

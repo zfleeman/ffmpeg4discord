@@ -1,10 +1,11 @@
 import sys
-from glob import glob
-import webbrowser
-from flask import Flask, render_template, url_for, request
-import time
 import threading
+import time
+import webbrowser
+from glob import glob
 from pathlib import Path
+
+from flask import Flask, render_template, request, url_for
 
 sys.dont_write_bytecode = True
 from ffmpeg4discord import arguments
@@ -95,6 +96,7 @@ def main() -> None:
             twopass.audio_br = (
                 float(audio_br) * 1000 if (audio_br := request.form.get("audio_br")) else twopass.audio_br
             )
+            twopass.verbose = bool(request.form.getlist("verbose"))
 
             # to loop or not to loop
             approx = bool(request.form.getlist("approx"))
