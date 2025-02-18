@@ -70,6 +70,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--approx` | No default. Boolean flag. | `--approx` | Approximate file size. The job will not loop to output the file under the target size. It will get close enough to the target on the first run. |
 | `-f`<br>`--framerate` | No default. | `-f 30` | Adjust the output's frame rate. Specify a value lower than the input video's frame rate. |
 | `--vp9-opts` | No default. | `--vp9-opts '{"row-mt":1,"deadline":"good","cpu-used":2}'` | Specify options to tweak VP9 encoding speed. `row-mt`, `deadline`, and `cpu-used` are the only values supported at the moment. This can only be set with the command line or JSON configuration file. It is not configurable with the Web UI. |
+| `-v`<br>`--verbose` | No default. Boolean flag. | `--verbose` | Enable verbose logging with FFmpeg. |
 
 ### File Name Formatting
 
