@@ -1,17 +1,72 @@
+"""
+This module provides functions for parsing command-line arguments and 
+loading configuration settings for the ffmpeg4discord application.
+
+Functions:
+- is_port_in_use: Checks if a given port is currently in use.
+- load_config: Loads configuration settings from a JSON file.
+- update_args_from_config: Updates command-line arguments with values from a configuration file.
+- get_args: Parses command-line arguments and returns them as a dictionary.
+"""
+
 import json
 import logging
 import socket
-from argparse import ArgumentParser, BooleanOptionalAction, Namespace
+from argparse import ArgumentParser, BooleanOptionalAction
 from pathlib import Path
 from random import randint
+from textwrap import dedent
 
 
 def is_port_in_use(port: int) -> bool:
+    """
+    Checks if a given port is currently in use.
+
+    Args:
+        port (int): The port number to check.
+
+    Returns:
+        bool: True if the port is in use, False otherwise.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("localhost", port)) == 0
 
 
-def get_args() -> Namespace:
+def load_config(file_path: Path) -> dict:
+    """
+    Loads configuration settings from a JSON file.
+
+    Args:
+        file_path (Path): The path to the JSON configuration file.
+
+    Returns:
+        dict: The configuration settings as a dictionary.
+    """
+    with open(file_path, encoding="UTF-8") as f:
+        return json.load(f)
+
+
+def update_args_from_config(args: dict, config: dict, parser: ArgumentParser) -> None:
+    """
+    Updates command-line arguments with values from a configuration file.
+
+    Args:
+        args (dict): The command-line arguments.
+        config (dict): The configuration settings from the JSON file.
+        parser (ArgumentParser): The argument parser instance.
+    """
+    for k, v in config.items():
+        if not args[k] or args[k] == parser.get_default(k):
+            args[k] = v
+
+
+def get_args() -> dict:
+    """
+    Parses command-line arguments and returns them as a dictionary.
+
+    Returns:
+        dict: The parsed command-line arguments.
+    """
     parser = ArgumentParser(
         prog="ffmpeg4discord",
         description="This script takes a video file and compresses it to a target file size.",
@@ -27,12 +82,14 @@ def get_args() -> Namespace:
     parser.add_argument(
         "--filename-times",
         action=BooleanOptionalAction,
+        default=False,
         help="Generate From/To timestamps from the clip's file name.",
     )
     parser.add_argument(
         "--approx",
         action=BooleanOptionalAction,
-        help="Approximate file size. The job will not loop to output the file under the target size. It will get close enough to the target on the first run.",
+        default=False,
+        help="The job will not loop to output the file under the target size.",
     )
     parser.add_argument("--from", help="Start clipping at this timestamp, e.g. 00:00:10")
     parser.add_argument("--to", help="Stop clipping at this timestamp, e.g. 00:00:20")
@@ -51,12 +108,13 @@ def get_args() -> Namespace:
         "--vp9-opts",
         type=str,
         default=None,
-        help="""JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding. (e.g., --vp9-opts \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\')')""",
+        help="""JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding. (e.g., --vp9-opts \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\')')""",  # pylint: disable=C0301
     )
     parser.add_argument(
         "-v",
         "--verbose",
         action=BooleanOptionalAction,
+        default=False,
         help="Add this flag to get more detailed logging out of FFmpeg. Useful for debugging an error.",
     )
 
@@ -69,7 +127,9 @@ def get_args() -> Namespace:
     parser.add_argument("--config", help="JSON file containing the run's configuration")
 
     # web
-    parser.add_argument("--web", action=BooleanOptionalAction, help="Launch ffmpeg4discord's Web UI in your browser.")
+    parser.add_argument(
+        "--web", action=BooleanOptionalAction, default=False, help="Launch ffmpeg4discord's Web UI in your browser."
+    )
     parser.add_argument("-p", "--port", type=int, help="Local port for the Flask application.")
 
     args = vars(parser.parse_args())
@@ -77,28 +137,17 @@ def get_args() -> Namespace:
     # fill in from the config JSON
     if args["config"]:
         file_path = Path(args["config"]).resolve()
-        with open(file_path) as f:
-            config: dict = json.load(f)
-
-        for k, v in config.items():
-            if not args[k]:
-                args[k] = v
-            elif args[k] == parser.get_default(k):
-                args[k] = v
+        config = load_config(file_path)
+        update_args_from_config(args, config, parser)
 
     del args["config"]
 
     # do some work regarding the port
     if args["web"]:
-        port = args.pop("port")
-        port = port if port else randint(5000, 6000)
-
-        while True:
-            if not is_port_in_use(port):
-                break
+        port = args.pop("port") or randint(5000, 6000)
+        while is_port_in_use(port):
             logging.warning(f"Port {port} is already in use. Retrying with a new port.")
             port = randint(5000, 6000)
-
         args["port"] = port
     else:
         del args["port"]
@@ -122,7 +171,13 @@ def get_args() -> Namespace:
             args["vp9_opts"] = json.loads(args["vp9_opts"])
         except json.JSONDecodeError:
             logging.error(
-                """Invalid JSON format. Format your input string like this: \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\'. Using default parameters."""
+                dedent(
+                    """\033[31m
+                    Invalid JSON format. 
+                    Format your input string like this: \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\'. 
+                    Using default parameters.
+                    \033[0m"""
+                )
             )
             args["vp9_opts"] = None
 

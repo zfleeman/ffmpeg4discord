@@ -1,3 +1,15 @@
+"""
+This module provides functions for downloading and installing FFmpeg on Windows systems.
+
+It includes functions to check the Python installation, download FFmpeg with a progress indicator,
+unzip the downloaded files, and copy the necessary files to the appropriate directory.
+
+Functions:
+- copy_directory_contents: Copies the contents of one directory to another.
+- download_with_progress: Downloads a file from a URL with a progress indicator.
+- install: Downloads, unzips, and installs FFmpeg on a Windows system.
+"""
+
 import logging
 import os
 import platform
@@ -5,19 +17,22 @@ import shutil
 import sys
 import zipfile
 from pathlib import Path
+from textwrap import dedent
 from urllib.request import urlretrieve
 
 if platform.system() != "Windows":
     logging.warning(
-        """
-        THIS SCRIPT IS INTENDED FOR WINDOWS USERS
+        dedent(
+            """\033[31m
+            THIS SCRIPT IS INTENDED FOR WINDOWS USERS
 
-        If you are running this script on macOS, consider installing ffmpeg with
-        Homebrew: https://formulae.brew.sh/formula/ffmpeg
+            If you are running this script on macOS, consider installing ffmpeg with
+            Homebrew: https://formulae.brew.sh/formula/ffmpeg
 
-        If you are running this script on some Linux, learn more about your options
-        to install ffmpeg on its website: https://ffmpeg.org/download.html#build-linux
-        """
+            If you are running this script on some Linux, learn more about your options
+            to install ffmpeg on its website: https://ffmpeg.org/download.html#build-linux
+            \033[0m"""
+        )
     )
 
     sys.exit()
@@ -29,7 +44,12 @@ python_install = Path(sys.executable)
 
 if "WindowsApps" in str(python_install):
     print(
-        "Microsoft Store Python installation detected. If you run into problems, consider using the https://python.org installation instead!"
+        dedent(
+            """
+            Microsoft Store Python installation detected. 
+            If you run into problems, consider using the https://python.org installation instead!
+            """
+        )
     )
     target = Path(sys.executable).parent.parent
 else:
@@ -51,9 +71,14 @@ if str(target) not in path:
     )
 
 
-def copy_directory_contents(source: Path, target: Path) -> None:
-    source_path = source
-    target_path = target
+def copy_directory_contents(source_path: Path, target_path: Path) -> None:
+    """
+    Copies the contents of one directory to another.
+
+    Args:
+        source (Path): The source directory.
+        target (Path): The target directory.
+    """
 
     # Iterate over files in the source directory
     for item in source_path.iterdir():
@@ -67,6 +92,14 @@ def copy_directory_contents(source: Path, target: Path) -> None:
 
 
 def download_with_progress(url: str, save_path: str) -> None:
+    """
+    Downloads a file from a URL with a progress indicator.
+
+    Args:
+        url (str): The URL to download the file from.
+        save_path (str): The path to save the downloaded file.
+    """
+
     def report(block_num, block_size, total_size):
         downloaded = block_num * block_size
         downloaded_mb = downloaded / (1024 * 1024)
@@ -83,6 +116,9 @@ def download_with_progress(url: str, save_path: str) -> None:
 
 
 def install() -> None:
+    """
+    Downloads, unzips, and installs FFmpeg on a Windows system.
+    """
     print("Downloading ffmpeg to ffmpeg.zip...")
     download_with_progress("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip", "ffmpeg/ffmpeg.zip")
 
@@ -92,7 +128,7 @@ def install() -> None:
         source = Path(f"ffmpeg/{zip_ref.namelist()[0]}/bin").resolve()
     print("Done!\n")
 
-    copy_directory_contents(source=source, target=target)
+    copy_directory_contents(source_path=source, target_path=target)
     shutil.rmtree("ffmpeg/")
 
     print("\nffmpeg installation complete.")

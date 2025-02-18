@@ -1,9 +1,24 @@
-import json
+"""
+This module provides the TwoPass class and utility functions for performing two-pass video encoding using FFmpeg.
+
+The TwoPass class allows users to compress video files to a specified target file size while maintaining
+optimal video quality. It supports various encoding parameters such as codec, resolution, and audio bitrate.
+The module also includes helper functions for timestamp conversion.
+
+Classes:
+- TwoPass: Encodes and resizes video files using FFmpeg's two-pass encoding to meet a specified target file size.
+
+Functions:
+- seconds_from_ts_string: Converts a timestamp string into an integer representing seconds.
+- seconds_to_timestamp: Converts an integer representing seconds into a timestamp string.
+"""
+
 import logging
 import math
 import os
 from datetime import datetime
 from pathlib import Path
+from textwrap import dedent
 from typing import Optional
 
 import ffmpeg
@@ -60,6 +75,10 @@ class TwoPass:
         self.output = output
         self.vp9_opts = vp9_opts or {}
         self.verbose = verbose
+        self.output_filename = ""
+        self.output_filesize = 0
+        self.bitrate_dict = {}
+        self.message = ""
 
         self.filename = filename
         self.fname = filename.name
@@ -77,6 +96,7 @@ class TwoPass:
             )
 
         # Extract some information from the probe.
+        audio_stream = None
         for stream in self.probe["streams"]:
             ix = stream["index"]
             codec_type = stream["codec_type"]
@@ -92,10 +112,13 @@ class TwoPass:
             elif codec_type == "audio":
                 audio_stream = ix
 
-        if not self.audio_br:
-            self.audio_br = float(self.probe["streams"][audio_stream]["bit_rate"])
+        if audio_stream is not None:
+            if not self.audio_br:
+                self.audio_br = float(self.probe["streams"][audio_stream]["bit_rate"])
+            else:
+                self.audio_br = self.audio_br * 1000
         else:
-            self.audio_br = self.audio_br * 1000
+            logging.warning("No audio stream found in the media file.")
 
         # times are supplied by the file's name
         if filename_times:
@@ -124,16 +147,18 @@ class TwoPass:
             self.length = self.duration
 
         if self.length <= 0:
-            raise Exception(
-                f"""
-                Time Paradox?
+            raise ValueError(
+                dedent(
+                    f"""\033[31m
+                    Time Paradox?
 
-                Something is wrong with your clipping times. Use this
-                information to further diagnose the problem:
+                    Something is wrong with your clipping times. Use this
+                    information to further diagnose the problem:
 
-                - Your video is {self.duration / 60} minutes long
-                - Your clipping times are {self.times}
-                """
+                    - Your video is {self.duration / 60} minutes long
+                    - Your clipping times are {self.times}
+                    \033[0m"""
+                )
             )
 
     def generate_params(self, codec: str) -> dict:
@@ -160,7 +185,12 @@ class TwoPass:
                 params["pass2"]["r"] = self.framerate
             else:
                 logging.warning(
-                    f"Your output framerate ({self.framerate}) is more than the original framerate ({self.init_framerate}). Keeping the original framerate..."
+                    dedent(
+                        f"""\033[31m
+                        Desired framerate ({self.framerate}) is more than original framerate ({self.init_framerate}).
+                        Keeping the original framerate...
+                        \033[0m"""
+                    )
                 )
 
         if codec == "libx264":
@@ -253,10 +283,12 @@ class TwoPass:
 
             if self.ratio != outputratio:
                 logging.warning(
-                    """
-                    Your output resolution's aspect ratio does not match the
-                    input resolution's or your croped resolution's aspect ratio.
-                    """
+                    dedent(
+                        """\033[31m
+                        Your output resolution's aspect ratio does not match the
+                        input resolution's or your croped resolution's aspect ratio.
+                        \033[0m"""
+                    )
                 )
 
         return video
@@ -280,7 +312,12 @@ class TwoPass:
         else:
             if ext != self.output.suffix:
                 logging.warning(
-                    f"You specified {self.codec}, but your output file name ends with {self.output.suffix}. I've corrected this."
+                    dedent(
+                        f"""\033[31m
+                        You specified {self.codec}, but your output file name ends with {self.output.suffix}.
+                        I've corrected this.
+                        \033[0m"""
+                    )
                 )
 
                 # correct the file suffix
@@ -304,16 +341,16 @@ class TwoPass:
         loglevel = "quiet" if not self.verbose else "verbose"
 
         # First Pass
-        ffOutput = ffmpeg.output(video, "pipe:", **params["pass1"])
-        ffOutput = ffOutput.global_args("-loglevel", loglevel, "-stats")
+        ffoutput = ffmpeg.output(video, "pipe:", **params["pass1"])
+        ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
         print("Performing first pass")
-        std_out, std_err = ffOutput.run(capture_stdout=True)
+        _, _ = ffoutput.run(capture_stdout=True)
 
         # Second Pass
-        ffOutput = ffmpeg.output(video, audio, self.output_filename, **params["pass2"])
-        ffOutput = ffOutput.global_args("-loglevel", loglevel, "-stats")
+        ffoutput = ffmpeg.output(video, audio, self.output_filename, **params["pass2"])
+        ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
         print("\nPerforming second pass")
-        ffOutput.run(overwrite_output=True)
+        ffoutput.run(overwrite_output=True)
 
         # save the output file size and return it
         self.output_filesize = os.path.getsize(self.output_filename) * 0.00000095367432
@@ -321,11 +358,17 @@ class TwoPass:
         return self.output_filesize
 
 
-def seconds_from_ts_string(ts_string: str):
+def seconds_from_ts_string(ts_string: str) -> int:
+    """
+    Take a "timestamp string" and convert it into an integer in seconds
+    """
     return int(ts_string[0:2]) * 60 * 60 + int(ts_string[3:5]) * 60 + int(ts_string[6:8])
 
 
 def seconds_to_timestamp(seconds: int) -> str:
+    """
+    Take seconds (as an integer) and convert it into a "timestamp string"
+    """
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
 
