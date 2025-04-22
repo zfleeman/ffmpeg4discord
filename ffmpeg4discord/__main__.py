@@ -98,12 +98,17 @@ def main() -> None:
     args = arguments.get_args()
     web = args.pop("web")
     approx = args.pop("approx")
+    run_amerge = args.get("amerge", False)
+    args.pop("amerge", None)
 
     if web:
         port = args.pop("port")
 
     path = Path(args["filename"]).resolve()
+    
+    # twopass needs these values now for downmixing
     args["filename"] = path
+    args['amerge'] = run_amerge
 
     # instantiate the TwoPass class
     twopass = TwoPass(**args)
@@ -145,7 +150,21 @@ def main() -> None:
             # to loop or not to loop
             approx = bool(request.form.getlist("approx"))
 
+            # Get amerge state for this specific request
+            web_amerge = "amerge_audio" in request.form
+            # Set amerge flag on instance for this request
+            twopass.amerge = web_amerge
+
             twopass_loop(twopass=twopass, target_filesize=target_filesize, approx=approx)
+
+            # <<< Conditionally run downmix >>>
+            # Check if loop likely succeeded and merge requested
+            if twopass.output_filename and Path(twopass.output_filename).exists() and twopass.amerge:
+                twopass.downmix_audio() # Call the method
+            elif twopass.amerge and (not twopass.output_filename or not Path(twopass.output_filename).exists()):
+                    # If merge requested but loop failed/file missing
+                    if twopass.message: twopass.message += " Downmix skipped."
+                    else: twopass.message = "Encoding failed. Downmix skipped."
 
             return render_template(
                 "web.html",
@@ -158,6 +177,17 @@ def main() -> None:
         app.run("0.0.0.0", port=port)
     else:
         twopass_loop(twopass=twopass, target_filesize=twopass.target_filesize, approx=approx)
+
+        # <<< Conditionally run downmix >>>
+        # Check if loop likely succeeded and merge requested via CLI flag
+        if twopass.output_filename and Path(twopass.output_filename).exists() and run_amerge:
+             twopass.downmix_audio() # Call the method
+        elif run_amerge: # If merge was requested but loop failed/file missing
+             if twopass.message: # Append to existing message if possible
+                  twopass.message += " Downmix skipped."
+             else: # Set message if encoding failed silently
+                  twopass.message = "Encoding failed. Downmix skipped."
+
         print(twopass.message)
 
 
