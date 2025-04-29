@@ -89,7 +89,6 @@ def cleanup_files(pattern: str) -> None:
     for file in glob(pattern):
         Path(file).unlink()
 
-
 def main() -> None:
     """
     The main function that parses command-line arguments and starts the encoding process or web server.
@@ -157,10 +156,10 @@ def main() -> None:
 
             twopass_loop(twopass=twopass, target_filesize=target_filesize, approx=approx)
 
-            # <<< Conditionally run downmix >>>
+            # Conditionally run downmix
             # Check if loop likely succeeded and merge requested
             if twopass.output_filename and Path(twopass.output_filename).exists() and twopass.amerge:
-                twopass.downmix_audio() # Call the method
+                twopass.downmix_audio()
             elif twopass.amerge and (not twopass.output_filename or not Path(twopass.output_filename).exists()):
                     # If merge requested but loop failed/file missing
                     if twopass.message: twopass.message += " Downmix skipped."
@@ -178,10 +177,10 @@ def main() -> None:
     else:
         twopass_loop(twopass=twopass, target_filesize=twopass.target_filesize, approx=approx)
 
-        # <<< Conditionally run downmix >>>
+        # Conditionally run downmix
         # Check if loop likely succeeded and merge requested via CLI flag
         if twopass.output_filename and Path(twopass.output_filename).exists() and run_amerge:
-             twopass.downmix_audio() # Call the method
+             twopass.downmix_audio()
         elif run_amerge: # If merge was requested but loop failed/file missing
              if twopass.message: # Append to existing message if possible
                   twopass.message += " Downmix skipped."
