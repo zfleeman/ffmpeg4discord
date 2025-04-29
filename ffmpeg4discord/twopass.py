@@ -16,12 +16,11 @@ Functions:
 import logging
 import math
 import os
-import shutil
 import subprocess 
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
-from typing import Optional, List
+from typing import Optional
 
 import ffmpeg
 
@@ -374,78 +373,43 @@ class TwoPass:
         Returns:
             bool: True if downmixing was successful or not needed/skipped, False otherwise.
         """
-
-        output_path = Path(self.output_filename)
-        print(f"\n--- Starting Mono Audio Downmix (using subprocess.run) for {output_path.name} ---")
         
-        # --- Probe the intermediate file to count audio streams and channels ---
-        # Initialize variables to store probe results
-        audio_streams: List[dict] = []
+        output_path = Path(self.output_filename)
+        audio_streams: list[dict] = []
         num_audio_streams = 0
         total_input_channels = 0
-        
-        logging.info(f"Probing intermediate file for audio streams: {output_path}")
-        # Call ffprobe (via ffmpeg-python) to get stream info
+        # Call ffprobe via ffmpeg-python to get stream info
         intermediate_probe = ffmpeg.probe(str(output_path))
         # Filter the streams to get only the audio ones
         audio_streams = [s for s in intermediate_probe.get("streams", []) if s.get("codec_type") == "audio"]
         # Count how many audio streams were found
         num_audio_streams = len(audio_streams)
-
-        # If no audio streams, skip downmixing
-        if num_audio_streams == 0:
-            logging.warning("No audio streams found in the intermediate file. Skipping downmix.")
-            return True
         
         # Loop through the found audio streams to count total channels
         for stream in audio_streams:
             total_input_channels += int(stream.get('channels', 0))
 
-        # Skip if the audio is already effectively mono or has zero channels
-        if total_input_channels == 0:
-                logging.warning("Intermediate file audio stream(s) report 0 total channels. Skipping downmix.")
-                return True
-        elif total_input_channels == 1:
-                logging.info("Intermediate file already has a single mono audio channel total. Skipping downmix.")
-                return True
-        else:
-                logging.info(f"Detected {num_audio_streams} audio stream(s) with {total_input_channels} total channels. Proceeding with merge and downmix.")
-
-  
         # Create a temporary filename for the downmixed output
         temp_output_filename = str(output_path.with_name(output_path.stem + "_mono_temp" + output_path.suffix))
-        # Revert to warning? No, keep verbose toggle
-        loglevel = "verbose" if self.verbose else "warning" 
         # Determine the target audio codec based on the video codec used
         audio_codec = "aac" if self.codec == "libx264" else "libopus"
-        # Calculate the target audio bitrate in bits per second (from kbps stored in self.audio_br)
-        audio_br_bps = self.audio_br * 1000 if self.audio_br is not None else 0
-        # Format the bitrate as a string argument for ffmpeg, or None if bitrate is 0
-        audio_bitrate_param = f"{int(audio_br_bps)}" if audio_br_bps > 0 else None
-       
-        # Manually construct the command arguments list for subprocess.run()
-        # Initialize variable for the command execution block
-        cmd = []
         # Calculate the number of channels after amerge (should equal total_input_channels)
         num_merged_channels = total_input_channels
         # Calculate the coefficient for averaging all channels (1 / total channels)
         coeff = 1.0 / num_merged_channels
         # Create the coefficient string for the pan filter (e.g., "0.125*c0+0.125*c1+...+0.125*c7" for 8 channels)
         pan_coeffs = "+".join([f"{coeff:.3f}*c{i}" for i in range(num_merged_channels)])
-
         # Construct the full filter_complex string
-        filter_complex_str = f"[0:a]amerge=inputs={num_audio_streams}[a_merged];[a_merged]pan=mono|c0={pan_coeffs}[a_out]"
+        filter_complex_str = f"[0:a]amerge=inputs={num_audio_streams}[a_merged];[a_merged]pan=1c|c0={pan_coeffs}[a_out]"
         logging.info(f"Using filter_complex: {filter_complex_str}")
 
         # Build the command as a list of strings
         cmd = [
             'ffmpeg',
-            # Global Option: Prevents FFmpeg from trying to read interactive input from the console.
-            '-nostdin', 
             # Input Option: Specifies the input file. `-i` is the flag, and `str(output_path)` is the path to the intermediate 
             # video file created by the `run()` method.
             '-i', str(output_path),
-            # Filter Option: Applies a complex filtergraph. The value `filter_complex_str` contains the string we built earlier 
+            # Filter Option: The value `filter_complex_str` contains the string we built earlier 
             # (e.g., "[0:a]amerge=inputs=4[a_merged];[a_merged]pan=mono|c0=0.125*c0+...+0.125*c7[a_out]") to merge and downmix the audio streams.
             '-filter_complex', filter_complex_str,
             # Map Option: Selects which video stream to include in the output. `0:v:0` means the first (0) video stream (`v`) from 
@@ -465,38 +429,25 @@ class TwoPass:
             '-dn',
             # Option: Finishes encoding when the shortest input stream ends. 
             '-shortest',
-            # Option: Sets how much information FFmpeg prints to the console (stderr)
-            '-loglevel', loglevel,
-            # Option: Tells FFmpeg to print periodic progress statistics during the process.
-            '-stats',
             # Global Option: Automatically overwrites the output file (`temp_output_filename`) if it already exists, without asking 
             # for confirmation.
             '-y',
+            #Give the output file name
+            temp_output_filename
         ]
-
-        # Conditionally add the audio bitrate argument if it's not None
-        if audio_bitrate_param:
-            cmd.extend(['-b:a', audio_bitrate_param])
-        # Add the final output filename
-        cmd.append(temp_output_filename)
-
-        # Log the command that will be executed (for debugging)
-        logging.debug(f"Downmix Command: {' '.join(cmd)}")
         
         # Execute the command using subprocess.run
         subprocess.run(cmd, capture_output=True, text=True, check=True, encoding='utf-8')
 
         # Replace the original file with the new temporary file
         output_path.unlink()
-        shutil.move(temp_output_filename, self.output_filename)
+        os.rename(temp_output_filename, self.output_filename)
 
         self.message = (
                 f"Encoding and mono downmix successful.) "
                 f"is located at {output_path.resolve()}"
         )
-        print("--- Mono Audio Downmix Completed ---")
         return True
-
 
 def seconds_from_ts_string(ts_string: str) -> int:
     """
