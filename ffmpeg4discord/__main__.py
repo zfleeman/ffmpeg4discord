@@ -89,6 +89,7 @@ def cleanup_files(pattern: str) -> None:
     for file in glob(pattern):
         Path(file).unlink()
 
+
 def main() -> None:
     """
     The main function that parses command-line arguments and starts the encoding process or web server.
@@ -97,7 +98,7 @@ def main() -> None:
     args = arguments.get_args()
     web = args.pop("web")
     approx = args.pop("approx")
-    run_amerge = args.get("amerge", False)
+    run_amerge = args.get("amerge")
     args.pop("amerge", None)
 
     if web:
