@@ -66,6 +66,14 @@
                 <div class="col">
                     <label for="audio_br" class="form-label">Audio Bitrate (kbps)</label>
                     <input class="form-control" name="audio_br" id="audio_br" type="text" value="{{ twopass.audio_br/1000 }}" />
+                    <div class="col">
+                        <div class="col">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="amerge_audio" value="True" name="amerge_audio">
+                                <label class="form-check-label" for="amerge_audio">Merge Audio</label>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="col">
                     <label for="crop" class="form-label">Crop</label>

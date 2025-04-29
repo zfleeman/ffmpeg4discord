@@ -132,6 +132,15 @@ def get_args() -> dict:
     )
     parser.add_argument("-p", "--port", type=int, help="Local port for the Flask application.")
 
+    # Add argument for audio merging
+    parser.add_argument(
+        "--amerge",
+        action=BooleanOptionalAction,
+        default=False,
+        help="Merge all audio channels down to 1 (mono) after encoding."
+    )
+
+
     args = vars(parser.parse_args())
 
     # fill in from the config JSON
