@@ -128,6 +128,70 @@ def build_parser() -> ArgumentParser:
     return parser
 
 
+def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:
+    """
+    Merge config file values into args if present and not already set.
+    Always remove 'config' key from args.
+    """
+    if args.get("config"):
+        file_path = Path(args["config"]).resolve()
+        config = load_config(file_path)
+        update_args_from_config(args, config, parser)
+    args.pop("config", None)
+    return args
+
+
+def _assign_port(args: dict) -> dict:
+    """
+    Assign a port for the web UI, ensuring it is not in use.
+    """
+    if args.get("web"):
+        port = args.pop("port") or randint(5000, 6000)
+        while is_port_in_use(port):
+            logging.warning(f"Port {port} is already in use. Retrying with a new port.")
+            port = randint(5000, 6000)
+        args["port"] = port
+    else:
+        args.pop("port", None)
+    return args
+
+
+def _extract_times(args: dict) -> dict:
+    """
+    Move 'from' and 'to' arguments into a 'times' dictionary.
+    """
+    args["times"] = {}
+    if args.get("from"):
+        args["times"]["from"] = args["from"]
+    if args.get("to"):
+        args["times"]["to"] = args["to"]
+    args.pop("from", None)
+    args.pop("to", None)
+    return args
+
+
+def _parse_vp9_opts(args: dict) -> dict:
+    """
+    Parse VP9 options from JSON string if necessary.
+    """
+    if args.get("vp9_opts") and not isinstance(args["vp9_opts"], dict):
+        logging.info(f"Received VP9 options: {args['vp9_opts']}")
+        try:
+            args["vp9_opts"] = json.loads(args["vp9_opts"])
+        except json.JSONDecodeError:
+            logging.error(
+                dedent(
+                    """\033[31m
+                    Invalid JSON format. 
+                    Format your input string like this: '{"row-mt": 1, "deadline": "good", "cpu-used": 2}'. 
+                    Using default parameters.
+                    \033[0m"""
+                )
+            )
+            args["vp9_opts"] = None
+    return args
+
+
 def get_args() -> dict:
     """
     Parses command-line arguments and returns them as a dictionary.
@@ -137,52 +201,8 @@ def get_args() -> dict:
     """
     parser = build_parser()
     args = vars(parser.parse_args())
-
-    # fill in from the config JSON
-    if args["config"]:
-        file_path = Path(args["config"]).resolve()
-        config = load_config(file_path)
-        update_args_from_config(args, config, parser)
-
-    args.pop("config", None)
-
-    # do some work regarding the port
-    if args["web"]:
-        port = args.pop("port") or randint(5000, 6000)
-        while is_port_in_use(port):
-            logging.warning(f"Port {port} is already in use. Retrying with a new port.")
-            port = randint(5000, 6000)
-        args["port"] = port
-    else:
-        args.pop("port", None)
-
-    args["times"] = {}
-
-    # adjust times
-    if args["from"]:
-        args["times"]["from"] = args["from"]
-
-    if args["to"]:
-        args["times"]["to"] = args["to"]
-
-    args.pop("from", None)
-    args.pop("to", None)
-
-    # work with vp9 options
-    if args["vp9_opts"] and not isinstance(args["vp9_opts"], dict):
-        logging.info(f"Received VP9 options: {args['vp9_opts']}")
-        try:
-            args["vp9_opts"] = json.loads(args["vp9_opts"])
-        except json.JSONDecodeError:
-            logging.error(
-                dedent(
-                    """\033[31m
-                    Invalid JSON format. 
-                    Format your input string like this: \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\'. 
-                    Using default parameters.
-                    \033[0m"""
-                )
-            )
-            args["vp9_opts"] = None
-
+    args = _merge_config_args(args, parser)
+    args = _assign_port(args)
+    args = _extract_times(args)
+    args = _parse_vp9_opts(args)
     return args
