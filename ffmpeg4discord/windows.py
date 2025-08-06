@@ -1,5 +1,6 @@
 """
 This module provides functions for downloading and installing FFmpeg on Windows systems.
+This file may not be well-maintained. Use with caution.
 
 It includes functions to check the Python installation, download FFmpeg with a progress indicator,
 unzip the downloaded files, and copy the necessary files to the appropriate directory.

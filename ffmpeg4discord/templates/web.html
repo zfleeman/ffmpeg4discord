@@ -34,12 +34,12 @@
             <div class="row mb-3">
                 <div class="col">
                     <label for="startTime" class="form-label padding-top">Start Time:</label>
-                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="1" max="0">
+                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="1" max="{{ twopass.duration }}">
                     <span id="startTimeLabel">{{ twopass.from_seconds|string + " seconds" if twopass.from_seconds else "0 seconds" }}</span>
                 </div>
                 <div class="col">
                     <label for="endTime" class="form-label">End Time:</label>
-                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="1" max="0">
+                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="1" max="{{ twopass.duration }}">
                     <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.duration|string + " seconds" }}</span>
                 </div>
             </div>
@@ -113,9 +113,6 @@
         const endTimeLabel = document.getElementById('endTimeLabel');
 
         video.addEventListener('loadedmetadata', () => {
-            // Set the maximum value of the input elements to the video duration
-            startTimeInput.max = video.duration;
-            endTimeInput.max = video.duration;
             startTimeInput.value = "{{ twopass.from_seconds if twopass.from_seconds else 0 }}"
             endTimeInput.value = "{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}"
         });

@@ -60,12 +60,9 @@ def update_args_from_config(args: dict, config: dict, parser: ArgumentParser) ->
             args[k] = v
 
 
-def get_args() -> dict:
+def build_parser() -> ArgumentParser:
     """
-    Parses command-line arguments and returns them as a dictionary.
-
-    Returns:
-        dict: The parsed command-line arguments.
+    Builds and returns the argument parser for ffmpeg4discord.
     """
     parser = ArgumentParser(
         prog="ffmpeg4discord",
@@ -117,21 +114,28 @@ def get_args() -> dict:
         default=False,
         help="Add this flag to get more detailed logging out of FFmpeg. Useful for debugging an error.",
     )
-
     # video filters
     parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
     parser.add_argument("-r", "--resolution", default="", help="The output resolution of your final video.")
     parser.add_argument("-f", "--framerate", type=int, help="The desired output frames per second.")
-
     # configuraiton json file
     parser.add_argument("--config", help="JSON file containing the run's configuration")
-
     # web
     parser.add_argument(
         "--web", action=BooleanOptionalAction, default=False, help="Launch ffmpeg4discord's Web UI in your browser."
     )
     parser.add_argument("-p", "--port", type=int, help="Local port for the Flask application.")
+    return parser
 
+
+def get_args() -> dict:
+    """
+    Parses command-line arguments and returns them as a dictionary.
+
+    Returns:
+        dict: The parsed command-line arguments.
+    """
+    parser = build_parser()
     args = vars(parser.parse_args())
 
     # fill in from the config JSON
@@ -140,7 +144,7 @@ def get_args() -> dict:
         config = load_config(file_path)
         update_args_from_config(args, config, parser)
 
-    del args["config"]
+    args.pop("config", None)
 
     # do some work regarding the port
     if args["web"]:
@@ -150,7 +154,7 @@ def get_args() -> dict:
             port = randint(5000, 6000)
         args["port"] = port
     else:
-        del args["port"]
+        args.pop("port", None)
 
     args["times"] = {}
 
@@ -161,8 +165,8 @@ def get_args() -> dict:
     if args["to"]:
         args["times"]["to"] = args["to"]
 
-    del args["from"]
-    del args["to"]
+    args.pop("from", None)
+    args.pop("to", None)
 
     # work with vp9 options
     if args["vp9_opts"] and not isinstance(args["vp9_opts"], dict):

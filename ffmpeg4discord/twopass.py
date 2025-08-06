@@ -45,8 +45,9 @@ class TwoPass:
         codec (str): Video codec to use for compression, e.g., 'libx264' (default).
         crop (str): Crop settings (if any) for the video.
         resolution (str): Target resolution for the output video.
-        config (str): Path to an optional configuration file for advanced ffmpeg settings.
         filename_times (bool): Flag to include timestamps in the output filename.
+        verbose (bool): Flag to allow verbose logging
+        vp9_opts (dict): JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding.
     """
 
     def __init__(
@@ -128,7 +129,7 @@ class TwoPass:
         elif self.times:
             if self.times.get("from"):
                 self.times["ss"] = self.times["from"] or "00:00:00"
-                del self.times["from"]
+                self.times.pop("from", None)
             else:
                 self.times["ss"] = "00:00:00"
 
