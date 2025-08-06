@@ -45,8 +45,9 @@ class TwoPass:
         codec (str): Video codec to use for compression, e.g., 'libx264' (default).
         crop (str): Crop settings (if any) for the video.
         resolution (str): Target resolution for the output video.
-        config (str): Path to an optional configuration file for advanced ffmpeg settings.
         filename_times (bool): Flag to include timestamps in the output filename.
+        verbose (bool): Flag to allow verbose logging
+        vp9_opts (dict): JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding.
     """
 
     def __init__(
@@ -84,10 +85,44 @@ class TwoPass:
         self.fname = filename.name
         self.split_fname = self.fname.split(".")
 
+        # Attributes set/updated by helper methods
+        self.duration = None
+        self.ratio = None
+        self.init_framerate = None
+        self.from_seconds = None
+        self.to_seconds = None
+        self.length = None
+
         # create a Path from the output string
         self.output = Path(self.output).resolve()
 
         self.probe = ffmpeg.probe(filename=filename)
+        self._process_probe()
+        self._process_times(filename_times)
+
+    def _parse_streams(self):
+        """
+        Helper to parse video and audio streams from the probe output.
+        Sets self.ratio, self.init_framerate, and returns audio_stream index.
+        """
+        audio_stream = None
+        for stream in self.probe["streams"]:
+            codec_type = stream["codec_type"]
+            if codec_type == "video":
+                width = stream["width"]
+                height = stream["height"]
+                self.ratio = width / height
+                framerate_ratio: str = stream.get("r_frame_rate")
+                self.init_framerate = round(int(framerate_ratio.split("/")[0]) / int(framerate_ratio.split("/")[1]))
+            elif codec_type == "audio":
+                audio_stream = stream["index"]
+        return audio_stream
+
+    def _process_probe(self):
+        """
+        Processes the ffmpeg probe output to set duration, ratio, framerate, and audio bitrate attributes.
+        """
+        # set the total video duration -- for use throughout the call and the web ui
         self.duration = math.floor(float(self.probe["format"]["duration"]))
 
         if len(self.probe["streams"]) > 2:
@@ -95,22 +130,7 @@ class TwoPass:
                 "This media file has more than two streams, which could cause errors during the encoding job."
             )
 
-        # Extract some information from the probe.
-        audio_stream = None
-        for stream in self.probe["streams"]:
-            ix = stream["index"]
-            codec_type = stream["codec_type"]
-            if codec_type == "video":
-                width = self.probe["streams"][ix]["width"]
-                height = self.probe["streams"][ix]["height"]
-                self.ratio = width / height
-
-                # Get the framerate for later comparisons
-                framerate_ratio: str = self.probe["streams"][ix].get("r_frame_rate")
-                self.init_framerate = round(int(framerate_ratio.split("/")[0]) / int(framerate_ratio.split("/")[1]))
-
-            elif codec_type == "audio":
-                audio_stream = ix
+        audio_stream = self._parse_streams()
 
         if audio_stream is not None:
             if not self.audio_br:
@@ -120,15 +140,19 @@ class TwoPass:
         else:
             logging.warning("No audio stream found in the media file.")
 
+    def _process_times(self, filename_times: bool):
+        """
+        Handles the logic for setting up trimming times and related attributes.
+        """
         # times are supplied by the file's name
         if filename_times:
-            self.time_from_file_name()
+            self._time_from_file_name()
 
         # times are provided by the flags or config file
         elif self.times:
             if self.times.get("from"):
                 self.times["ss"] = self.times["from"] or "00:00:00"
-                del self.times["from"]
+                self.times.pop("from", None)
             else:
                 self.times["ss"] = "00:00:00"
 
@@ -161,7 +185,7 @@ class TwoPass:
                 )
             )
 
-    def generate_params(self, codec: str) -> dict:
+    def _generate_params(self, codec: str) -> dict:
         """
         Create params for the ffmpeg.output() function
         :param codec: ffmpeg video codec to use during encoding
@@ -211,7 +235,7 @@ class TwoPass:
 
         return params
 
-    def create_bitrate_dict(self) -> None:
+    def _create_bitrate_dict(self) -> None:
         """
         Perform the calculation specified in ffmpeg's documentation that generates
         the video bitrates needed to achieve the target file size
@@ -224,7 +248,7 @@ class TwoPass:
             "bufsize": br * 2,
         }
 
-    def time_from_file_name(self):
+    def _time_from_file_name(self):
         """
         Extracts start (`-ss`) and optional end (`-to`) timestamps from the file name and updates the instance's
         time-related attributes. Assumes the file name is in one of two formats:
@@ -263,7 +287,7 @@ class TwoPass:
         # Update instance attributes with calculated times
         self.times = times
 
-    def apply_video_filters(self, video):
+    def _apply_video_filters(self, video):
         """
         Function to apply the crop and resolution parameters to a video object
         :param video: the ffmpeg video object from the Class's input video file
@@ -329,12 +353,12 @@ class TwoPass:
             self.output_filename = str(self.output)
 
         # generate run parameters
-        self.create_bitrate_dict()
-        params = self.generate_params(codec=self.codec)
+        self._create_bitrate_dict()
+        params = self._generate_params(codec=self.codec)
 
         # separate streams from ffinput
         ffinput = ffmpeg.input(self.filename, **self.times)
-        video = self.apply_video_filters(ffinput.video)
+        video = self._apply_video_filters(ffinput.video)
         audio = ffinput.audio
 
         # set our logging level

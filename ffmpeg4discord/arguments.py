@@ -60,12 +60,9 @@ def update_args_from_config(args: dict, config: dict, parser: ArgumentParser) ->
             args[k] = v
 
 
-def get_args() -> dict:
+def build_parser() -> ArgumentParser:
     """
-    Parses command-line arguments and returns them as a dictionary.
-
-    Returns:
-        dict: The parsed command-line arguments.
+    Builds and returns the argument parser for ffmpeg4discord.
     """
     parser = ArgumentParser(
         prog="ffmpeg4discord",
@@ -117,55 +114,67 @@ def get_args() -> dict:
         default=False,
         help="Add this flag to get more detailed logging out of FFmpeg. Useful for debugging an error.",
     )
-
     # video filters
     parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
     parser.add_argument("-r", "--resolution", default="", help="The output resolution of your final video.")
     parser.add_argument("-f", "--framerate", type=int, help="The desired output frames per second.")
-
     # configuraiton json file
     parser.add_argument("--config", help="JSON file containing the run's configuration")
-
     # web
     parser.add_argument(
         "--web", action=BooleanOptionalAction, default=False, help="Launch ffmpeg4discord's Web UI in your browser."
     )
     parser.add_argument("-p", "--port", type=int, help="Local port for the Flask application.")
+    return parser
 
-    args = vars(parser.parse_args())
 
-    # fill in from the config JSON
-    if args["config"]:
+def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:
+    """
+    Merge config file values into args if present and not already set.
+    Always remove 'config' key from args.
+    """
+    if args.get("config"):
         file_path = Path(args["config"]).resolve()
         config = load_config(file_path)
         update_args_from_config(args, config, parser)
+    args.pop("config", None)
+    return args
 
-    del args["config"]
 
-    # do some work regarding the port
-    if args["web"]:
+def _assign_port(args: dict) -> dict:
+    """
+    Assign a port for the web UI, ensuring it is not in use.
+    """
+    if args.get("web"):
         port = args.pop("port") or randint(5000, 6000)
         while is_port_in_use(port):
             logging.warning(f"Port {port} is already in use. Retrying with a new port.")
             port = randint(5000, 6000)
         args["port"] = port
     else:
-        del args["port"]
+        args.pop("port", None)
+    return args
 
+
+def _extract_times(args: dict) -> dict:
+    """
+    Move 'from' and 'to' arguments into a 'times' dictionary.
+    """
     args["times"] = {}
-
-    # adjust times
-    if args["from"]:
+    if args.get("from"):
         args["times"]["from"] = args["from"]
-
-    if args["to"]:
+    if args.get("to"):
         args["times"]["to"] = args["to"]
+    args.pop("from", None)
+    args.pop("to", None)
+    return args
 
-    del args["from"]
-    del args["to"]
 
-    # work with vp9 options
-    if args["vp9_opts"] and not isinstance(args["vp9_opts"], dict):
+def _parse_vp9_opts(args: dict) -> dict:
+    """
+    Parse VP9 options from JSON string if necessary.
+    """
+    if args.get("vp9_opts") and not isinstance(args["vp9_opts"], dict):
         logging.info(f"Received VP9 options: {args['vp9_opts']}")
         try:
             args["vp9_opts"] = json.loads(args["vp9_opts"])
@@ -174,11 +183,26 @@ def get_args() -> dict:
                 dedent(
                     """\033[31m
                     Invalid JSON format. 
-                    Format your input string like this: \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\'. 
+                    Format your input string like this: '{"row-mt": 1, "deadline": "good", "cpu-used": 2}'. 
                     Using default parameters.
                     \033[0m"""
                 )
             )
             args["vp9_opts"] = None
+    return args
 
+
+def get_args() -> dict:
+    """
+    Parses command-line arguments and returns them as a dictionary.
+
+    Returns:
+        dict: The parsed command-line arguments.
+    """
+    parser = build_parser()
+    args = vars(parser.parse_args())
+    args = _merge_config_args(args, parser)
+    args = _assign_port(args)
+    args = _extract_times(args)
+    args = _parse_vp9_opts(args)
     return args
