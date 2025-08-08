@@ -1,0 +1,23 @@
+name: ffmpeg4discord Unit Testing & Linting
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install Dependencies
+      run: pip install black coverage isort
+    - name: Run Unit Tests
+      run: coverage run -m unittest discover
+    - name: Check Coverage
+      run: coverage report -m
+    - name: Check Import Sorting (isort)
+      run: isort -l 120 . --profile black --check-only --diff
+    - name: Check Code Formatting (black)
+      run: black -l 120 . --check --diff
