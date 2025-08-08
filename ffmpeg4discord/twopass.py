@@ -281,7 +281,7 @@ class TwoPass:
         except ValueError:
             # Handle any issues with timestamp parsing by defaulting to full duration
             self.length = self.duration
-            self.times = {"ss": "00:00:00", "to": seconds_to_timestamp(self.duration)}
+            times = {"ss": "00:00:00", "to": seconds_to_timestamp(self.duration)}
             logging.warning("Warning: Invalid time format in filename. Defaulting to full duration.")
 
         # Update instance attributes with calculated times
