@@ -1,5 +1,5 @@
 """
-This module provides functions for parsing command-line arguments and 
+This module provides functions for parsing command-line arguments and
 loading configuration settings for the ffmpeg4discord application.
 
 Functions:
