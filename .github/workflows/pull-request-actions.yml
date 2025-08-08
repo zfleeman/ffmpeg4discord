@@ -1,4 +1,4 @@
-name: ffmpeg4discord Unit Testing & Linting
+name: Pull Request Actions
 
 on:
   push:
