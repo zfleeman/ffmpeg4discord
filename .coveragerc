@@ -1,0 +1,9 @@
+[run]
+source = ffmpeg4discord
+
+[report]
+fail_under = 90
+include =
+    ffmpeg4discord/__main__.py
+    ffmpeg4discord/arguments.py
+    ffmpeg4discord/twopass.py
