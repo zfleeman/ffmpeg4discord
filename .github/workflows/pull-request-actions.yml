@@ -16,10 +16,10 @@ jobs:
         pip install black==25.1.0 coverage==7.10.2 isort==6.0.1 ffmpeg-python==0.2.0 flask==3.0.1
     - name: Run Unit Tests
       run: |
-        coverage run -m unittest discover
+        coverage run --rcfile=tests/.coveragerc -m unittest discover
     - name: Check Coverage
       run: |
-        coverage report -m
+        coverage report --rcfile=tests/.coveragerc -m
     - name: Check Import Sorting (isort)
       run: |
         isort -l 120 . --profile black --check-only --diff
