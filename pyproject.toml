@@ -28,3 +28,13 @@ install-ffmpeg-windows = "ffmpeg4discord.windows:install"
 
 [tool.setuptools.package-data]
 ffmpeg4discord = ["templates/*.html"]
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "tests"]
+
+[project.optional-dependencies]
+dev = [
+    "coverage",
+    "isort",
+    "black"
+]
