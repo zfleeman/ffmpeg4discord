@@ -34,7 +34,7 @@ exclude = ["tests*", "tests"]
 
 [project.optional-dependencies]
 dev = [
-    "coverage",
-    "isort",
-    "black"
+    "coverage==7.10.2",
+    "isort==6.0.1",
+    "black==25.1.0"
 ]
