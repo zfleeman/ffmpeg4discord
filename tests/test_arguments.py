@@ -21,7 +21,7 @@ from ffmpeg4discord.arguments import (
 
 
 class TestArguments(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = build_parser()
         self.default_args = {
             "filename": "file.mp4",
@@ -59,7 +59,7 @@ class TestArguments(unittest.TestCase):
             "port": 5050,
         }
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         pass
 
     def get_args(self, overrides=None):
