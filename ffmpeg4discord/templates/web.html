@@ -89,7 +89,7 @@
             </div>
             <div class="row mb-3">
                 <div class="col">
-                    <button id="spinButton" onclick="startSpin()" class="submission btn btn-primary btn-lg" type="submit">
+                    <button id="spinButton" onclick="return startSpin()" class="submission btn btn-primary btn-lg" type="submit">
                         <span class="bi-film"></span> Encode
                     </button>
                     <span id="spinIcon" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" hidden></span>
@@ -106,6 +106,8 @@
         </form>
     </div>
     <script>
+        const MAX_FILESIZE_MB = parseFloat("{{ twopass.probe['format']['size'] }}") * 0.00000095367432;
+        console.log("MAX_FILESIZE_MB:", MAX_FILESIZE_MB);
         const video = document.getElementById('myVideo');
         const startTimeInput = document.getElementById('startTime');
         const endTimeInput = document.getElementById('endTime');
@@ -164,8 +166,20 @@
 
             // Disable the button temporarily to prevent multiple clicks
             document.getElementById('spinButton').disabled = true;
-            document.getElementById('encodeForm').submit();
 
+            // Validation for target_filesize
+            const targetField = document.getElementById('target_filesize');
+            const value = parseFloat(targetField.value);
+            if (!isNaN(value) && value > MAX_FILESIZE_MB && MAX_FILESIZE_MB > 0) {
+                alert('Target filesize (' + value + ' MB) exceeds the maximum allowed (' + MAX_FILESIZE_MB + ' MB). Please enter a smaller value.');
+                targetField.focus();
+                // Re-enable the button since submission is blocked
+                document.getElementById('spinButton').disabled = false;
+                icon.hidden = true;
+                return false;
+            }
+
+            document.getElementById('encodeForm').submit();
         }
 
         const checkbox = document.getElementById('approx');
@@ -182,6 +196,8 @@
                 span.textContent = 'Target';
             }
         });
+
+        // Validation is now handled in startSpin()
     </script>
 </body>
 </html>
