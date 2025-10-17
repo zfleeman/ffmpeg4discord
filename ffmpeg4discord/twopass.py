@@ -26,6 +26,13 @@ import ffmpeg
 logging.getLogger().setLevel(logging.INFO)
 
 
+# Note: FILE_SIZE_MULT converts bytes to mebibytes (MiB, 1 MiB = 1,048,576 bytes).
+# macOS Finder reports file sizes in megabytes (MB, 1 MB = 1,000,000 bytes),
+# while Windows File Explorer reports in mebibytes (but labels as MB).
+# This can cause discrepancies in reported file sizes between the two systems.
+FILE_SIZE_MULT = 0.00000095367432
+
+
 class TwoPass:
     """
     Encodes and resizes video files using ffmpeg's two-pass encoding to meet a specified target file size.
@@ -92,6 +99,8 @@ class TwoPass:
         self.from_seconds = None
         self.to_seconds = None
         self.length = None
+        self.audio_streams = []
+        self.video_stream = None
 
         # create a Path from the output string
         self.output = Path(self.output).resolve()
@@ -109,6 +118,7 @@ class TwoPass:
         for stream in self.probe["streams"]:
             codec_type = stream["codec_type"]
             if codec_type == "video":
+                self.video_stream = stream
                 width = stream["width"]
                 height = stream["height"]
                 self.ratio = width / height
@@ -116,6 +126,7 @@ class TwoPass:
                 self.init_framerate = round(int(framerate_ratio.split("/")[0]) / int(framerate_ratio.split("/")[1]))
             elif codec_type == "audio":
                 audio_stream = stream["index"]
+                self.audio_streams.append(stream)
         return audio_stream
 
     def _process_probe(self):
@@ -124,6 +135,17 @@ class TwoPass:
         """
         # set the total video duration -- for use throughout the call and the web ui
         self.duration = math.floor(float(self.probe["format"]["duration"]))
+
+        # The file size comparison below uses mebibytes (MiB, 1 MiB = 1,048,576 bytes).
+        input_filesize_mib = float(self.probe["format"]["size"]) * FILE_SIZE_MULT
+        if input_filesize_mib < self.target_filesize:
+            raise ValueError(
+                f"Your target file size is larger than the input file.\n"
+                f"Input file size (in MiB):\t{input_filesize_mib:.2f} MiB\n"
+                f"Target file size (in MiB):\t{self.target_filesize:.2f} MiB\n"
+                "Note: File size is calculated in MiB (1 MiB = 1,048,576 bytes). "
+                "macOS Finder uses MB (1 MB = 1,000,000 bytes), which may differ."
+            )
 
         if len(self.probe["streams"]) > 2:
             logging.warning(
@@ -359,7 +381,7 @@ class TwoPass:
         # separate streams from ffinput
         ffinput = ffmpeg.input(self.filename, **self.times)
         video = self._apply_video_filters(ffinput.video)
-        audio = ffinput.audio
+        audio = ffinput.audio if self.audio_streams else None
 
         # set our logging level
         loglevel = "quiet" if not self.verbose else "verbose"
@@ -370,14 +392,17 @@ class TwoPass:
         print("Performing first pass")
         _, _ = ffoutput.run(capture_stdout=True)
 
+        # set our output streams
+        output_streams = [video, audio] if audio else [video]
+
         # Second Pass
-        ffoutput = ffmpeg.output(video, audio, self.output_filename, **params["pass2"])
+        ffoutput = ffmpeg.output(*output_streams, self.output_filename, **params["pass2"])
         ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
         print("\nPerforming second pass")
         ffoutput.run(overwrite_output=True)
 
         # save the output file size and return it
-        self.output_filesize = os.path.getsize(self.output_filename) * 0.00000095367432
+        self.output_filesize = os.path.getsize(self.output_filename) * FILE_SIZE_MULT
 
         return self.output_filesize
 

@@ -22,7 +22,7 @@ class TestTwoPassUtils(unittest.TestCase):
 class TestTwoPass(unittest.TestCase):
     def setUp(self) -> None:
         self.fake_probe_result: Dict[str, Any] = {
-            "format": {"duration": "120.0"},
+            "format": {"duration": "120.0", "size": "53000000"},
             "streams": [
                 {
                     "codec_type": "video",
@@ -183,6 +183,10 @@ class TestTwoPass(unittest.TestCase):
     def test_time_paradox_raises(self) -> None:
         with self.assertRaises(ValueError):
             self.make_twopass(times={"from": "00:02:00", "to": "00:01:00"})
+
+    def test_target_fs_greater_than_input_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            self.make_twopass(target_filesize=51)
 
     def test_time_from_file_name_invalid(self) -> None:
         with self.assertLogs(level="WARNING") as cm:
