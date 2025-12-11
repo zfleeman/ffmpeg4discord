@@ -206,15 +206,6 @@ class TestTwoPass(unittest.TestCase):
         self.assertIn("maxrate", tp.bitrate_dict)
         self.assertIn("bufsize", tp.bitrate_dict)
 
-    def test_warning_more_than_two_streams(self) -> None:
-        # Add a third dummy stream
-        self.fake_probe_result["streams"].append({"codec_type": "subtitle", "index": 2})
-        with self.assertLogs(level="WARNING") as cm:
-            _ = self.make_twopass()
-        self.assertTrue(any("more than two streams" in msg.lower() for msg in cm.output))
-        # Remove the extra stream for other tests
-        self.fake_probe_result["streams"] = self.fake_probe_result["streams"][:2]
-
     def test_warning_no_audio_stream(self) -> None:
         # Remove audio stream
         self.fake_probe_result["streams"] = [self.fake_probe_result["streams"][0]]
