@@ -118,6 +118,19 @@ def build_parser() -> ArgumentParser:
     parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
     parser.add_argument("-r", "--resolution", default="", help="The output resolution of your final video.")
     parser.add_argument("-f", "--framerate", type=int, help="The desired output frames per second.")
+    # audio filters
+    parser.add_argument(
+        "--amix",
+        action=BooleanOptionalAction,
+        default=False,
+        help="Mix all audio streams into one (default: off).",
+    )
+    parser.add_argument(
+        "--amix-normalize",
+        action=BooleanOptionalAction,
+        default=False,
+        help=("When mixing audio, normalize volume levels (default: off). " "Specifying this flag implies --amix."),
+    )
     # configuraiton json file
     parser.add_argument("--config", help="JSON file containing the run's configuration")
     # web
@@ -126,6 +139,15 @@ def build_parser() -> ArgumentParser:
     )
     parser.add_argument("-p", "--port", type=int, help="Local port for the Flask application.")
     return parser
+
+
+def _normalize_amix_args(args: dict) -> dict:
+    """Make --amix-normalize imply --amix, unless amix was explicitly set false."""
+    # If user/config turned on normalize but never explicitly disabled amix,
+    # treat that as "we are mixing, with normalization".
+    if args.get("amix_normalize") and not args.get("amix"):
+        args["amix"] = True
+    return args
 
 
 def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:
@@ -205,4 +227,5 @@ def get_args() -> dict:
     args = _assign_port(args)
     args = _extract_times(args)
     args = _parse_vp9_opts(args)
+    args = _normalize_amix_args(args)
     return args

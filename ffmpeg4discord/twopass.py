@@ -71,6 +71,8 @@ class TwoPass:
         verbose: bool = False,
         framerate: Optional[int] = None,
         vp9_opts: Optional[dict] = None,
+        amix: bool = False,
+        amix_normalize: bool = False,
     ) -> None:
 
         self.target_filesize = target_filesize
@@ -83,6 +85,8 @@ class TwoPass:
         self.output = output
         self.vp9_opts = vp9_opts or {}
         self.verbose = verbose
+        self.amix = amix
+        self.amix_normalize = amix_normalize
         self.output_filename = ""
         self.output_filesize = 0
         self.bitrate_dict = {}
@@ -145,11 +149,6 @@ class TwoPass:
                 f"Target file size (in MiB):\t{self.target_filesize:.2f} MiB\n"
                 "Note: File size is calculated in MiB (1 MiB = 1,048,576 bytes). "
                 "macOS Finder uses MB (1 MB = 1,000,000 bytes), which may differ."
-            )
-
-        if len(self.probe["streams"]) > 2:
-            logging.warning(
-                "This media file has more than two streams, which could cause errors during the encoding job."
             )
 
         audio_stream = self._parse_streams()
@@ -339,6 +338,20 @@ class TwoPass:
 
         return video
 
+    def _apply_audio_filters(self, ffinput):
+        if self.amix and self.audio_streams:
+            to_merge = [ffinput[f"a:{i}"] for i, _ in enumerate(self.audio_streams)]
+
+            merged = ffmpeg.filter(
+                to_merge,
+                "amix",
+                normalize=int(self.amix_normalize),
+                inputs=len(self.audio_streams),
+            )
+            return merged
+
+        return ffinput.audio if self.audio_streams else None
+
     def run(self) -> float:
         """
         Perform the CPU-intensive encoding job
@@ -381,7 +394,7 @@ class TwoPass:
         # separate streams from ffinput
         ffinput = ffmpeg.input(self.filename, **self.times)
         video = self._apply_video_filters(ffinput.video)
-        audio = ffinput.audio if self.audio_streams else None
+        audio = self._apply_audio_filters(ffinput)
 
         # set our logging level
         loglevel = "quiet" if not self.verbose else "verbose"
