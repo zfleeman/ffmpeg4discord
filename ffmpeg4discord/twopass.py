@@ -73,6 +73,7 @@ class TwoPass:
         vp9_opts: Optional[dict] = None,
         amix: bool = False,
         amix_normalize: bool = False,
+        astreams: Optional[list[int]] = None,
     ) -> None:
 
         self.target_filesize = target_filesize
@@ -87,6 +88,7 @@ class TwoPass:
         self.verbose = verbose
         self.amix = amix
         self.amix_normalize = amix_normalize
+        self.astreams = astreams
         self.output_filename = ""
         self.output_filesize = 0
         self.bitrate_dict = {}
@@ -114,10 +116,12 @@ class TwoPass:
         self._process_times(filename_times)
 
     def _parse_streams(self):
+        """Helper to parse video and audio streams from the probe output.
+
+        Returns:
+            The ffprobe "index" of the *first audio stream* (if any). This is only used for audio bitrate lookup.
         """
-        Helper to parse video and audio streams from the probe output.
-        Sets self.ratio, self.init_framerate, and returns audio_stream index.
-        """
+
         audio_stream = None
         for stream in self.probe["streams"]:
             codec_type = stream["codec_type"]
@@ -131,6 +135,7 @@ class TwoPass:
             elif codec_type == "audio":
                 audio_stream = stream["index"]
                 self.audio_streams.append(stream)
+
         return audio_stream
 
     def _process_probe(self):
@@ -257,10 +262,18 @@ class TwoPass:
         return params
 
     def _create_bitrate_dict(self) -> None:
+        """Compute the video bitrate targets for the requested file size.
+
+        Notes:
+            `self.length` is expected to be > 0. In the CLI path this is enforced by `_process_times()`,
+            but the Web UI mutates `self.times`/`self.length` directly, so we defensively guard here.
         """
-        Perform the calculation specified in ffmpeg's documentation that generates
-        the video bitrates needed to achieve the target file size
-        """
+
+        if not self.length or self.length <= 0:
+            raise ValueError(
+                "Invalid clip length (length must be > 0 seconds). " "Check your Start/End times (start must be < end)."
+            )
+
         br = math.floor((self.target_filesize * 8192) / self.length - (self.audio_br / 1000)) * 1000
         self.bitrate_dict = {
             "b:v": br,
@@ -339,18 +352,39 @@ class TwoPass:
         return video
 
     def _apply_audio_filters(self, ffinput):
-        if self.amix and self.audio_streams:
-            to_merge = [ffinput[f"a:{i}"] for i, _ in enumerate(self.audio_streams)]
+        """Select and/or mix audio streams.
 
-            merged = ffmpeg.filter(
-                to_merge,
-                "amix",
-                normalize=int(self.amix_normalize),
-                inputs=len(self.audio_streams),
-            )
-            return merged
+        Selection is controlled by `self.astreams` (0-based *audio stream order*, not ffprobe index).
+        - If `self.astreams` is None: select all (historical behavior).
+        - If `self.astreams` is []: select none.
+        - If `self.amix` is True: merge the selected streams.
+        - If `self.amix` is False: pick the first selected stream.
+        """
 
-        return ffinput.audio if self.audio_streams else None
+        if not self.audio_streams:
+            return None
+
+        # Non-mixing mode: we only support a single audio output stream.
+        # Preserve the original behavior: keep the default/first audio track.
+        if not self.amix:
+            return ffinput.audio
+
+        # Mixing mode: optionally select a subset; otherwise mix all.
+        if self.astreams is None:
+            selected_positions = list(range(len(self.audio_streams)))
+        else:
+            selected_positions = [i for i in self.astreams if 0 <= i < len(self.audio_streams)]
+
+        if not selected_positions:
+            return None
+
+        to_merge = [ffinput[f"a:{i}"] for i in selected_positions]
+        return ffmpeg.filter(
+            to_merge,
+            "amix",
+            normalize=int(self.amix_normalize),
+            inputs=len(selected_positions),
+        )
 
     def run(self) -> float:
         """

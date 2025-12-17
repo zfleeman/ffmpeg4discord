@@ -88,7 +88,7 @@
                 </div>
                 {% if twopass.audio_streams|length > 1 %}
                 <div class="col">
-                    <label class="form-label d-block">Audio Mixing</label>
+                    <label class="form-label d-block">Audio Mixing<br /><small><em>({{twopass.audio_streams|length}} audio tracks found)</small></em></label>
                     <div class="form-check">
                         <input
                             class="form-check-input"
@@ -99,7 +99,7 @@
                             {% if not twopass.amix %}checked{% endif %}
                         >
                         <label class="form-check-label" for="amix_off">
-                            No mixing
+                            No mixing (takes first track)
                         </label>
                     </div>
                     <div class="form-check">
@@ -112,7 +112,7 @@
                             {% if twopass.amix and not twopass.amix_normalize %}checked{% endif %}
                         >
                         <label class="form-check-label" for="amix_mix">
-                            Mix tracks (no normalize)
+                            Mix tracks
                         </label>
                     </div>
                     <div class="form-check">
@@ -125,12 +125,41 @@
                             {% if twopass.amix and twopass.amix_normalize %}checked{% endif %}
                         >
                         <label class="form-check-label" for="amix_mix_normalize">
-                            Mix + normalize
+                            Mix tracks + normalize audio
                         </label>
+                    </div>
+                </div>
+
+                <div class="col" id="audioStreamsCol">
+                    <label class="form-label d-block">Audio Streams</label>
+                    <div class="row row-cols-2 g-1 mt-1">
+                        {% for stream in twopass.audio_streams %}
+                        {% set idx = loop.index0 %}
+                        <div class="col">
+                            <div class="form-check" style="margin-bottom: 0;">
+                                <input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="astreams"
+                                    id="astream_{{ idx }}"
+                                    value="{{ idx }}"
+                                    {% if twopass.astreams is not none %}
+                                        {% if idx in twopass.astreams %}checked{% endif %}
+                                    {% else %}
+                                        checked
+                                    {% endif %}
+                                >
+                                <label class="form-check-label" for="astream_{{ idx }}" style="font-size: 0.9rem;">
+                                    {{ idx }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
                 {% endif %}
             </div>
+
             <div class="row mb-3">
                 <div class="col">
                     <button id="spinButton" onclick="return startSpin()" class="submission btn btn-primary btn-lg" type="submit">
@@ -282,6 +311,25 @@
         });
 
         // Validation is now handled in startSpin()
+
+        // Hide/show the "Audio Streams" column depending on Audio Mixing mode
+        function toggleAudioStreamsVisibility() {
+            const audioStreamsCol = document.getElementById('audioStreamsCol');
+            if (!audioStreamsCol) return; // section not rendered when only 1 audio stream
+
+            const amixOff = document.getElementById('amix_off');
+            const hide = !!amixOff && amixOff.checked;
+
+            audioStreamsCol.classList.toggle('d-none', hide);
+        }
+
+        // Listen for changes to Audio Mixing radio buttons (if present)
+        document.querySelectorAll('input[type="radio"][name="amix_mode"]').forEach((radio) => {
+            radio.addEventListener('change', toggleAudioStreamsVisibility);
+        });
+
+        // Apply on initial page load
+        toggleAudioStreamsVisibility();
     </script>
 </body>
 </html>

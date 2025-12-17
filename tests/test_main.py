@@ -74,6 +74,9 @@ class TestMain(unittest.TestCase):
             "resolution": "",
             "framerate": None,
             "output": "",
+            "amix": False,
+            "amix_normalize": False,
+            "astreams": None,
         }
         mock_get_args.return_value = args.copy()
         tp: MagicMock = MagicMock()
@@ -105,6 +108,9 @@ class TestMain(unittest.TestCase):
             "resolution": "",
             "framerate": None,
             "output": "",
+            "amix": False,
+            "amix_normalize": False,
+            "astreams": None,
             "port": 5000,
         }
         mock_get_args.return_value = args.copy()
@@ -150,6 +156,9 @@ class TestMain(unittest.TestCase):
             "resolution": "",
             "framerate": None,
             "output": "",
+            "amix": False,
+            "amix_normalize": False,
+            "astreams": None,
             "port": 5000,
         }
         mock_get_args.return_value = args.copy()

@@ -142,6 +142,25 @@ def main() -> None:
             )
             twopass.verbose = bool(request.form.getlist("verbose"))
 
+            # audio mixing mode
+            amix_mode = request.form.get("amix_mode")
+            if amix_mode == "mix_normalize":
+                twopass.amix = True
+                twopass.amix_normalize = True
+            elif amix_mode == "mix":
+                twopass.amix = True
+                twopass.amix_normalize = False
+            else:
+                twopass.amix = False
+                twopass.amix_normalize = False
+
+            # audio stream selection (0-based audio-stream order)
+            astreams = request.form.getlist("astreams")
+            if astreams:
+                twopass.astreams = [int(i) for i in astreams]
+            else:
+                twopass.astreams = None
+
             # to loop or not to loop
             approx = bool(request.form.getlist("approx"))
 

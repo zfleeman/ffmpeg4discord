@@ -131,6 +131,15 @@ def build_parser() -> ArgumentParser:
         default=False,
         help=("When mixing audio, normalize volume levels (default: off). " "Specifying this flag implies --amix."),
     )
+    parser.add_argument(
+        "--astreams",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated list of 0-based audio stream indexes to include in the output (e.g. '0,1,2'). "
+            "If omitted, all audio streams are used."
+        ),
+    )
     # configuraiton json file
     parser.add_argument("--config", help="JSON file containing the run's configuration")
     # web
@@ -214,6 +223,60 @@ def _parse_vp9_opts(args: dict) -> dict:
     return args
 
 
+def _parse_astreams(args: dict) -> dict:
+    """Parse --astreams from comma-separated string (or list) into a list[int] or None."""
+
+    raw = args.get("astreams")
+    if raw is None:
+        return args
+
+    # Allow config/json to provide a list already.
+    if isinstance(raw, list):
+        try:
+            parsed = [int(x) for x in raw]
+        except (TypeError, ValueError):
+            logging.error("Invalid astreams list. Expected list of ints.")
+            args["astreams"] = None
+            return args
+    else:
+        raw_str = str(raw).strip()
+        if raw_str == "":
+            args["astreams"] = None
+            return args
+
+        parts = [p.strip() for p in raw_str.split(",") if p.strip() != ""]
+        try:
+            parsed = [int(p) for p in parts]
+        except ValueError:
+            logging.error(
+                dedent(
+                    """\033[31m
+                    Invalid --astreams format.
+
+                    Provide a comma-separated list of integers, e.g. --astreams "0,1,2".
+                    Ignoring --astreams.
+                    \033[0m"""
+                )
+            )
+            args["astreams"] = None
+            return args
+
+    # Normalize: remove duplicates, preserve order.
+    seen: set[int] = set()
+    normalized: list[int] = []
+    for idx in parsed:
+        if idx < 0:
+            logging.warning(f"Ignoring negative audio stream index in --astreams: {idx}")
+            continue
+        if idx in seen:
+            continue
+        seen.add(idx)
+        normalized.append(idx)
+
+    args["astreams"] = normalized
+    return args
+
+
 def get_args() -> dict:
     """
     Parses command-line arguments and returns them as a dictionary.
@@ -227,5 +290,6 @@ def get_args() -> dict:
     args = _assign_port(args)
     args = _extract_times(args)
     args = _parse_vp9_opts(args)
+    args = _parse_astreams(args)
     args = _normalize_amix_args(args)
     return args
