@@ -69,6 +69,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--filename-times` | false | `--filename-times` | Parse From/To timestamps from the input filename. See [File Name Formatting](#file-name-formatting). |
 | `--approx` | false | `--approx` | Approximate the target size: do a single 2-pass encode and **do not** loop to get under the target. |
 | `--vp9-opts` | No default | `--vp9-opts '{"row-mt":1,"deadline":"good","cpu-used":2}'` | JSON string to tweak VP9 encoding speed/quality. Supported keys: `row-mt`, `deadline`, `cpu-used`. (CLI / JSON config only; not exposed in the Web UI.) |
+| `-an`<br>`--no-audio` | false | `-an` | Do not include any audio stream in the output. (Overrides `--amix` / `--astreams`.) To explicitly re-enable audio after setting this in a config, use `--no-no-audio`. |
 | `--amix` | false | `--amix` | Mix all (selected) audio streams into one output track. When off, only the default/first audio track is used. |
 | `--amix-normalize` | false | `--amix-normalize` | When mixing audio, normalize volume levels. Specifying this implies `--amix`. |
 | `--astreams` | all | `--astreams "0,1"` | Comma-separated list of **0-based audio stream positions** to include. When used with `--amix`, those streams will be mixed; otherwise, only the first selected stream is kept. |
