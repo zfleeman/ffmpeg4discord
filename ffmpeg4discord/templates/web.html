@@ -86,7 +86,95 @@
                         <option {{ "selected" if twopass.codec == "libvpx-vp9" else "" }} value="libvpx-vp9">WEBM / libvpx-vp9</option>
                     </select>
                 </div>
+                <div class="col">
+                    <label class="form-label d-block">Include Audio</label>
+                    <div class="form-check form-switch mt-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="include_audio"
+                            name="include_audio"
+                            value="True"
+                            {{ "checked" if not twopass.no_audio else "" }}
+                        >
+                        <label class="form-check-label" for="include_audio">Enabled</label>
+                    </div>
+                </div>
+                {% if twopass.audio_streams|length > 1 %}
+                <div class="col" id="audioMixingCol">
+                    <label class="form-label d-block">Audio Mixing<br /><small><em>({{twopass.audio_streams|length}} audio tracks found)</small></em></label>
+                    <div class="form-check">
+                        <input
+                            class="form-check-input"
+                            type="radio"
+                            name="amix_mode"
+                            id="amix_off"
+                            value="off"
+                            {% if not twopass.amix %}checked{% endif %}
+                        >
+                        <label class="form-check-label" for="amix_off">
+                            No mixing (takes first track)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input
+                            class="form-check-input"
+                            type="radio"
+                            name="amix_mode"
+                            id="amix_mix"
+                            value="mix"
+                            {% if twopass.amix and not twopass.amix_normalize %}checked{% endif %}
+                        >
+                        <label class="form-check-label" for="amix_mix">
+                            Mix tracks
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input
+                            class="form-check-input"
+                            type="radio"
+                            name="amix_mode"
+                            id="amix_mix_normalize"
+                            value="mix_normalize"
+                            {% if twopass.amix and twopass.amix_normalize %}checked{% endif %}
+                        >
+                        <label class="form-check-label" for="amix_mix_normalize">
+                            Mix tracks + normalize audio
+                        </label>
+                    </div>
+                </div>
+
+                <div class="col" id="audioStreamsCol">
+                    <label class="form-label d-block">Audio Streams</label>
+                    <div class="row row-cols-2 g-1 mt-1">
+                        {% for stream in twopass.audio_streams %}
+                        {% set idx = loop.index0 %}
+                        <div class="col">
+                            <div class="form-check" style="margin-bottom: 0;">
+                                <input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="astreams"
+                                    id="astream_{{ idx }}"
+                                    value="{{ idx }}"
+                                    {% if twopass.astreams is not none %}
+                                        {% if idx in twopass.astreams %}checked{% endif %}
+                                    {% else %}
+                                        checked
+                                    {% endif %}
+                                >
+                                <label class="form-check-label" for="astream_{{ idx }}" style="font-size: 0.9rem;">
+                                    {{ idx }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
+
             <div class="row mb-3">
                 <div class="col">
                     <button id="spinButton" onclick="return startSpin()" class="submission btn btn-primary btn-lg" type="submit">
@@ -103,8 +191,48 @@
                     </div>
                 </div>
             </div>
+            <div class="row mb-3">
+                <div class="col">
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#streamDetails" aria-expanded="false" aria-controls="streamDetails">
+                        Show input stream details
+                    </button>
+                </div>
+            </div>
+            <div class="collapse" id="streamDetails">
+                <div class="row mb-3">
+                    <div class="col">
+                        <h4>Video Streams</h4>
+                        {% set video_streams = twopass.probe["streams"] | selectattr("codec_type", "equalto", "video") | list %}
+                        {% if video_streams %}
+                            <pre class="bg-dark text-light p-3 rounded" style="max-height: 200px; overflow: auto; font-size: 0.8rem;"><code>{% for stream in video_streams %}-- Stream {{ loop.index0 }} --
+{% for key, value in stream.items() %}{% if key not in ["disposition", "tags"] %}{{ key }}: {{ value }}
+{% endif %}{% endfor %}
+
+{% endfor %}</code></pre>
+                        {% else %}
+                            <p class="text-muted">No video streams found.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col">
+                        <h4>Audio Streams</h4>
+                        {% set audio_streams = twopass.probe["streams"] | selectattr("codec_type", "equalto", "audio") | list %}
+                        {% if audio_streams %}
+                            <pre class="bg-dark text-light p-3 rounded" style="max-height: 200px; overflow: auto; font-size: 0.8rem;"><code>{% for stream in audio_streams %}-- Stream {{ loop.index0 }} --
+{% for key, value in stream.items() %}{% if key not in ["disposition", "tags"] %}{{ key }}: {{ value }}
+{% endif %}{% endfor %}
+
+{% endfor %}</code></pre>
+                        {% else %}
+                            <p class="text-muted">No audio streams found.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
         </form>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
     <script>
         const MAX_FILESIZE_MB = parseFloat("{{ twopass.probe['format']['size'] }}") * 0.00000095367432;
         console.log("MAX_FILESIZE_MB:", MAX_FILESIZE_MB);
@@ -198,6 +326,72 @@
         });
 
         // Validation is now handled in startSpin()
+
+        function setColumnEnabled(col, enabled) {
+            if (!col) return;
+            col.querySelectorAll('input, select, textarea, button').forEach((el) => {
+                el.disabled = !enabled;
+            });
+        }
+
+        // Hide/show the "Audio Streams" column depending on Audio Mixing mode
+        function toggleAudioStreamsVisibility() {
+            const audioStreamsCol = document.getElementById('audioStreamsCol');
+            if (!audioStreamsCol) return; // section not rendered when only 1 audio stream
+
+            const includeAudioSwitch = document.getElementById('include_audio');
+            if (includeAudioSwitch && !includeAudioSwitch.checked) {
+                audioStreamsCol.classList.add('d-none');
+                return;
+            }
+
+            const amixOff = document.getElementById('amix_off');
+            const hide = !!amixOff && amixOff.checked;
+
+            audioStreamsCol.classList.toggle('d-none', hide);
+        }
+
+        function toggleAudioOptionsVisibility() {
+            const includeAudioSwitch = document.getElementById('include_audio');
+            // If the switch isn't present for some reason, default to showing audio options.
+            const includeAudio = !includeAudioSwitch || includeAudioSwitch.checked;
+
+            const audioMixingCol = document.getElementById('audioMixingCol');
+            const audioStreamsCol = document.getElementById('audioStreamsCol');
+
+            // These sections aren't rendered when only 1 audio stream exists.
+            if (!audioMixingCol && !audioStreamsCol) return;
+
+            if (audioMixingCol) {
+                audioMixingCol.classList.toggle('d-none', !includeAudio);
+            }
+            if (audioStreamsCol) {
+                audioStreamsCol.classList.toggle('d-none', !includeAudio);
+            }
+
+            // Disable hidden audio option inputs so they don't submit values.
+            setColumnEnabled(audioMixingCol, includeAudio);
+            setColumnEnabled(audioStreamsCol, includeAudio);
+
+            // If we're including audio, apply any additional logic (like hiding streams when mixing is off).
+            if (includeAudio) {
+                toggleAudioStreamsVisibility();
+            }
+        }
+
+        // Listen for changes to Audio Mixing radio buttons (if present)
+        document.querySelectorAll('input[type="radio"][name="amix_mode"]').forEach((radio) => {
+            radio.addEventListener('change', toggleAudioStreamsVisibility);
+        });
+
+        // Listen for Include Audio toggle
+        const includeAudioSwitch = document.getElementById('include_audio');
+        if (includeAudioSwitch) {
+            includeAudioSwitch.addEventListener('change', toggleAudioOptionsVisibility);
+        }
+
+        // Apply on initial page load
+        toggleAudioOptionsVisibility();
     </script>
 </body>
 </html>

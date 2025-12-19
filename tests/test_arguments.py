@@ -11,6 +11,8 @@ from unittest.mock import patch
 from ffmpeg4discord.arguments import (
     _assign_port,
     _extract_times,
+    _normalize_amix_args,
+    _parse_astreams,
     _parse_vp9_opts,
     build_parser,
     get_args,
@@ -41,6 +43,7 @@ class TestArguments(unittest.TestCase):
             "config": None,
             "web": False,
             "port": None,
+            "astreams": None,
         }
         self.default_config = {
             "output": "mydir",
@@ -57,6 +60,7 @@ class TestArguments(unittest.TestCase):
             "framerate": 60,
             "web": True,
             "port": 5050,
+            "astreams": "0,2",
         }
 
     def tearDown(self) -> None:
@@ -101,6 +105,7 @@ class TestArguments(unittest.TestCase):
         self.assertIsNone(args.config)
         self.assertFalse(args.web)
         self.assertIsNone(args.port)
+        self.assertIsNone(getattr(args, "astreams", None))
 
     def test_parser_optional_arguments(self):
         args = self.parser.parse_args(
@@ -134,6 +139,8 @@ class TestArguments(unittest.TestCase):
                 "--web",
                 "-p",
                 "5050",
+                "--astreams",
+                "0,2",
             ]
         )
         self.assertEqual(args.output, "outdir")
@@ -152,6 +159,7 @@ class TestArguments(unittest.TestCase):
         self.assertEqual(args.config, "config.json")
         self.assertTrue(args.web)
         self.assertEqual(args.port, 5050)
+        self.assertEqual(args.astreams, "0,2")
 
     def test_parser_boolean_optional_action_false(self):
         args = self.parser.parse_args(["file.mp4", "--no-filename-times", "--no-approx", "--no-web", "--no-verbose"])
@@ -238,6 +246,7 @@ class TestArguments(unittest.TestCase):
             "config": None,
             "web": False,
             "port": None,
+            "astreams": None,
         }
         config = {
             "output": "mydir",
@@ -254,6 +263,7 @@ class TestArguments(unittest.TestCase):
             "framerate": 60,
             "web": True,
             "port": 5050,
+            "astreams": "0,2",
         }
         update_args_from_config(args, config, parser)
         self.assertEqual(args["output"], "mydir")
@@ -317,6 +327,7 @@ class TestArguments(unittest.TestCase):
                 "framerate": None,
                 "web": False,
                 "port": None,
+                "astreams": None,
             }
             result = __import__("ffmpeg4discord.arguments").arguments._merge_config_args(args.copy(), parser)
             self.assertEqual(result["output"], "from_config")
@@ -345,6 +356,7 @@ class TestArguments(unittest.TestCase):
             "framerate": None,
             "web": False,
             "port": None,
+            "astreams": None,
         }
         result = __import__("ffmpeg4discord.arguments").arguments._merge_config_args(args.copy(), parser)
         self.assertNotIn("config", result)
@@ -370,6 +382,7 @@ class TestArguments(unittest.TestCase):
             "framerate": None,
             "web": False,
             "port": None,
+            "astreams": None,
         }
         with self.assertRaises(FileNotFoundError):
             __import__("ffmpeg4discord.arguments").arguments._merge_config_args(args.copy(), parser)
@@ -454,6 +467,56 @@ class TestArguments(unittest.TestCase):
         args = {"vp9_opts": None}
         result = _parse_vp9_opts(args)
         self.assertIsNone(result["vp9_opts"])
+
+    def test_parse_astreams_valid(self):
+        args = {"astreams": "0, 2,2"}
+        result = _parse_astreams(args)
+        self.assertEqual(result["astreams"], [0, 2])
+
+    def test_parse_astreams_invalid(self):
+        args = {"astreams": "0, no"}
+        with self.assertLogs(level="ERROR") as cm:
+            result = _parse_astreams(args)
+        self.assertIsNone(result["astreams"])
+        self.assertTrue(any("invalid --astreams format" in msg.lower() for msg in cm.output))
+
+    def test_parse_astreams_empty_string(self):
+        args = {"astreams": ""}
+        result = _parse_astreams(args)
+        self.assertIsNone(result["astreams"])
+
+    def test_parse_astreams_list_valid(self):
+        args = {"astreams": ["0", 2, "2"]}
+        result = _parse_astreams(args)
+        # Note: list-input mode does not de-dupe; normalize loop does.
+        self.assertEqual(result["astreams"], [0, 2])
+
+    def test_parse_astreams_list_invalid(self):
+        args = {"astreams": ["nope"]}
+        with self.assertLogs(level="ERROR") as cm:
+            result = _parse_astreams(args)
+        self.assertIsNone(result["astreams"])
+        self.assertTrue(any("invalid astreams list" in msg.lower() for msg in cm.output))
+
+    def test_parse_astreams_negative_index_warns_and_is_ignored(self):
+        args = {"astreams": "0,-1,2"}
+        with self.assertLogs(level="WARNING") as cm:
+            result = _parse_astreams(args)
+        self.assertEqual(result["astreams"], [0, 2])
+        self.assertTrue(any("ignoring negative audio stream index" in msg.lower() for msg in cm.output))
+
+    def test_normalize_amix_args_implies_amix(self):
+        args = {"amix": False, "amix_normalize": True}
+        result = _normalize_amix_args(args)
+        self.assertTrue(result["amix"])
+
+    def test_get_args_parses_astreams_and_amix_normalize(self):
+        test_argv = ["prog", "file.mp4", "--amix-normalize", "--astreams", "0,1"]
+        with patch.object(sys, "argv", test_argv):
+            args = get_args()
+        self.assertEqual(args["astreams"], [0, 1])
+        self.assertTrue(args["amix_normalize"])
+        self.assertTrue(args["amix"])  # implied by normalize
 
     def test_get_args_basic(self):
         test_argv = ["prog", "file.mp4", "-o", "outdir", "--target-filesize", "5"]
