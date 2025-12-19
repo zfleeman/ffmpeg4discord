@@ -53,24 +53,29 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 
 ### Optional Flags
 
+> **Boolean flags** support both `--flag` and `--no-flag` forms (e.g. `--web` / `--no-web`).
+
 | Flag | Default | Example | Description |
 |---|---|---|---|
-| `-o`<br>`--output` | current working directory | `-o "C:/Users/zflee/A Folder"`<br>`-o "C:/Users/zflee/Desktop/A Folder/filename.mp4"` | If you want your smaller clips to go to a specific folder, use this option. You can also choose a custom output filename, just make sure to include the correct file extension for your video codec. |
-| `-s`<br>`--target-filesize` | 10 | `-s 50` | Change this value if you want to compress your video to something other than the 10MB Discord limit. |
-| `-a`<br>`--audio-br` | 96 | `-a 128` | You can change this value if you want to increase or decrease your audio bitrate. Lowering it will allow for a slight increase in the compressed file's video bitrate. |
-| `-r`<br>`--resolution` | No default | `-r 1280x720` | Modify this value to change the output resolution of your video file. |
-| `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). From the top-left of your video, this example goes 255 pixels to the right, 0 pixels down, and it carves out a 1410x1080 section of the video. |
-| `-c`<br>`--codec` | libx264 | `-c libvpx-vp9` | Options: `libx264` or `libvpx-vp9`<br>Specify the video codec that you want to use. The default option creates `.mp4` files, while `libvpx-vp9` creates `.webm` video files.<br>`libvpx-vp9` creates better looking video files with the same bitrates, but it takes significantly longer to encode. VP9 is also not as compatible with as many devices or browsers. I can view `.webm` videos on the desktop installation of Discord, but they are not viewable on my iOS Discord installation. |
-| `--web` | No default. Boolean flag. | `--web` | Launch the Web UI for this job. A Boolean flag. No value is needed after the flag. See [Web UI](#web-ui) for more information on the Web UI. |
-| `-p`<br>`--port` | No default. Picks a random port if not specified. | `-p 5333` | Run the Web UI on a specific port. |
-| `--config` | No default | `--config config.json` | Path to a JSON file containing the configuration for the above parameters. This config file takes precedence over all of the other flags. See [JSON Configuration](#json-configuration). |
-| `--from` | No default | `--from 00:01:00` | Start time for trimming the video file to a desired section. |
-| `--to` | No default | `--to 00:01:20` | End time for trimming the video file to a desired section. |
-| `--filename-times` | No default. Boolean flag. | `--filename-times` | Generate From/To timestamps from the clip's file name. See [File Name Formatting](#file-name-formatting) |
-| `--approx` | No default. Boolean flag. | `--approx` | Approximate file size. The job will not loop to output the file under the target size. It will get close enough to the target on the first run. |
-| `-f`<br>`--framerate` | No default. | `-f 30` | Adjust the output's frame rate. Specify a value lower than the input video's frame rate. |
-| `--vp9-opts` | No default. | `--vp9-opts '{"row-mt":1,"deadline":"good","cpu-used":2}'` | Specify options to tweak VP9 encoding speed. `row-mt`, `deadline`, and `cpu-used` are the only values supported at the moment. This can only be set with the command line or JSON configuration file. It is not configurable with the Web UI. |
-| `-v`<br>`--verbose` | No default. Boolean flag. | `--verbose` | Enable verbose logging with FFmpeg. |
+| `-o`<br>`--output` | current working directory | `-o "C:/Users/zflee/A Folder"`<br>`-o "C:/Users/zflee/Desktop/A Folder/filename.mp4"` | Output directory **or** full output filename. If you provide a directory, `ff4d` will generate a timestamped filename. If you provide a filename, `ff4d` will use it (and will correct the extension if it doesn’t match the selected codec). |
+| `-s`<br>`--target-filesize` | 10 | `-s 50` | Target output file size in MiB. The encoder will iterate until it gets under this size (unless `--approx` is used). |
+| `-a`<br>`--audio-br` | 96 | `-a 128` | Audio bitrate in kbps. Lowering this allows a slightly higher video bitrate for the same target file size. |
+| `-c`<br>`--codec` | libx264 | `-c libvpx-vp9` | Video codec. Options: `libx264` (outputs `.mp4`) or `libvpx-vp9` (outputs `.webm`). VP9 usually looks better at the same bitrate but is much slower and less universally compatible. |
+| `-r`<br>`--resolution` | off | `-r 1280x720` | Scale the output video to a specific resolution (format: `WIDTHxHEIGHT`). |
+| `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | Crop the input before encoding (format: `x_offsetx y_offsetx widthx height`). See [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). |
+| `-f`<br>`--framerate` | off | `-f 30` | Output frame rate (FPS). If you specify a value higher than the input video’s FPS, the original FPS will be kept. |
+| `--from` | No default | `--from 00:01:00` | Start time for trimming the input (timestamp format `HH:MM:SS`). |
+| `--to` | No default | `--to 00:01:20` | End time for trimming the input (timestamp format `HH:MM:SS`). |
+| `--filename-times` | false | `--filename-times` | Parse From/To timestamps from the input filename. See [File Name Formatting](#file-name-formatting). |
+| `--approx` | false | `--approx` | Approximate the target size: do a single 2-pass encode and **do not** loop to get under the target. |
+| `--vp9-opts` | No default | `--vp9-opts '{"row-mt":1,"deadline":"good","cpu-used":2}'` | JSON string to tweak VP9 encoding speed/quality. Supported keys: `row-mt`, `deadline`, `cpu-used`. (CLI / JSON config only; not exposed in the Web UI.) |
+| `--amix` | false | `--amix` | Mix all (selected) audio streams into one output track. When off, only the default/first audio track is used. |
+| `--amix-normalize` | false | `--amix-normalize` | When mixing audio, normalize volume levels. Specifying this implies `--amix`. |
+| `--astreams` | all | `--astreams "0,1"` | Comma-separated list of **0-based audio stream positions** to include. When used with `--amix`, those streams will be mixed; otherwise, only the first selected stream is kept. |
+| `-v`<br>`--verbose` | false | `--verbose` | Enable verbose FFmpeg logging (useful for debugging). |
+| `--config` | off | `--config config.json` | Path to a JSON file containing a saved configuration. When a setting is provided by both JSON and CLI flags, the CLI flag wins. See [JSON Configuration](#json-configuration). |
+| `--web` | false | `--web` | Launch the Web UI for this job. See [Web UI](#web-ui). |
+| `-p`<br>`--port` | random (when `--web`) | `-p 5333` | Run the Web UI on a specific port. If omitted, a random free port between 5000–6000 is chosen. |
 
 ### File Name Formatting
 
