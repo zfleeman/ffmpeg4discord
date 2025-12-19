@@ -1,5 +1,6 @@
 # pylint: disable=W0201, W0212, C0114, C0115, C0116
 import unittest
+import tempfile
 from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
@@ -510,20 +511,19 @@ class TestTwoPass(unittest.TestCase):
     @patch("ffmpeg4discord.twopass.ffmpeg.output")
     @patch("ffmpeg4discord.twopass.ffmpeg.input")
     def test_output_is_dir(self, mock_input: MagicMock, mock_output: MagicMock, mock_getsize: MagicMock) -> None:
-        # Simulate output as a directory
+        # Simulate output as a directory in a cross-platform way
         self.patch_ffmpeg_input_output(mock_input, mock_output)
         mock_getsize.return_value = 10485760  # 10 MB
-        # Use a Path object that is a directory
-        output_dir = Path("/tmp")
-        tp = self.make_twopass(output=str(output_dir))
-        # Patch is_dir to return True
-        tp.output = output_dir
-        tp.length = 100
-        tp.audio_br = 128000
-        tp._create_bitrate_dict()
-        tp.run()
-        self.assertTrue(tp.output_filename.startswith(str(output_dir)))
-        self.assertIn("small_", tp.output_filename)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Pass the temporary directory as the output target
+            tp = self.make_twopass(output=tmpdir)
+            tp.length = 100
+            tp.audio_br = 128000
+            tp._create_bitrate_dict()
+            tp.run()
+            self.assertTrue(tp.output_filename.startswith(tmpdir))
+            self.assertIn("small_", tp.output_filename)
 
 
 if __name__ == "__main__":
