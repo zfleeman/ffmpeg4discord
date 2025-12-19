@@ -142,7 +142,10 @@ def main() -> None:
             )
             twopass.verbose = bool(request.form.getlist("verbose"))
 
-            # audio mixing mode
+            # include audio (unchecked => no_audio)
+            twopass.no_audio = not bool(request.form.getlist("include_audio"))
+
+            # audio mixing mode (only relevant when audio is included)
             amix_mode = request.form.get("amix_mode")
             if amix_mode == "mix_normalize":
                 twopass.amix = True

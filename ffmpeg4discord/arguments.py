@@ -120,6 +120,13 @@ def build_parser() -> ArgumentParser:
     parser.add_argument("-f", "--framerate", type=int, help="The desired output frames per second.")
     # audio filters
     parser.add_argument(
+        "-an",
+        "--no-audio",
+        action=BooleanOptionalAction,
+        default=False,
+        help="Do not include any audio stream in the output.",
+    )
+    parser.add_argument(
         "--amix",
         action=BooleanOptionalAction,
         default=False,

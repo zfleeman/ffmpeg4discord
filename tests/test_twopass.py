@@ -1,6 +1,6 @@
 # pylint: disable=W0201, W0212, C0114, C0115, C0116
-import unittest
 import tempfile
+import unittest
 from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch

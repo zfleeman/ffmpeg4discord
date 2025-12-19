@@ -74,6 +74,7 @@ class TwoPass:
         amix: bool = False,
         amix_normalize: bool = False,
         astreams: Optional[list[int]] = None,
+        no_audio: bool = False,
     ) -> None:
 
         self.target_filesize = target_filesize
@@ -93,6 +94,7 @@ class TwoPass:
         self.output_filesize = 0
         self.bitrate_dict = {}
         self.message = ""
+        self.no_audio = no_audio
 
         self.filename = filename
         self.fname = filename.name
@@ -271,7 +273,7 @@ class TwoPass:
 
         if not self.length or self.length <= 0:
             raise ValueError(
-                "Invalid clip length (length must be > 0 seconds). " "Check your Start/End times (start must be < end)."
+                "Invalid clip length (length must be > 0 seconds). Check your Start/End times (start must be < end)."
             )
 
         br = math.floor((self.target_filesize * 8192) / self.length - (self.audio_br / 1000)) * 1000
@@ -440,7 +442,7 @@ class TwoPass:
         _, _ = ffoutput.run(capture_stdout=True)
 
         # set our output streams
-        output_streams = [video, audio] if audio else [video]
+        output_streams = [video, audio] if audio and not self.no_audio else [video]
 
         # Second Pass
         ffoutput = ffmpeg.output(*output_streams, self.output_filename, **params["pass2"])

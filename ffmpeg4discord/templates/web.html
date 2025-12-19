@@ -86,8 +86,23 @@
                         <option {{ "selected" if twopass.codec == "libvpx-vp9" else "" }} value="libvpx-vp9">WEBM / libvpx-vp9</option>
                     </select>
                 </div>
-                {% if twopass.audio_streams|length > 1 %}
                 <div class="col">
+                    <label class="form-label d-block">Include Audio</label>
+                    <div class="form-check form-switch mt-2">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="include_audio"
+                            name="include_audio"
+                            value="True"
+                            {{ "checked" if not twopass.no_audio else "" }}
+                        >
+                        <label class="form-check-label" for="include_audio">Enabled</label>
+                    </div>
+                </div>
+                {% if twopass.audio_streams|length > 1 %}
+                <div class="col" id="audioMixingCol">
                     <label class="form-label d-block">Audio Mixing<br /><small><em>({{twopass.audio_streams|length}} audio tracks found)</small></em></label>
                     <div class="form-check">
                         <input
@@ -312,10 +327,23 @@
 
         // Validation is now handled in startSpin()
 
+        function setColumnEnabled(col, enabled) {
+            if (!col) return;
+            col.querySelectorAll('input, select, textarea, button').forEach((el) => {
+                el.disabled = !enabled;
+            });
+        }
+
         // Hide/show the "Audio Streams" column depending on Audio Mixing mode
         function toggleAudioStreamsVisibility() {
             const audioStreamsCol = document.getElementById('audioStreamsCol');
             if (!audioStreamsCol) return; // section not rendered when only 1 audio stream
+
+            const includeAudioSwitch = document.getElementById('include_audio');
+            if (includeAudioSwitch && !includeAudioSwitch.checked) {
+                audioStreamsCol.classList.add('d-none');
+                return;
+            }
 
             const amixOff = document.getElementById('amix_off');
             const hide = !!amixOff && amixOff.checked;
@@ -323,13 +351,47 @@
             audioStreamsCol.classList.toggle('d-none', hide);
         }
 
+        function toggleAudioOptionsVisibility() {
+            const includeAudioSwitch = document.getElementById('include_audio');
+            // If the switch isn't present for some reason, default to showing audio options.
+            const includeAudio = !includeAudioSwitch || includeAudioSwitch.checked;
+
+            const audioMixingCol = document.getElementById('audioMixingCol');
+            const audioStreamsCol = document.getElementById('audioStreamsCol');
+
+            // These sections aren't rendered when only 1 audio stream exists.
+            if (!audioMixingCol && !audioStreamsCol) return;
+
+            if (audioMixingCol) {
+                audioMixingCol.classList.toggle('d-none', !includeAudio);
+            }
+            if (audioStreamsCol) {
+                audioStreamsCol.classList.toggle('d-none', !includeAudio);
+            }
+
+            // Disable hidden audio option inputs so they don't submit values.
+            setColumnEnabled(audioMixingCol, includeAudio);
+            setColumnEnabled(audioStreamsCol, includeAudio);
+
+            // If we're including audio, apply any additional logic (like hiding streams when mixing is off).
+            if (includeAudio) {
+                toggleAudioStreamsVisibility();
+            }
+        }
+
         // Listen for changes to Audio Mixing radio buttons (if present)
         document.querySelectorAll('input[type="radio"][name="amix_mode"]').forEach((radio) => {
             radio.addEventListener('change', toggleAudioStreamsVisibility);
         });
 
+        // Listen for Include Audio toggle
+        const includeAudioSwitch = document.getElementById('include_audio');
+        if (includeAudioSwitch) {
+            includeAudioSwitch.addEventListener('change', toggleAudioOptionsVisibility);
+        }
+
         // Apply on initial page load
-        toggleAudioStreamsVisibility();
+        toggleAudioOptionsVisibility();
     </script>
 </body>
 </html>
