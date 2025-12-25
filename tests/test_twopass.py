@@ -1,4 +1,5 @@
 # pylint: disable=W0201, W0212, C0114, C0115, C0116
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -615,7 +616,12 @@ class TestTwoPass(unittest.TestCase):
             tp.audio_br = 128000
             tp._create_bitrate_dict()
             tp.run()
-            self.assertTrue(tp.output_filename.startswith(tmpdir))
+            # Cross-platform check that the output file is *inside* tmpdir.
+            # macOS: `/var` is a symlink to `/private/var`, so Path.resolve() (used by TwoPass)
+            # canonicalizes temp paths. Windows: be resilient to drive letter casing.
+            base_dir = os.path.normcase(os.path.realpath(tmpdir))
+            out_file = os.path.normcase(os.path.realpath(tp.output_filename))
+            self.assertEqual(os.path.commonpath([out_file, base_dir]), base_dir)
             self.assertIn("small_", tp.output_filename)
 
 
