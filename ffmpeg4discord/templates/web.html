@@ -82,8 +82,12 @@
                 <div class="col">
                     <label for="codec" class="form-label">Video Codec</label>
                     <select name="codec" id="codec" class="form-select">
-                        <option {{ "selected" if twopass.codec == "libx264" else "" }} value="libx264">MP4 / libx264</option>
-                        <option {{ "selected" if twopass.codec == "libvpx-vp9" else "" }} value="libvpx-vp9">WEBM / libvpx-vp9</option>
+                        <option {{ "selected" if twopass.codec == "x264" else "" }} value="x264">x264 (.mp4)</option>
+                        <option {{ "selected" if twopass.codec == "h264_nvenc" else "" }} value="h264_nvenc">H264 NVENC (.mp4)</option>
+                        <option {{ "selected" if twopass.codec == "x265" else "" }} value="x265">x265 (.mp4)</option>
+                        <option {{ "selected" if twopass.codec == "hevc_nvenc" else "" }} value="hevc_nvenc">HEVC NVENC (.mp4)</option>
+                        <option {{ "selected" if twopass.codec == "vp9" else "" }} value="vp9">VP9 (.web)</option>
+                        <option {{ "selected" if twopass.codec == "av1" else "" }} value="av1">AV1 (.mp4)</option>
                     </select>
                 </div>
                 <div class="col">

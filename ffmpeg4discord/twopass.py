@@ -33,6 +33,23 @@ logging.getLogger().setLevel(logging.INFO)
 FILE_SIZE_MULT = 0.00000095367432
 
 
+# Per-codec tweaks for `_generate_params()`.
+# Kept module-level (instead of inside the method) so tests can patch it and
+# exercise the `overrides.get("both", {})` branch.
+CODEC_OVERRIDES = {
+    "x264": {"pass2": {"c:a": "aac"}},
+    "x265": {"pass2": {"c:a": "aac"}},
+    "h264_nvenc": {"pass2": {"c:a": "aac"}},
+    "hevc_nvenc": {"pass2": {"c:a": "aac"}},
+    "vp9": {
+        "pass2": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
+    },
+    "av1": {
+        "pass2": {"c:a": "libopus", "row-mt": 1, "cpu-used": 8},
+    },
+}
+
+
 class TwoPass:
     """
     Encodes and resizes video files using ffmpeg's two-pass encoding to meet a specified target file size.
@@ -49,12 +66,11 @@ class TwoPass:
         output (str): Output file path or directory where the compressed video will be saved.
         times (dict): Dictionary with keys "from" and "to" specifying timestamps (in seconds) for encoding a segment.
         audio_br (float): Audio bitrate in kilobits per second (kbps), if specified. Defaults to automatic calculation.
-        codec (str): Video codec to use for compression, e.g., 'libx264' (default).
+        codec (str): Video codec to use for compression, e.g., 'x264' (default).
         crop (str): Crop settings (if any) for the video.
         resolution (str): Target resolution for the output video.
         filename_times (bool): Flag to include timestamps in the output filename.
         verbose (bool): Flag to allow verbose logging
-        vp9_opts (dict): JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding.
     """
 
     def __init__(
@@ -64,13 +80,12 @@ class TwoPass:
         output: str = "",
         times: Optional[dict] = None,
         audio_br: Optional[float] = None,
-        codec: str = "libx264",
+        codec: str = "x264",
         crop: str = "",
         resolution: str = "",
         filename_times: bool = False,
         verbose: bool = False,
         framerate: Optional[int] = None,
-        vp9_opts: Optional[dict] = None,
         amix: bool = False,
         amix_normalize: bool = False,
         astreams: Optional[list[int]] = None,
@@ -85,7 +100,6 @@ class TwoPass:
         self.codec = codec
         self.framerate = framerate
         self.output = output
-        self.vp9_opts = vp9_opts or {}
         self.verbose = verbose
         self.amix = amix
         self.amix_normalize = amix_normalize
@@ -220,14 +234,25 @@ class TwoPass:
         :return: dictionary containing parameters for ffmpeg's first and second pass.
         """
 
+        codec_map = {
+            "x264": "libx264",
+            "x265": "libx265",
+            "vp9": "libvpx-vp9",
+            "av1": "libaom-av1",
+        }
+
         params = {
             "pass1": {
                 "pass": 1,
                 "f": "null",
                 "vsync": "cfr",  # not sure if this is unique to x264 or not
-                "c:v": codec,
+                "c:v": codec_map.get(codec, codec),
             },
-            "pass2": {"pass": 2, "b:a": self.audio_br, "c:v": codec},
+            "pass2": {
+                "pass": 2,
+                "b:a": self.audio_br,
+                "c:v": codec_map.get(codec, codec),
+            },
         }
 
         # assign the output framerate
@@ -245,21 +270,28 @@ class TwoPass:
                     )
                 )
 
-        if codec == "libx264":
-            params["pass2"]["c:a"] = "aac"
-        elif codec == "libvpx-vp9":
-            row_mt = self.vp9_opts.get("row-mt", 1)
-            cpu_used = self.vp9_opts.get("cpu-used", 2)
-            deadline = self.vp9_opts.get("deadline", "good")
+        # add in configurations specific to the codec
+        if codec == "x265":
+            # two pass is different for x265
+            _ = params["pass1"].pop("pass")
+            _ = params["pass2"].pop("pass")
+            params["pass1"]["x265-params"] = "pass=1"
+            params["pass2"]["x265-params"] = "pass=2"
 
-            params["pass1"]["row-mt"] = row_mt
-            params["pass2"]["row-mt"] = row_mt
-            params["pass2"]["cpu-used"] = cpu_used
-            params["pass2"]["deadline"] = deadline
-            params["pass2"]["c:a"] = "libopus"
+        overrides = CODEC_OVERRIDES.get(codec)
+        if overrides:
+            # Apply shared params to both passes
+            for key, value in overrides.get("both", {}).items():
+                params["pass1"][key] = value
+                params["pass2"][key] = value
 
-        params["pass1"].update(**self.bitrate_dict)
-        params["pass2"].update(**self.bitrate_dict)
+            # Apply pass-specific params
+            params["pass1"].update(overrides.get("pass1", {}))
+            params["pass2"].update(overrides.get("pass2", {}))
+
+        # Apply bitrate targets to both passes
+        for pass_params in params.values():
+            pass_params.update(**self.bitrate_dict)
 
         return params
 
@@ -394,13 +426,18 @@ class TwoPass:
         :return: the output file's size
         """
 
-        ext: str = ".webm" if self.codec == "libvpx-vp9" else ".mp4"
+        if "vp9" in self.codec:
+            ext = ".webm"
+        else:
+            ext = ".mp4"
+
         if self.output.is_dir():
             self.output_filename = str(
                 self.output
                 / (
                     "small_"
                     + self.filename.stem.replace(" ", "_")
+                    + f"_{self.codec}"
                     + datetime.strftime(datetime.now(), f"_%Y%m%d%H%M%S{ext}")
                 )
             )
@@ -416,7 +453,7 @@ class TwoPass:
                 )
 
                 # correct the file suffix
-                if self.codec == "libvpx-vp9":
+                if "vp9" in self.codec:
                     self.output = self.output.with_suffix(".webm")
                 else:
                     self.output = self.output.with_suffix(".mp4")
