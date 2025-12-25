@@ -162,28 +162,28 @@ PAUSE
 
 Different codecs have different trade-offs in terms of quality, speed, file size, and compatibility. “Compatibility” here refers to how widely a format can be played across devices, browsers, operating systems, and media players without requiring special software or recent hardware.
 
-- **`x264` (H.264, CPU)**  
-  General‑purpose default. Produces H.264 video that is widely supported across virtually all modern devices, browsers, and players. Good balance of quality, speed, and compatibility.  
+- **`x264` (H.264, CPU)**
+  General‑purpose default. Produces H.264 video that is widely supported across virtually all modern devices, browsers, and players. Good balance of quality, speed, and compatibility.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/H.264)
 
-- **`h264_nvenc` (H.264, NVENC GPU)**  
-  Hardware‑accelerated H.264 using an NVIDIA GPU. Typically faster than `x264` with slightly lower quality at the same bitrate. Compatibility of the output files is essentially the same as `x264`; the difference is how the video is encoded, not how it is played.  
+- **`h264_nvenc` (H.264, NVENC GPU)**
+  Hardware‑accelerated H.264 using an NVIDIA GPU. Typically faster than `x264` with slightly lower quality at the same bitrate. Compatibility of the output files is essentially the same as `x264`; the difference is how the video is encoded, not how it is played.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
 
-- **`x265` (HEVC, CPU)**  
-  HEVC encoder that can provide approximately 25–50% lower bitrate than H.264 (`x264`) at comparable visual quality. Playback support is more limited than H.264: many newer devices and players support HEVC, but older hardware, some browsers, and certain embeds may not.  
+- **`x265` (HEVC, CPU)**
+  HEVC encoder that can provide approximately 25–50% lower bitrate than H.264 (`x264`) at comparable visual quality. Playback support is more limited than H.264: many newer devices and players support HEVC, but older hardware, some browsers, and certain embeds may not.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/H.265)
 
-- **`hevc_nvenc` (HEVC, NVENC GPU)**  
-  Hardware‑accelerated HEVC using an NVIDIA GPU. Similar compression benefits and compatibility characteristics as `x265`, but significantly faster encoding due to GPU offload.  
+- **`hevc_nvenc` (HEVC, NVENC GPU)**
+  Hardware‑accelerated HEVC using an NVIDIA GPU. Similar compression benefits and compatibility characteristics as `x265`, but significantly faster encoding due to GPU offload.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
 
-- **`vp9` (VP9, CPU, `.webm`)**  
-  Produces `.webm` video. VP9 can save about 20–50% bitrate compared to H.264 (`x264`) at similar quality. It is well supported in modern browsers (especially for web streaming) but may have more limited support in older devices, legacy players, and some hardware decoders.  
+- **`vp9` (VP9, CPU, `.webm`)**
+  Produces `.webm` video. VP9 can save about 20–50% bitrate compared to H.264 (`x264`) at similar quality. It is well supported in modern browsers (especially for web streaming) but may have more limited support in older devices, legacy players, and some hardware decoders.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/VP9)
 
-- **`av1` (AV1, CPU, `.mp4`/`.webm`/`.mkv`/others)**  
-  AV1 can offer around 30% better compression than VP9 and roughly 50% better than H.264 at comparable quality. However, playback support is still maturing: recent browsers and newer devices increasingly support AV1, but compatibility with older hardware, embedded players, and some software remains limited. Encoding is typically slower than the other options.  
+- **`av1` (AV1, CPU, `.mp4`/`.webm`/`.mkv`/others)**
+  AV1 can offer around 30% better compression than VP9 and roughly 50% better than H.264 at comparable quality. However, playback support is still maturing: recent browsers and newer devices increasingly support AV1, but compatibility with older hardware, embedded players, and some software remains limited. Encoding is typically slower than the other options. I have had issues with using this codec to create shorter clips (< 15 seconds).
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/AV1)
 
 ## Thanks!
