@@ -38,9 +38,9 @@ FILE_SIZE_MULT = 0.00000095367432
 # exercise the `overrides.get("both", {})` branch.
 CODEC_OVERRIDES = {
     "x264": {"pass2": {"c:a": "aac"}},
-    "x265": {"pass2": {"c:a": "aac"}},
+    "x265": {"pass2": {"tag:v": "hvc1", "c:a": "aac"}},
     "h264_nvenc": {"pass2": {"c:a": "aac"}},
-    "hevc_nvenc": {"pass2": {"c:a": "aac"}},
+    "hevc_nvenc": {"pass2": {"tag:v": "hvc1", "c:a": "aac"}},
     "vp9": {
         "pass2": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
     },
