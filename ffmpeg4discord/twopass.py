@@ -45,7 +45,7 @@ CODEC_OVERRIDES = {
         "pass2": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
     },
     "av1": {
-        "pass2": {"c:a": "libopus", "row-mt": 1, "cpu-used": 8},
+        "pass2": {"tag:v": "av01", "c:a": "libopus", "row-mt": 1, "cpu-used": 8},
     },
 }
 
