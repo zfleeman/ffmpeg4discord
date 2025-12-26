@@ -64,15 +64,15 @@ def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False)
         # adjust the class's target file size to set a lower bitrate for the next run
         twopass.target_filesize -= 0.2
 
-        # final cleanup
-        if twopass.codec == "x265":
-            cleanup_files("x265_2pass*")
-        else:
-            cleanup_files("ffmpeg2pass*")
-
     # set the final message
     output_path = Path(twopass.output_filename).resolve()
     twopass.message = f"Your compressed video file ({output_fs}MB) is located at {output_path}"
+
+    # final cleanup
+    if twopass.codec == "x265":
+        cleanup_files("x265_2pass*")
+    else:
+        cleanup_files("ffmpeg2pass*")
 
 
 def open_browser(port: int) -> None:
