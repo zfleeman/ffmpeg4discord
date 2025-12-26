@@ -60,7 +60,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `-o`<br>`--output` | current working directory | `-o "C:/Users/zflee/A Folder"`<br>`-o "C:/Users/zflee/Desktop/A Folder/filename.mp4"` | Output directory **or** full output filename. If you provide a directory, `ff4d` will generate a timestamped filename. If you provide a filename, `ff4d` will use it (and will correct the extension if it doesn’t match the selected codec). |
 | `-s`<br>`--target-filesize` | 10 | `-s 50` | Target output file size in MiB. The encoder will iterate until it gets under this size (unless `--approx` is used). |
 | `-a`<br>`--audio-br` | 96 | `-a 128` | Audio bitrate in kbps. Lowering this allows a slightly higher video bitrate for the same target file size. |
-| `-c`<br>`--codec` | libx264 | `-c libvpx-vp9` | Video codec. Options: `libx264` (outputs `.mp4`) or `libvpx-vp9` (outputs `.webm`). VP9 usually looks better at the same bitrate but is much slower and less universally compatible. |
+| `-c`<br>`--codec` | x264 | `-c nvenc` | Video "codec profile". These aren't 1:1 titles with the FFmpeg codec choices, because modern codecs require more tweaking for encoding performance, so I've setup a profile for `vp9` and `av1` speed. Options are ordered from "most compatible" to "least compatible": `x264`, `h264_nvenc`, `x265`, `hevc_nvenc`, `vp9`, `av1`. See [Notes on Codec Selection](#notes-on-codec-selection) for more information. |
 | `-r`<br>`--resolution` | off | `-r 1280x720` | Scale the output video to a specific resolution (format: `WIDTHxHEIGHT`). |
 | `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | Crop the input before encoding (format: `x_offsetx y_offsetx widthx height`). See [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). |
 | `-f`<br>`--framerate` | off | `-f 30` | Output frame rate (FPS). If you specify a value higher than the input video’s FPS, the original FPS will be kept. |
@@ -68,7 +68,6 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--to` | No default | `--to 00:01:20` | End time for trimming the input (timestamp format `HH:MM:SS`). |
 | `--filename-times` | false | `--filename-times` | Parse From/To timestamps from the input filename. See [File Name Formatting](#file-name-formatting). |
 | `--approx` | false | `--approx` | Approximate the target size: do a single 2-pass encode and **do not** loop to get under the target. |
-| `--vp9-opts` | No default | `--vp9-opts '{"row-mt":1,"deadline":"good","cpu-used":2}'` | JSON string to tweak VP9 encoding speed/quality. Supported keys: `row-mt`, `deadline`, `cpu-used`. (CLI / JSON config only; not exposed in the Web UI.) |
 | `-an`<br>`--no-audio` | false | `-an` | Do not include any audio stream in the output. (Overrides `--amix` / `--astreams`.) To explicitly re-enable audio after setting this in a config, use `--no-no-audio`. |
 | `--amix` | false | `--amix` | Mix all (selected) audio streams into one output track. When off, only the default/first audio track is used. |
 | `--amix-normalize` | false | `--amix-normalize` | When mixing audio, normalize volume levels. Specifying this implies `--amix`. |
@@ -158,6 +157,34 @@ Set filename=%1
 ff4d %filename% -o "C:/output/folder/" --web
 PAUSE
 ```
+
+## Notes on Codec Selection
+
+Different codecs have different trade-offs in terms of quality, speed, file size, and compatibility. “Compatibility” here refers to how widely a format can be played across devices, browsers, operating systems, and media players without requiring special software or recent hardware.
+
+- **`x264` (H.264, CPU)**
+  General‑purpose default. Produces H.264 video that is widely supported across virtually all modern devices, browsers, and players. Good balance of quality, speed, and compatibility.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/H.264)
+
+- **`h264_nvenc` (H.264, NVENC GPU)**
+  Hardware‑accelerated H.264 using an NVIDIA GPU. Typically faster than `x264` with slightly lower quality at the same bitrate. Compatibility of the output files is essentially the same as `x264`; the difference is how the video is encoded, not how it is played.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
+
+- **`x265` (HEVC, CPU)**
+  HEVC encoder that can provide approximately 25–50% lower bitrate than H.264 (`x264`) at comparable visual quality. Playback support is more limited than H.264: many newer devices and players support HEVC, but older hardware, some browsers, and certain embeds may not.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/H.265)
+
+- **`hevc_nvenc` (HEVC, NVENC GPU)**
+  Hardware‑accelerated HEVC using an NVIDIA GPU. Similar compression benefits and compatibility characteristics as `x265`, but significantly faster encoding due to GPU offload.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
+
+- **`vp9` (VP9, CPU, `.webm`)**
+  Produces `.webm` video. VP9 can save about 20–50% bitrate compared to H.264 (`x264`) at similar quality. It is well supported in modern browsers (especially for web streaming) but may have more limited support in older devices, legacy players, and some hardware decoders.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/VP9)
+
+- **`av1` (AV1, CPU, `.mp4`/`.webm`/`.mkv`/others)**
+  AV1 can offer around 30% better compression than VP9 and roughly 50% better than H.264 at comparable quality. However, playback support is still maturing: recent browsers and newer devices increasingly support AV1, but compatibility with older hardware, embedded players, and some software remains limited. Encoding is typically slower than the other options. I have had issues with using this codec to create shorter clips (< 15 seconds).
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/AV1)
 
 ## Thanks!
 

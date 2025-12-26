@@ -99,13 +99,12 @@ def build_parser() -> ArgumentParser:
     )
     parser.add_argument("-a", "--audio-br", type=float, default=96, help="Audio bitrate in kbps.")
     parser.add_argument(
-        "-c", "--codec", type=str, default="libx264", choices=["libx264", "libvpx-vp9"], help="Video codec."
-    )
-    parser.add_argument(
-        "--vp9-opts",
+        "-c",
+        "--codec",
         type=str,
-        default=None,
-        help="""JSON string to configure row-mt, deadline, and cpu-used options for VP9 encoding. (e.g., --vp9-opts \'{"row-mt": 1, "deadline": "good", "cpu-used": 2}\')')""",  # pylint: disable=C0301
+        default="x264",
+        choices=["x264", "h264_nvenc", "x265", "hevc_nvenc", "vp9", "av1"],
+        help="Video codec.",
     )
     parser.add_argument(
         "-v",
@@ -208,28 +207,6 @@ def _extract_times(args: dict) -> dict:
     return args
 
 
-def _parse_vp9_opts(args: dict) -> dict:
-    """
-    Parse VP9 options from JSON string if necessary.
-    """
-    if args.get("vp9_opts") and not isinstance(args["vp9_opts"], dict):
-        logging.info(f"Received VP9 options: {args['vp9_opts']}")
-        try:
-            args["vp9_opts"] = json.loads(args["vp9_opts"])
-        except json.JSONDecodeError:
-            logging.error(
-                dedent(
-                    """\033[31m
-                    Invalid JSON format. 
-                    Format your input string like this: '{"row-mt": 1, "deadline": "good", "cpu-used": 2}'. 
-                    Using default parameters.
-                    \033[0m"""
-                )
-            )
-            args["vp9_opts"] = None
-    return args
-
-
 def _parse_astreams(args: dict) -> dict:
     """Parse --astreams from comma-separated string (or list) into a list[int] or None."""
 
@@ -296,7 +273,6 @@ def get_args() -> dict:
     args = _merge_config_args(args, parser)
     args = _assign_port(args)
     args = _extract_times(args)
-    args = _parse_vp9_opts(args)
     args = _parse_astreams(args)
     args = _normalize_amix_args(args)
     return args

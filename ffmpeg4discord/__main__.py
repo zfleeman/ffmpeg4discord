@@ -37,7 +37,10 @@ def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False)
     """
     while True:
         # clean up before each run
-        cleanup_files("ffmpeg2pass*")
+        if twopass.codec == "x265":
+            cleanup_files("x265_2pass*")
+        else:
+            cleanup_files("ffmpeg2pass*")
 
         # run the two-pass encoding
         current_filesize = twopass.run()
@@ -60,8 +63,11 @@ def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False)
         # adjust the class's target file size to set a lower bitrate for the next run
         twopass.target_filesize -= 0.2
 
-    # final cleanup
-    cleanup_files("ffmpeg2pass*")
+        # final cleanup
+        if twopass.codec == "x265":
+            cleanup_files("x265_2pass*")
+        else:
+            cleanup_files("ffmpeg2pass*")
 
     # set the final message
     output_path = Path(twopass.output_filename).resolve()

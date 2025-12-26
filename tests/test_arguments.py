@@ -13,7 +13,6 @@ from ffmpeg4discord.arguments import (
     _extract_times,
     _normalize_amix_args,
     _parse_astreams,
-    _parse_vp9_opts,
     build_parser,
     get_args,
     is_port_in_use,
@@ -32,7 +31,6 @@ class TestArguments(unittest.TestCase):
             "filename_times": False,
             "audio_br": 96,
             "codec": "libx264",
-            "vp9_opts": None,
             "approx": False,
             "from": None,
             "to": None,
@@ -49,7 +47,7 @@ class TestArguments(unittest.TestCase):
             "output": "mydir",
             "target_filesize": 5,
             "audio_br": 128,
-            "codec": "libvpx-vp9",
+            "codec": "vp9",
             "filename_times": True,
             "approx": True,
             "from": "00:00:10",
@@ -96,8 +94,7 @@ class TestArguments(unittest.TestCase):
         self.assertFalse(args.approx)
         self.assertEqual(args.target_filesize, 10)
         self.assertEqual(args.audio_br, 96)
-        self.assertEqual(args.codec, "libx264")
-        self.assertIsNone(args.vp9_opts)
+        self.assertEqual(args.codec, "x264")
         self.assertFalse(args.verbose)
         self.assertEqual(args.crop, "")
         self.assertEqual(args.resolution, "")
@@ -124,9 +121,7 @@ class TestArguments(unittest.TestCase):
                 "-a",
                 "128",
                 "-c",
-                "libvpx-vp9",
-                "--vp9-opts",
-                '{"row-mt":1}',
+                "vp9",
                 "-v",
                 "-x",
                 "10x10x100x100",
@@ -150,8 +145,7 @@ class TestArguments(unittest.TestCase):
         self.assertEqual(args.to, "00:02:00")
         self.assertEqual(args.target_filesize, 5)
         self.assertEqual(args.audio_br, 128)
-        self.assertEqual(args.codec, "libvpx-vp9")
-        self.assertEqual(args.vp9_opts, '{"row-mt":1}')
+        self.assertEqual(args.codec, "vp9")
         self.assertTrue(args.verbose)
         self.assertEqual(args.crop, "10x10x100x100")
         self.assertEqual(args.resolution, "1280x720")
@@ -169,10 +163,10 @@ class TestArguments(unittest.TestCase):
         self.assertFalse(args.verbose)
 
     def test_parser_codec_choices(self):
-        args = self.parser.parse_args(["file.mp4", "-c", "libx264"])
-        self.assertEqual(args.codec, "libx264")
-        args = self.parser.parse_args(["file.mp4", "-c", "libvpx-vp9"])
-        self.assertEqual(args.codec, "libvpx-vp9")
+        args = self.parser.parse_args(["file.mp4", "-c", "x264"])
+        self.assertEqual(args.codec, "x264")
+        args = self.parser.parse_args(["file.mp4", "-c", "vp9"])
+        self.assertEqual(args.codec, "vp9")
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["file.mp4", "-c", "invalid_codec"])
 
@@ -233,8 +227,7 @@ class TestArguments(unittest.TestCase):
             "target_filesize": 10,
             "audio_br": 96,
             "filename": "file.mp4",
-            "codec": "libx264",
-            "vp9_opts": None,
+            "codec": "x264",
             "filename_times": False,
             "approx": False,
             "from": None,
@@ -252,7 +245,7 @@ class TestArguments(unittest.TestCase):
             "output": "mydir",
             "target_filesize": 5,
             "audio_br": 128,
-            "codec": "libvpx-vp9",
+            "codec": "vp9-speed",
             "filename_times": True,
             "approx": True,
             "from": "00:00:10",
@@ -269,7 +262,7 @@ class TestArguments(unittest.TestCase):
         self.assertEqual(args["output"], "mydir")
         self.assertEqual(args["target_filesize"], 5)
         self.assertEqual(args["audio_br"], 128)
-        self.assertEqual(args["codec"], "libvpx-vp9")
+        self.assertEqual(args["codec"], "vp9-speed")
         self.assertTrue(args["filename_times"])
         self.assertTrue(args["approx"])
         self.assertEqual(args["from"], "00:00:10")
@@ -317,7 +310,6 @@ class TestArguments(unittest.TestCase):
                 "config": str(tmp_path),
                 "audio_br": 96,
                 "codec": "libx264",
-                "vp9_opts": None,
                 "approx": False,
                 "from": None,
                 "to": None,
@@ -346,7 +338,6 @@ class TestArguments(unittest.TestCase):
             "filename_times": False,
             "audio_br": 96,
             "codec": "libx264",
-            "vp9_opts": None,
             "approx": False,
             "from": None,
             "to": None,
@@ -372,7 +363,6 @@ class TestArguments(unittest.TestCase):
             "config": "nonexistent_config_file_12345.json",
             "audio_br": 96,
             "codec": "libx264",
-            "vp9_opts": None,
             "approx": False,
             "from": None,
             "to": None,
@@ -440,33 +430,6 @@ class TestArguments(unittest.TestCase):
         self.assertEqual(result["times"], {})
         self.assertNotIn("from", result)
         self.assertNotIn("to", result)
-
-    def test_parse_vp9_opts_valid_json(self):
-        args = {"vp9_opts": '{"row-mt": 1, "deadline": "good", "cpu-used": 2}'}
-        result = _parse_vp9_opts(args)
-        vp9_opts: dict = result["vp9_opts"]
-        self.assertIsInstance(vp9_opts, dict)
-        self.assertEqual(vp9_opts["row-mt"], 1)  # pylint: disable=E1126
-        self.assertEqual(vp9_opts["deadline"], "good")  # pylint: disable=E1126
-        self.assertEqual(vp9_opts["cpu-used"], 2)  # pylint: disable=E1126
-
-    def test_parse_vp9_opts_invalid_json(self):
-        args = {"vp9_opts": "{invalid json}"}
-        with self.assertLogs(level="ERROR") as cm:
-            result = _parse_vp9_opts(args)
-        self.assertIsNone(result["vp9_opts"])
-        self.assertTrue(any("invalid json format" in msg.lower() for msg in cm.output))
-
-    def test_parse_vp9_opts_already_dict(self):
-        args = {"vp9_opts": {"row-mt": 1}}
-        result = _parse_vp9_opts(args)
-        self.assertIsInstance(result["vp9_opts"], dict)
-        self.assertEqual(result["vp9_opts"], {"row-mt": 1})
-
-    def test_parse_vp9_opts_none(self):
-        args = {"vp9_opts": None}
-        result = _parse_vp9_opts(args)
-        self.assertIsNone(result["vp9_opts"])
 
     def test_parse_astreams_valid(self):
         args = {"astreams": "0, 2,2"}
