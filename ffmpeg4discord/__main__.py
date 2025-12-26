@@ -24,6 +24,7 @@ from flask import Flask, render_template, request, url_for
 
 from ffmpeg4discord import arguments
 from ffmpeg4discord.twopass import TwoPass, seconds_to_timestamp
+from ffmpeg4discord.versioning import check_for_update
 
 
 def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False) -> None:
@@ -100,6 +101,25 @@ def main() -> None:
     """
     The main function that parses command-line arguments and starts the encoding process or web server.
     """
+    # Best-effort version check (never blocks startup)
+    version_info = check_for_update(timeout_s=1.5)
+
+    # CLI: show version + update notice early (for both CLI mode and web-launch mode)
+    if version_info.current_version:
+        print(f"ffmpeg4discord v{version_info.current_version}")
+    else:
+        print("ffmpeg4discord")
+
+    if version_info.update_available:
+        print(
+            dedent(
+                f"""\033[33m
+                Update available: {version_info.latest_version} (you are running {version_info.current_version}).
+                Upgrade with: pip install -U ffmpeg4discord
+                \033[0m"""
+            ).strip()
+        )
+
     # get args from the command line
     args = arguments.get_args()
     web = args.pop("web")
@@ -123,6 +143,7 @@ def main() -> None:
                 "web.html",
                 file_url=url_for("static", filename=path.name),
                 twopass=twopass,
+                version_info=version_info,
                 alert_hidden=True,
                 approx=approx,
             )
@@ -179,6 +200,7 @@ def main() -> None:
                 "web.html",
                 file_url=url_for("static", filename=path.name),
                 twopass=twopass,
+                version_info=version_info,
                 approx=approx,
             )
 

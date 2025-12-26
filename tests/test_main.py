@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import ffmpeg4discord.__main__ as mainmod
+from ffmpeg4discord.versioning import VersionInfo
 
 
 class TestMain(unittest.TestCase):
@@ -60,7 +61,15 @@ class TestMain(unittest.TestCase):
     @patch("ffmpeg4discord.__main__.twopass_loop")
     @patch("ffmpeg4discord.__main__.TwoPass")
     @patch("ffmpeg4discord.__main__.arguments.get_args")
-    def test_main_cli(self, mock_get_args: MagicMock, mock_TwoPass: MagicMock, mock_twopass_loop: MagicMock) -> None:
+    @patch("ffmpeg4discord.__main__.check_for_update")
+    def test_main_cli(
+        self,
+        mock_check_for_update: MagicMock,
+        mock_get_args: MagicMock,
+        mock_TwoPass: MagicMock,
+        mock_twopass_loop: MagicMock,
+    ) -> None:
+        mock_check_for_update.return_value = VersionInfo(current_version="0.1.9", latest_version="0.1.9")
         args = {
             "web": False,
             "approx": False,
@@ -84,16 +93,23 @@ class TestMain(unittest.TestCase):
         with patch("builtins.print") as mock_print:
             mainmod.main()
         mock_twopass_loop.assert_called_once()
-        mock_print.assert_called_with("done")
+        self.assertTrue(any(str(call) == "call('done')" for call in mock_print.call_args_list))
 
     @patch("ffmpeg4discord.__main__.twopass_loop")
     @patch("ffmpeg4discord.__main__.TwoPass")
     @patch("ffmpeg4discord.__main__.arguments.get_args")
     @patch("ffmpeg4discord.__main__.Flask")
+    @patch("ffmpeg4discord.__main__.check_for_update")
     def test_main_web(
-        self, mock_Flask: MagicMock, mock_get_args: MagicMock, mock_TwoPass: MagicMock, mock_twopass_loop: MagicMock
+        self,
+        mock_check_for_update: MagicMock,
+        mock_Flask: MagicMock,
+        mock_get_args: MagicMock,
+        mock_TwoPass: MagicMock,
+        mock_twopass_loop: MagicMock,
     ) -> None:
         _ = mock_twopass_loop
+        mock_check_for_update.return_value = VersionInfo(current_version="0.1.9", latest_version="0.1.9")
         args = {
             "web": True,
             "approx": True,
@@ -128,8 +144,10 @@ class TestMain(unittest.TestCase):
     @patch("ffmpeg4discord.__main__.TwoPass")
     @patch("ffmpeg4discord.__main__.arguments.get_args")
     @patch("ffmpeg4discord.__main__.Flask")
+    @patch("ffmpeg4discord.__main__.check_for_update")
     def test_main_web_run_args(
         self,
+        mock_check_for_update: MagicMock,
         mock_Flask: MagicMock,
         mock_get_args: MagicMock,
         mock_TwoPass: MagicMock,
@@ -141,6 +159,7 @@ class TestMain(unittest.TestCase):
         _ = mock_twopass_loop
         _ = mock_unlink
         _ = mock_resolve
+        mock_check_for_update.return_value = VersionInfo(current_version="0.1.9", latest_version="0.1.9")
         args = {
             "web": True,
             "approx": True,
