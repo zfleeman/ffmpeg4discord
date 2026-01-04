@@ -103,6 +103,7 @@ Typically, this would be:
 |---|---|---|
 | `%LOCALAPPDATA%\zfleeman\ff4d` | `$XDG_CONFIG_HOME/ff4d.json` OR `$XDG_CONFIG_HOME/ff4d/config.json` | `~/Library/Application Support/ff4d/config.json` |
 
+If you are unsure of where these paths would resolve to, `ff4d` logs any searched paths to the console when run.
 This feature can be turned off with the `--no-config` flag.
 
 #### Example JSON File Configuration

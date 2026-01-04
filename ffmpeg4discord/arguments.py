@@ -180,16 +180,20 @@ def _search_for_default_config(args: dict) -> dict:
         import platformdirs
 
         if sys.platform == 'linux': # allow for ~/.config/ff4d.json under linux
-            conf = Path(platformdirs.user_config_dir()) / 'ff4d.json'
+            conf = platformdirs.user_config_path() / 'ff4d.json'
+            logging.info(f'checking for {conf}')
             if conf.exists() and conf.is_file():
                 args['config'] = conf
                 return args
 
-        conf = Path(platformdirs.user_config_dir('ff4d', 'zfleeman')) / 'config.json'
+        conf = platformdirs.user_config_path('ff4d', 'zfleeman') / 'config.json'
+        logging.info(f'checking for {conf}')
         if conf.exists() and conf.is_file():
             args['config'] = conf
+            return args
 
-    return args
+        logging.info('no default configuration files found')
+        return args
 
 def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:
     """
