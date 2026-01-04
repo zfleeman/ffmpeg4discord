@@ -74,6 +74,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--astreams` | all | `--astreams "0,1"` | Comma-separated list of **0-based audio stream positions** to include. When used with `--amix`, those streams will be mixed; otherwise, only the first selected stream is kept. |
 | `-v`<br>`--verbose` | false | `--verbose` | Enable verbose FFmpeg logging (useful for debugging). |
 | `--config` | off | `--config config.json` | Path to a JSON file containing a saved configuration. When a setting is provided by both JSON and CLI flags, the CLI flag wins. See [JSON Configuration](#json-configuration). |
+| `--no-config` | off | `no---config` | Disable loading any default configuration files. See [JSON Configuration](#json-configuration). |
 | `--web` | false | `--web` | Launch the Web UI for this job. See [Web UI](#web-ui). |
 | `-p`<br>`--port` | random (when `--web`) | `-p 5333` | Run the Web UI on a specific port. If omitted, a random free port between 5000–6000 is chosen. |
 
@@ -95,6 +96,14 @@ If your encoding job uses the same settings consistently, you can simplify your 
 When using both a JSON configuration file and command-line flags, the **command-line flag values take precedence** over the values defined in the JSON. For example, if `"target_filesize"` is specified in the JSON file and you include the `--target-filesize` (or `-s`) flag in your command, the command-line value will be used.
 
 If you supply a configuration JSON file, include only the settings that differ from the [default values](#optional-flags). Any omitted values will automatically use their defaults.
+
+By default, ff4d will try to read a default configuration file if it is present. This file is located wherever your platform stores user-specific configuration data.
+Typically, this would be:
+| Windows | Linux | MacOS |
+|---|---|---|
+| `%LOCALAPPDATA%\zfleeman\ff4d` | `$XDG_CONFIG_HOME/ff4d.json` OR `$XDG_CONFIG_HOME/ff4d/config.json` | `~/Library/Application Support/ff4d/config.json` |
+
+This feature can be turned off with the `--no-config` flag.
 
 #### Example JSON File Configuration
 
