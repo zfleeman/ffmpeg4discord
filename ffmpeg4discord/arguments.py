@@ -57,7 +57,7 @@ def update_args_from_config(args: dict, config: dict, parser: ArgumentParser) ->
         parser (ArgumentParser): The argument parser instance.
     """
     for k, v in config.items():
-        if k != "no_config" and (args.get(k) is None or args[k] == parser.get_default(k)):
+        if args.get(k) is None or args[k] == parser.get_default(k):
             args[k] = v
 
 
