@@ -196,10 +196,13 @@ def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:
     Merge config file values into args if present and not already set.
     Always remove 'config' key from args.
     """
-    if args.get("config") is not None:
+    configs = set()
+    while args.get("config") is not None:
         file_path = Path(args.pop("config")).resolve()
-        config = load_config(file_path)
-        update_args_from_config(args, config, parser)
+        if file_path not in configs:
+            configs.add(file_path)
+            config = load_config(file_path)
+            update_args_from_config(args, config, parser)
     args.pop("config", None)
     args.pop("no_config", None)
     return args
