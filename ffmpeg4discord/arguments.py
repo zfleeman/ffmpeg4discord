@@ -118,13 +118,7 @@ def build_parser() -> ArgumentParser:
     parser.add_argument("-r", "--resolution", default="", help="The output resolution of your final video.")
     parser.add_argument("-f", "--framerate", type=int, help="The desired output frames per second.")
     # audio filters
-    parser.add_argument(
-        "-an",
-        "--no-audio",
-        action=BooleanOptionalAction,
-        default=False,
-        help="Do not include any audio stream in the output.",
-    )
+    parser.add_argument("-an", "--no-audio", dest="no_audio", action="store_true", default=False)
     parser.add_argument(
         "--amix",
         action=BooleanOptionalAction,
