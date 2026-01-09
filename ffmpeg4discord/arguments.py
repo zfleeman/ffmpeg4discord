@@ -18,6 +18,8 @@ from pathlib import Path
 from random import randint
 from textwrap import dedent
 
+import platformdirs
+
 
 def is_port_in_use(port: int) -> bool:
     """
@@ -177,8 +179,6 @@ def _search_for_default_config(args: dict) -> dict:
     Search for config files in platform-specific default locations and include them if they exist (unless the --no-config flag is used)
     '''
     if args.get('config') is None and not args.get('no_config'):
-        import platformdirs
-
         if sys.platform == 'linux': # allow for ~/.config/ff4d.json under linux
             conf = platformdirs.user_config_path() / 'ff4d.json'
             logging.info(f'checking for {conf}')
