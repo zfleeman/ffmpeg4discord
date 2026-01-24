@@ -186,7 +186,7 @@ def _search_for_default_config(args: dict) -> dict:
                 args['config'] = conf
                 return args
 
-        conf = platformdirs.user_config_path('ff4d', 'zfleeman') / 'config.json'
+        conf = platformdirs.user_config_path('ff4d') / 'config.json'
         logging.info(f'checking for {conf}')
         if conf.exists() and conf.is_file():
             args['config'] = conf
