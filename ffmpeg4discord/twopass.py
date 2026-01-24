@@ -252,6 +252,8 @@ class TwoPass:
                 "pass": 2,
                 "b:a": self.audio_br,
                 "c:v": codec_map.get(codec, codec),
+                "ac": 2,  # downmix to stereo b/c current audio compression technique doesn't like 5.1 channel tracks
+                "map_chapters": -1,  # remove chapters from output files, as it messes up total video length
             },
         }
 
