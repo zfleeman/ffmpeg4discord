@@ -62,7 +62,9 @@ def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False)
         Path(twopass.output_filename).unlink()
 
         # adjust the class's target file size to set a lower bitrate for the next run
-        twopass.target_filesize -= 0.2
+        # scale by how far off we are to avoid tiny incremental retries
+        adjustment_ratio = target_filesize / current_filesize
+        twopass.target_filesize = max(twopass.target_filesize * adjustment_ratio, 0.1)
 
     # set the final message
     output_path = Path(twopass.output_filename).resolve()
