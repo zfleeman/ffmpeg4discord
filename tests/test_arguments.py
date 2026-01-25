@@ -13,6 +13,7 @@ from ffmpeg4discord.arguments import (
     _extract_times,
     _normalize_amix_args,
     _parse_astreams,
+    _search_for_default_config,
     build_parser,
     get_args,
     is_port_in_use,
@@ -472,6 +473,30 @@ class TestArguments(unittest.TestCase):
         args = {"amix": False, "amix_normalize": True}
         result = _normalize_amix_args(args)
         self.assertTrue(result["amix"])
+
+    def test_search_for_default_config_linux_config_found(self):
+        args = {"config": None, "no_config": False}
+        with (
+            patch("ffmpeg4discord.arguments.sys.platform", "linux"),
+            patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
+        ):
+            mock_user_config_path.return_value = Path("/tmp")
+            with patch.object(Path, "exists", return_value=True), patch.object(Path, "is_file", return_value=True):
+                result = _search_for_default_config(args)
+        self.assertEqual(result["config"], Path("/tmp/ff4d.json"))
+
+    def test_search_for_default_config_no_defaults_found(self):
+        args = {"config": None, "no_config": False}
+        with (
+            patch("ffmpeg4discord.arguments.sys.platform", "darwin"),
+            patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
+        ):
+            mock_user_config_path.return_value = Path("/tmp")
+            with patch.object(Path, "exists", return_value=False), patch.object(Path, "is_file", return_value=False):
+                with self.assertLogs(level="INFO") as cm:
+                    result = _search_for_default_config(args)
+        self.assertIsNone(result.get("config"))
+        self.assertTrue(any("no default configuration files found" in msg.lower() for msg in cm.output))
 
     def test_get_args_parses_astreams_and_amix_normalize(self):
         test_argv = ["prog", "file.mp4", "--amix-normalize", "--astreams", "0,1"]
