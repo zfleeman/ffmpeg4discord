@@ -285,10 +285,10 @@ class TestArguments(unittest.TestCase):
             "output": "mydir",
             "target_filesize": 5,
         }
-        # Should not raise KeyError for missing keys in args
-        with self.assertRaises(KeyError):
-            update_args_from_config(args, config, parser)
-        # To make it robust, you could add a test for a safer implementation
+        # Missing keys should be inserted without raising
+        update_args_from_config(args, config, parser)
+        self.assertEqual(args["output"], "mydir")
+        self.assertEqual(args["target_filesize"], 5)
 
     def test_merge_config_args_merges_and_removes_config(self):
         # Prepare args with config file
