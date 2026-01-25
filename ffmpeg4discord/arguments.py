@@ -171,7 +171,7 @@ def _normalize_amix_args(args: dict) -> dict:
 
 def _search_for_default_config(args: dict) -> dict:
     """
-    Search for config files in platform-specific default locations and include them 
+    Search for config files in platform-specific default locations and include them
     if they exist (unless the --no-config flag is used)
     """
     if args.get("config") is None and not args.get("no_config"):
