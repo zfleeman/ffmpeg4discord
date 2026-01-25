@@ -12,10 +12,13 @@ Functions:
 import json
 import logging
 import socket
+import sys
 from argparse import ArgumentParser, BooleanOptionalAction
 from pathlib import Path
 from random import randint
 from textwrap import dedent
+
+import platformdirs
 
 
 def is_port_in_use(port: int) -> bool:
@@ -56,7 +59,7 @@ def update_args_from_config(args: dict, config: dict, parser: ArgumentParser) ->
         parser (ArgumentParser): The argument parser instance.
     """
     for k, v in config.items():
-        if not args[k] or args[k] == parser.get_default(k):
+        if args.get(k) is None or args[k] == parser.get_default(k):
             args[k] = v
 
 
@@ -141,7 +144,14 @@ def build_parser() -> ArgumentParser:
         ),
     )
     # configuraiton json file
-    parser.add_argument("--config", help="JSON file containing the run's configuration")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--config", help="JSON file containing the run's configuration")
+    group.add_argument(
+        "--no-config",
+        action='store_true',
+        default=False,
+        help="Do not attempt to read any default configuration files (default: off)",
+    )
     # web
     parser.add_argument(
         "--web", action=BooleanOptionalAction, default=False, help="Launch ffmpeg4discord's Web UI in your browser."
@@ -158,17 +168,41 @@ def _normalize_amix_args(args: dict) -> dict:
         args["amix"] = True
     return args
 
+def _search_for_default_config(args: dict) -> dict:
+    '''
+    Search for config files in platform-specific default locations and include them if they exist (unless the --no-config flag is used)
+    '''
+    if args.get('config') is None and not args.get('no_config'):
+        if sys.platform == 'linux': # allow for ~/.config/ff4d.json under linux
+            conf = platformdirs.user_config_path() / 'ff4d.json'
+            logging.info(f'checking for {conf}')
+            if conf.exists() and conf.is_file():
+                args['config'] = conf
+                return args
+
+        conf = platformdirs.user_config_path('ff4d') / 'config.json'
+        logging.info(f'checking for {conf}')
+        if conf.exists() and conf.is_file():
+            args['config'] = conf
+            return args
+
+        logging.info('no default configuration files found')
+        return args
 
 def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:
     """
     Merge config file values into args if present and not already set.
     Always remove 'config' key from args.
     """
-    if args.get("config"):
-        file_path = Path(args["config"]).resolve()
-        config = load_config(file_path)
-        update_args_from_config(args, config, parser)
+    configs = set()
+    while args.get("config") is not None:
+        file_path = Path(args.pop("config")).resolve()
+        if file_path not in configs:
+            configs.add(file_path)
+            config = load_config(file_path)
+            update_args_from_config(args, config, parser)
     args.pop("config", None)
+    args.pop("no_config", None)
     return args
 
 
@@ -264,6 +298,7 @@ def get_args() -> dict:
     """
     parser = build_parser()
     args = vars(parser.parse_args())
+    args = _search_for_default_config(args)
     args = _merge_config_args(args, parser)
     args = _assign_port(args)
     args = _extract_times(args)
