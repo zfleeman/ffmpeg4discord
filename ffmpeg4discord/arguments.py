@@ -148,7 +148,7 @@ def build_parser() -> ArgumentParser:
     group.add_argument("--config", help="JSON file containing the run's configuration")
     group.add_argument(
         "--no-config",
-        action='store_true',
+        action="store_true",
         default=False,
         help="Do not attempt to read any default configuration files (default: off)",
     )
@@ -168,26 +168,29 @@ def _normalize_amix_args(args: dict) -> dict:
         args["amix"] = True
     return args
 
+
 def _search_for_default_config(args: dict) -> dict:
-    '''
-    Search for config files in platform-specific default locations and include them if they exist (unless the --no-config flag is used)
-    '''
-    if args.get('config') is None and not args.get('no_config'):
-        if sys.platform == 'linux': # allow for ~/.config/ff4d.json under linux
-            conf = platformdirs.user_config_path() / 'ff4d.json'
-            logging.info(f'checking for {conf}')
+    """
+    Search for config files in platform-specific default locations and include them 
+    if they exist (unless the --no-config flag is used)
+    """
+    if args.get("config") is None and not args.get("no_config"):
+        if sys.platform == "linux":  # allow for ~/.config/ff4d.json under linux
+            conf = platformdirs.user_config_path() / "ff4d.json"
+            logging.info(f"checking for {conf}")
             if conf.exists() and conf.is_file():
-                args['config'] = conf
+                args["config"] = conf
                 return args
 
-        conf = platformdirs.user_config_path('ff4d') / 'config.json'
-        logging.info(f'checking for {conf}')
+        conf = platformdirs.user_config_path("ff4d") / "config.json"
+        logging.info(f"checking for {conf}")
         if conf.exists() and conf.is_file():
-            args['config'] = conf
+            args["config"] = conf
             return args
 
-        logging.info('no default configuration files found')
+        logging.info("no default configuration files found")
         return args
+
 
 def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:
     """
