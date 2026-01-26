@@ -185,6 +185,7 @@ def _search_for_default_config(args: dict) -> dict:
         conf = platformdirs.user_config_path("ffmpeg4discord") / "ffmpeg4discord.json"
         logging.info(f"checking for {conf}")
         if conf.exists() and conf.is_file():
+            logging.info(f"default config file found at {conf}")
             args["config"] = conf
             return args
 
