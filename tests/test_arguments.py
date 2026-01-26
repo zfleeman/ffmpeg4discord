@@ -483,7 +483,18 @@ class TestArguments(unittest.TestCase):
             mock_user_config_path.return_value = Path("/tmp")
             with patch.object(Path, "exists", return_value=True), patch.object(Path, "is_file", return_value=True):
                 result = _search_for_default_config(args)
-        self.assertEqual(result["config"], Path("/tmp/ff4d.json"))
+        self.assertEqual(result["config"], Path("/tmp/ffmpeg4discord.json"))
+
+    def test_search_for_default_config_non_linux_config_found(self):
+        args = {"config": None, "no_config": False}
+        with (
+            patch("ffmpeg4discord.arguments.sys.platform", "Windows"),
+            patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
+        ):
+            mock_user_config_path.return_value = Path("/tmp")
+            with patch.object(Path, "exists", return_value=True), patch.object(Path, "is_file", return_value=True):
+                result = _search_for_default_config(args)
+        self.assertEqual(result["config"], Path("/tmp/ffmpeg4discord.json"))
 
     def test_search_for_default_config_no_defaults_found(self):
         args = {"config": None, "no_config": False}

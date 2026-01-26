@@ -101,7 +101,7 @@ By default, ff4d will try to read a default configuration file if it is present.
 Typically, this would be:
 | Windows | Linux | MacOS |
 |---|---|---|
-| `%LOCALAPPDATA%\zfleeman\ff4d` | `$XDG_CONFIG_HOME/ff4d.json` OR `$XDG_CONFIG_HOME/ff4d/config.json` | `~/Library/Application Support/ff4d/config.json` |
+| `%LOCALAPPDATA%\zfleeman\ffmpeg4discord` | `$XDG_CONFIG_HOME/ffmpeg4discord.json` OR `$XDG_CONFIG_HOME/ff4d/ffmpeg4discord.json` | `~/Library/Application Support/ffmpeg4discord/ffmpeg4discord.json` |
 
 If you are unsure of where these paths would resolve to, `ff4d` logs any searched paths to the console when run.
 This feature can be turned off with the `--no-config` flag.
