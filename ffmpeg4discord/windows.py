@@ -107,7 +107,10 @@ def download_with_progress(url: str, save_path: str) -> None:
         total_size_mb = total_size / (1024 * 1024)
         progress = min(downloaded / total_size, 1.0)
         percent = round(progress * 100, 2)
-        print(f"\rDownloaded {downloaded_mb:.2f}/{total_size_mb:.2f} MB ({percent}%)", end="")
+        print(
+            f"\rDownloaded {downloaded_mb:.2f}/{total_size_mb:.2f} MB ({percent}%)",
+            end="",
+        )
 
     save_dir = Path(save_path).parent
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -121,7 +124,10 @@ def install() -> None:
     Downloads, unzips, and installs FFmpeg on a Windows system.
     """
     print("Downloading ffmpeg to ffmpeg.zip...")
-    download_with_progress("https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip", "ffmpeg/ffmpeg.zip")
+    download_with_progress(
+        "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+        "ffmpeg/ffmpeg.zip",
+    )
 
     print("\nUnzipping ffmpeg.zip...")
     with zipfile.ZipFile("ffmpeg/ffmpeg.zip", "r") as zip_ref:

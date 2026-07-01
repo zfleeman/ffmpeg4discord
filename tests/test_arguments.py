@@ -157,7 +157,15 @@ class TestArguments(unittest.TestCase):
         self.assertEqual(args.astreams, "0,2")
 
     def test_parser_boolean_optional_action_false(self):
-        args = self.parser.parse_args(["file.mp4", "--no-filename-times", "--no-approx", "--no-web", "--no-verbose"])
+        args = self.parser.parse_args(
+            [
+                "file.mp4",
+                "--no-filename-times",
+                "--no-approx",
+                "--no-web",
+                "--no-verbose",
+            ]
+        )
         self.assertFalse(args.filename_times)
         self.assertFalse(args.approx)
         self.assertFalse(args.web)
@@ -191,7 +199,6 @@ class TestArguments(unittest.TestCase):
             s.close()
 
     def test_load_config_valid_json(self):
-
         config_data = {"key1": "value1", "key2": 2}
         with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as tmp:
             json.dump(config_data, tmp)
@@ -203,7 +210,6 @@ class TestArguments(unittest.TestCase):
             tmp_path.unlink()
 
     def test_load_config_invalid_json_raises(self):
-
         with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as tmp:
             tmp.write("{invalid json}")
             tmp_path = Path(tmp.name)
@@ -214,13 +220,11 @@ class TestArguments(unittest.TestCase):
             tmp_path.unlink()
 
     def test_load_config_file_not_found(self):
-
         non_existent = Path("this_file_should_not_exist_12345.json")
         with self.assertRaises(FileNotFoundError):
             load_config(non_existent)
 
     def test_update_args_from_config_overwrites_default_and_empty(self):
-
         parser = build_parser()
         # args with default and empty values
         args = {
@@ -276,7 +280,6 @@ class TestArguments(unittest.TestCase):
         self.assertEqual(args["port"], 5050)
 
     def test_update_args_from_config_missing_keys(self):
-
         parser = build_parser()
         args = {
             "output": "",
@@ -481,7 +484,10 @@ class TestArguments(unittest.TestCase):
             patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
         ):
             mock_user_config_path.return_value = Path("/tmp")
-            with patch.object(Path, "exists", return_value=True), patch.object(Path, "is_file", return_value=True):
+            with (
+                patch.object(Path, "exists", return_value=True),
+                patch.object(Path, "is_file", return_value=True),
+            ):
                 result = _search_for_default_config(args)
         self.assertEqual(result["config"], Path("/tmp/ffmpeg4discord.json"))
 
@@ -492,7 +498,10 @@ class TestArguments(unittest.TestCase):
             patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
         ):
             mock_user_config_path.return_value = Path("/tmp")
-            with patch.object(Path, "exists", return_value=True), patch.object(Path, "is_file", return_value=True):
+            with (
+                patch.object(Path, "exists", return_value=True),
+                patch.object(Path, "is_file", return_value=True),
+            ):
                 result = _search_for_default_config(args)
         self.assertEqual(result["config"], Path("/tmp/ffmpeg4discord.json"))
 
@@ -503,7 +512,10 @@ class TestArguments(unittest.TestCase):
             patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
         ):
             mock_user_config_path.return_value = Path("/tmp")
-            with patch.object(Path, "exists", return_value=False), patch.object(Path, "is_file", return_value=False):
+            with (
+                patch.object(Path, "exists", return_value=False),
+                patch.object(Path, "is_file", return_value=False),
+            ):
                 with self.assertLogs(level="INFO") as cm:
                     result = _search_for_default_config(args)
         self.assertIsNone(result.get("config"))
