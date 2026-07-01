@@ -155,7 +155,6 @@ class TestMain(unittest.TestCase):
         mock_unlink: MagicMock,
         mock_resolve: MagicMock,
     ) -> None:
-
         _ = mock_twopass_loop
         _ = mock_unlink
         _ = mock_resolve

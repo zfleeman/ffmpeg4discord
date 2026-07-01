@@ -156,7 +156,10 @@ def main() -> None:
             ss = int(request.form.get("startTime"))
             to = int(request.form.get("endTime"))
             twopass.length = to - ss
-            twopass.times = {"ss": seconds_to_timestamp(ss), "to": seconds_to_timestamp(to)}
+            twopass.times = {
+                "ss": seconds_to_timestamp(ss),
+                "to": seconds_to_timestamp(to),
+            }
             target_filesize = float(request.form.get("target_filesize"))
 
             # update TwoPass from web form

@@ -91,7 +91,6 @@ class TwoPass:
         astreams: Optional[list[int]] = None,
         no_audio: bool = False,
     ) -> None:
-
         self.target_filesize = target_filesize
         self.crop = crop
         self.resolution = resolution

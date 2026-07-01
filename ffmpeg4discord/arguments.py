@@ -118,7 +118,12 @@ def build_parser() -> ArgumentParser:
     )
     # video filters
     parser.add_argument("-x", "--crop", default="", help="Cropping dimensions. Example: 255x0x1410x1080")
-    parser.add_argument("-r", "--resolution", default="", help="The output resolution of your final video.")
+    parser.add_argument(
+        "-r",
+        "--resolution",
+        default="",
+        help="The output resolution of your final video.",
+    )
     parser.add_argument("-f", "--framerate", type=int, help="The desired output frames per second.")
     # audio filters
     parser.add_argument("-an", "--no-audio", dest="no_audio", action="store_true", default=False)
@@ -132,7 +137,7 @@ def build_parser() -> ArgumentParser:
         "--amix-normalize",
         action=BooleanOptionalAction,
         default=False,
-        help=("When mixing audio, normalize volume levels (default: off). " "Specifying this flag implies --amix."),
+        help=("When mixing audio, normalize volume levels (default: off). Specifying this flag implies --amix."),
     )
     parser.add_argument(
         "--astreams",
@@ -154,7 +159,10 @@ def build_parser() -> ArgumentParser:
     )
     # web
     parser.add_argument(
-        "--web", action=BooleanOptionalAction, default=False, help="Launch ffmpeg4discord's Web UI in your browser."
+        "--web",
+        action=BooleanOptionalAction,
+        default=False,
+        help="Launch ffmpeg4discord's Web UI in your browser.",
     )
     parser.add_argument("-p", "--port", type=int, help="Local port for the Flask application.")
     return parser

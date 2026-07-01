@@ -1,28 +1,29 @@
 name: Pull Request Actions
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
-  check_tests_and_formatting:
+  test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Install Dependencies
-      run: |
-        pip install black==25.1.0 coverage==7.10.2 isort==6.0.1 ffmpeg-python==0.2.0 flask==3.0.1
-    - name: Run Unit Tests
-      run: |
-        coverage run --rcfile=tests/.coveragerc -m unittest discover
-    - name: Check Coverage
-      run: |
-        coverage report --rcfile=tests/.coveragerc -m
-    - name: Check Import Sorting (isort)
-      run: |
-        isort -l 120 . --profile black --check-only --diff
-    - name: Check Code Formatting (black)
-      run: |
-        black -l 120 . --check --diff
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Sync environment
+        run: uv sync --extra dev
+
+      - name: Ruff
+        run: |
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Unittest
+        run: uv run python -m unittest discover -s tests -p 'test_*.py' -v

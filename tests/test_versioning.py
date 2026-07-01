@@ -31,7 +31,9 @@ class TestVersioning(unittest.TestCase):
         info = VersionInfo(current_version="0.1.9", latest_version="0.1.9")
         self.assertFalse(info.update_available)
 
-    def test_get_current_version_package_not_found_falls_back_to_pyproject(self) -> None:
+    def test_get_current_version_package_not_found_falls_back_to_pyproject(
+        self,
+    ) -> None:
         with patch("ffmpeg4discord.versioning.metadata.version") as mock_version:
             mock_version.side_effect = __import__("importlib").metadata.PackageNotFoundError
             v = get_current_version()
@@ -52,7 +54,10 @@ class TestVersioning(unittest.TestCase):
             self.assertEqual(get_latest_pypi_version(timeout_s=0.01), "9.9.9")
 
     def test_get_latest_pypi_version_exception_returns_none(self) -> None:
-        with patch("ffmpeg4discord.versioning.urllib.request.urlopen", side_effect=Exception("no net")):
+        with patch(
+            "ffmpeg4discord.versioning.urllib.request.urlopen",
+            side_effect=Exception("no net"),
+        ):
             self.assertIsNone(get_latest_pypi_version(timeout_s=0.01))
 
     def test_get_version_from_pyproject_missing_file(self) -> None:
@@ -62,7 +67,10 @@ class TestVersioning(unittest.TestCase):
     def test_get_version_from_pyproject_no_version_match(self) -> None:
         with (
             patch("ffmpeg4discord.versioning.Path.exists", return_value=True),
-            patch("ffmpeg4discord.versioning.Path.read_text", return_value="[project]\nname='ffmpeg4discord'\n"),
+            patch(
+                "ffmpeg4discord.versioning.Path.read_text",
+                return_value="[project]\nname='ffmpeg4discord'\n",
+            ),
         ):
             self.assertIsNone(_get_version_from_pyproject())
 
