@@ -530,7 +530,7 @@ class TestArguments(unittest.TestCase):
         self.assertTrue(args["amix"])  # implied by normalize
 
     def test_get_args_basic(self):
-        test_argv = ["prog", "file.mp4", "-o", "outdir", "--target-filesize", "5"]
+        test_argv = ["prog", "file.mp4", "-o", "outdir", "--target-filesize", "20"]
         with patch.object(sys, "argv", test_argv):
             args = get_args()
             self.assertEqual(args["filename"], "file.mp4")
