@@ -96,7 +96,7 @@ def build_parser() -> ArgumentParser:
     parser.add_argument(
         "-s",
         "--target-filesize",
-        default=10,
+        default=20,
         type=float,
         help="The output file size in MB.",
     )

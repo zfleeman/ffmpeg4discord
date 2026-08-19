@@ -28,7 +28,7 @@ class TestArguments(unittest.TestCase):
         self.default_args = {
             "filename": "file.mp4",
             "output": "",
-            "target_filesize": 10,
+            "target_filesize": 20,
             "filename_times": False,
             "audio_br": 96,
             "codec": "libx264",
@@ -46,7 +46,7 @@ class TestArguments(unittest.TestCase):
         }
         self.default_config = {
             "output": "mydir",
-            "target_filesize": 5,
+            "target_filesize": 20,
             "audio_br": 128,
             "codec": "vp9",
             "filename_times": True,
@@ -93,7 +93,7 @@ class TestArguments(unittest.TestCase):
         self.assertEqual(args.output, "")
         self.assertFalse(args.filename_times)
         self.assertFalse(args.approx)
-        self.assertEqual(args.target_filesize, 10)
+        self.assertEqual(args.target_filesize, 20)
         self.assertEqual(args.audio_br, 96)
         self.assertEqual(args.codec, "x264")
         self.assertFalse(args.verbose)
@@ -118,7 +118,7 @@ class TestArguments(unittest.TestCase):
                 "--to",
                 "00:02:00",
                 "-s",
-                "5",
+                "20",
                 "-a",
                 "128",
                 "-c",
@@ -144,7 +144,7 @@ class TestArguments(unittest.TestCase):
         self.assertTrue(args.approx)
         self.assertEqual(getattr(args, "from"), "00:01:00")
         self.assertEqual(args.to, "00:02:00")
-        self.assertEqual(args.target_filesize, 5)
+        self.assertEqual(args.target_filesize, 20)
         self.assertEqual(args.audio_br, 128)
         self.assertEqual(args.codec, "vp9")
         self.assertTrue(args.verbose)
@@ -229,7 +229,7 @@ class TestArguments(unittest.TestCase):
         # args with default and empty values
         args = {
             "output": "",
-            "target_filesize": 10,
+            "target_filesize": 20,
             "audio_br": 96,
             "filename": "file.mp4",
             "codec": "x264",
@@ -248,7 +248,7 @@ class TestArguments(unittest.TestCase):
         }
         config = {
             "output": "mydir",
-            "target_filesize": 5,
+            "target_filesize": 20,
             "audio_br": 128,
             "codec": "vp9-speed",
             "filename_times": True,
@@ -265,7 +265,7 @@ class TestArguments(unittest.TestCase):
         }
         update_args_from_config(args, config, parser)
         self.assertEqual(args["output"], "mydir")
-        self.assertEqual(args["target_filesize"], 5)
+        self.assertEqual(args["target_filesize"], 20)
         self.assertEqual(args["audio_br"], 128)
         self.assertEqual(args["codec"], "vp9-speed")
         self.assertTrue(args["filename_times"])
@@ -287,19 +287,19 @@ class TestArguments(unittest.TestCase):
         }
         config = {
             "output": "mydir",
-            "target_filesize": 5,
+            "target_filesize": 20,
         }
         # Missing keys should be inserted without raising
         update_args_from_config(args, config, parser)
         self.assertEqual(args["output"], "mydir")
-        self.assertEqual(args["target_filesize"], 5)
+        self.assertEqual(args["target_filesize"], 20)
 
     def test_merge_config_args_merges_and_removes_config(self):
         # Prepare args with config file
         parser = build_parser()
         config_data = {
             "output": "from_config",
-            "target_filesize": 7,
+            "target_filesize": 20,
             "filename_times": True,
         }
         with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as tmp:
@@ -309,7 +309,7 @@ class TestArguments(unittest.TestCase):
             args = {
                 "filename": "file.mp4",
                 "output": "",
-                "target_filesize": 10,
+                "target_filesize": 20,
                 "filename_times": False,
                 "config": str(tmp_path),
                 "audio_br": 96,
@@ -327,7 +327,7 @@ class TestArguments(unittest.TestCase):
             }
             result = __import__("ffmpeg4discord.arguments").arguments._merge_config_args(args.copy(), parser)
             self.assertEqual(result["output"], "from_config")
-            self.assertEqual(result["target_filesize"], 7)
+            self.assertEqual(result["target_filesize"], 20)
             self.assertTrue(result["filename_times"])
             self.assertNotIn("config", result)
         finally:
@@ -338,7 +338,7 @@ class TestArguments(unittest.TestCase):
         args = {
             "filename": "file.mp4",
             "output": "",
-            "target_filesize": 10,
+            "target_filesize": 20,
             "filename_times": False,
             "audio_br": 96,
             "codec": "libx264",
@@ -362,7 +362,7 @@ class TestArguments(unittest.TestCase):
         args = {
             "filename": "file.mp4",
             "output": "",
-            "target_filesize": 10,
+            "target_filesize": 20,
             "filename_times": False,
             "config": "nonexistent_config_file_12345.json",
             "audio_br": 96,
@@ -530,12 +530,12 @@ class TestArguments(unittest.TestCase):
         self.assertTrue(args["amix"])  # implied by normalize
 
     def test_get_args_basic(self):
-        test_argv = ["prog", "file.mp4", "-o", "outdir", "--target-filesize", "5"]
+        test_argv = ["prog", "file.mp4", "-o", "outdir", "--target-filesize", "20"]
         with patch.object(sys, "argv", test_argv):
             args = get_args()
             self.assertEqual(args["filename"], "file.mp4")
             self.assertEqual(args["output"], "outdir")
-            self.assertEqual(args["target_filesize"], 5)
+            self.assertEqual(args["target_filesize"], 20)
 
 
 if __name__ == "__main__":
