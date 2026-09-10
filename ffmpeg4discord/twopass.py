@@ -18,10 +18,7 @@ Functions:
 import logging
 import math
 import os
-import re
-import subprocess
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 from textwrap import dedent
 from typing import Optional
@@ -38,19 +35,24 @@ logging.getLogger().setLevel(logging.INFO)
 FILE_SIZE_MULT = 0.00000095367432
 
 
-@lru_cache(maxsize=1)
-def fps_mode_flag() -> str:
-    """Return the frame rate flag this system's ffmpeg understands.
+def fps_mode_flag(probe: dict) -> str:
+    """Return the frame rate flag name this system's ffmpeg understands.
 
-    ffmpeg 5.0 replaced `-vsync` with `-fps_mode`, and 9.0 removed `-vsync` entirely. We assume the
-    modern flag unless we positively detect an ffmpeg older than 5.0, because unparseable versions
-    (git/nightly builds report "ffmpeg version N-119...") are always newer than 5.0.
+    ffmpeg 5.0 replaced `-vsync` with `-fps_mode`, and 9.0 removed `-vsync` entirely. The version
+    comes from the `-show_program_version` section of the probe we already run, so this costs us
+    nothing extra. That reports ffprobe's version, but ffmpeg and ffprobe ship together in every
+    packaging we support, so they agree in practice.
+
+    Version strings vary by build ("9.0.1", "n7.1", "4.4.2-0ubuntu0.22.04.1"), so we only take the
+    leading number. We assume the modern flag whenever it can't be read, because unparseable
+    versions are git/nightly builds ("N-119043-g1234567"), which are always newer than 5.0.
     """
 
+    version = probe.get("program_version", {}).get("version", "")
+
     try:
-        output = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10, check=False).stdout
-        major = int(re.search(r"ffmpeg version n?(\d+)\.", output).group(1))
-    except (OSError, subprocess.SubprocessError, AttributeError, ValueError):
+        major = int(version.split(".")[0].lstrip("nN"))
+    except ValueError:
         return "fps_mode"
 
     return "fps_mode" if major >= 5 else "vsync"
@@ -177,7 +179,8 @@ class TwoPass:
         # create a Path from the output string
         self.output = Path(self.output).resolve()
 
-        self.probe = ffmpeg.probe(filename=filename)
+        # `show_program_version` adds the ffmpeg version to the probe output, which fps_mode_flag() needs.
+        self.probe = ffmpeg.probe(filename=filename, show_program_version=None)
         self._process_probe()
         self._process_times(filename_times)
 
@@ -295,7 +298,7 @@ class TwoPass:
             "pass1": {
                 "pass": 1,
                 "f": "null",
-                fps_mode_flag(): "cfr",  # force constant frame rate; flag name varies by ffmpeg version
+                fps_mode_flag(self.probe): "cfr",  # force CFR; flag name varies by ffmpeg version
                 "c:v": codec_map.get(codec, codec),
             },
             "pass2": {

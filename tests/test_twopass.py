@@ -32,6 +32,7 @@ class TestTwoPassUtils(unittest.TestCase):
 class TestTwoPass(unittest.TestCase):
     def setUp(self) -> None:
         self.fake_probe_result: Dict[str, Any] = {
+            "program_version": {"version": "9.0.1"},
             "format": {"duration": "120.0", "size": "53000000"},
             "streams": [
                 {
@@ -636,42 +637,63 @@ class TestTwoPass(unittest.TestCase):
 class TestFpsModeFlag(unittest.TestCase):
     """ffmpeg 5.0 renamed `-vsync` to `-fps_mode`, and 9.0 dropped `-vsync` (issue #66)."""
 
-    def setUp(self) -> None:
-        # The flag lookup is cached for the life of the process, so clear it between cases.
-        fps_mode_flag.cache_clear()
-        self.addCleanup(fps_mode_flag.cache_clear)
-
-    def run_with_version_output(self, stdout: str) -> str:
-        with patch("ffmpeg4discord.twopass.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(stdout=stdout)
-            return fps_mode_flag()
+    @staticmethod
+    def probe_reporting(version: str) -> Dict[str, Any]:
+        return {"program_version": {"version": version}}
 
     def test_modern_ffmpeg_uses_fps_mode(self) -> None:
-        self.assertEqual(self.run_with_version_output("ffmpeg version 9.0 Copyright (c)"), "fps_mode")
-        fps_mode_flag.cache_clear()
-        self.assertEqual(self.run_with_version_output("ffmpeg version 5.0.1 Copyright (c)"), "fps_mode")
+        self.assertEqual(fps_mode_flag(self.probe_reporting("9.0.1")), "fps_mode")
+        self.assertEqual(fps_mode_flag(self.probe_reporting("5.0.1")), "fps_mode")
 
     def test_distro_version_prefix_is_handled(self) -> None:
         # Arch and some other distros report versions like "n7.1".
-        self.assertEqual(self.run_with_version_output("ffmpeg version n7.1 Copyright (c)"), "fps_mode")
+        self.assertEqual(fps_mode_flag(self.probe_reporting("n7.1")), "fps_mode")
 
     def test_old_ffmpeg_uses_vsync(self) -> None:
-        self.assertEqual(self.run_with_version_output("ffmpeg version 4.4.2-0ubuntu0.22.04.1"), "vsync")
+        self.assertEqual(fps_mode_flag(self.probe_reporting("4.4.2-0ubuntu0.22.04.1")), "vsync")
+        self.assertEqual(fps_mode_flag(self.probe_reporting("n4.4")), "vsync")
 
     def test_unparseable_version_falls_back_to_fps_mode(self) -> None:
         # Nightly/git builds have no version number, and they are always newer than 5.0.
-        self.assertEqual(self.run_with_version_output("ffmpeg version N-119043-g1234567"), "fps_mode")
+        self.assertEqual(fps_mode_flag(self.probe_reporting("N-119043-g1234567")), "fps_mode")
 
-    def test_missing_ffmpeg_falls_back_to_fps_mode(self) -> None:
-        with patch("ffmpeg4discord.twopass.subprocess.run", side_effect=FileNotFoundError):
-            self.assertEqual(fps_mode_flag(), "fps_mode")
+    def test_missing_version_section_falls_back_to_fps_mode(self) -> None:
+        self.assertEqual(fps_mode_flag({}), "fps_mode")
 
-    def test_result_is_cached(self) -> None:
-        with patch("ffmpeg4discord.twopass.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(stdout="ffmpeg version 9.0")
-            fps_mode_flag()
-            fps_mode_flag()
-        mock_run.assert_called_once()
+    def test_generate_params_uses_the_detected_flag(self) -> None:
+        """The detected flag has to reach the actual first-pass parameters, which is what broke in #66."""
+
+        with patch("ffmpeg4discord.twopass.ffmpeg.probe") as mock_probe:
+            mock_probe.return_value = {
+                "format": {"duration": "120.0", "size": "53000000"},
+                "streams": [
+                    {"codec_type": "video", "width": 1920, "height": 1080, "r_frame_rate": "30/1", "index": 0},
+                    {"codec_type": "audio", "bit_rate": "128000", "index": 1},
+                ],
+                "program_version": {"version": "4.4.2"},
+            }
+            tp = TwoPass(filename=Path("input.mp4"), target_filesize=10)
+            tp.bitrate_dict = {"b:v": 1000000}
+            params = tp._generate_params(codec="x264")
+
+        self.assertEqual(params["pass1"]["vsync"], "cfr")
+        self.assertNotIn("fps_mode", params["pass1"])
+
+    def test_probe_requests_the_version_section(self) -> None:
+        """Without this kwarg the probe output has no version to read."""
+
+        with patch("ffmpeg4discord.twopass.ffmpeg.probe") as mock_probe:
+            mock_probe.return_value = {
+                "format": {"duration": "120.0", "size": "53000000"},
+                "streams": [
+                    {"codec_type": "video", "width": 1920, "height": 1080, "r_frame_rate": "30/1", "index": 0},
+                ],
+                "program_version": {"version": "9.0.1"},
+            }
+            TwoPass(filename=Path("input.mp4"), target_filesize=10)
+
+        _, kwargs = mock_probe.call_args
+        self.assertIn("show_program_version", kwargs)
 
 
 class TestRunPass(unittest.TestCase):
