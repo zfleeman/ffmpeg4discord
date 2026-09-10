@@ -6,7 +6,15 @@ from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
-from ffmpeg4discord.twopass import TwoPass, seconds_from_ts_string, seconds_to_timestamp
+import ffmpeg
+
+from ffmpeg4discord.twopass import (
+    TwoPass,
+    fps_mode_flag,
+    run_pass,
+    seconds_from_ts_string,
+    seconds_to_timestamp,
+)
 
 
 class TestTwoPassUtils(unittest.TestCase):
@@ -623,6 +631,72 @@ class TestTwoPass(unittest.TestCase):
             out_file = os.path.normcase(os.path.realpath(tp.output_filename))
             self.assertEqual(os.path.commonpath([out_file, base_dir]), base_dir)
             self.assertIn("small_", tp.output_filename)
+
+
+class TestFpsModeFlag(unittest.TestCase):
+    """ffmpeg 5.0 renamed `-vsync` to `-fps_mode`, and 9.0 dropped `-vsync` (issue #66)."""
+
+    def setUp(self) -> None:
+        # The flag lookup is cached for the life of the process, so clear it between cases.
+        fps_mode_flag.cache_clear()
+        self.addCleanup(fps_mode_flag.cache_clear)
+
+    def run_with_version_output(self, stdout: str) -> str:
+        with patch("ffmpeg4discord.twopass.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout=stdout)
+            return fps_mode_flag()
+
+    def test_modern_ffmpeg_uses_fps_mode(self) -> None:
+        self.assertEqual(self.run_with_version_output("ffmpeg version 9.0 Copyright (c)"), "fps_mode")
+        fps_mode_flag.cache_clear()
+        self.assertEqual(self.run_with_version_output("ffmpeg version 5.0.1 Copyright (c)"), "fps_mode")
+
+    def test_distro_version_prefix_is_handled(self) -> None:
+        # Arch and some other distros report versions like "n7.1".
+        self.assertEqual(self.run_with_version_output("ffmpeg version n7.1 Copyright (c)"), "fps_mode")
+
+    def test_old_ffmpeg_uses_vsync(self) -> None:
+        self.assertEqual(self.run_with_version_output("ffmpeg version 4.4.2-0ubuntu0.22.04.1"), "vsync")
+
+    def test_unparseable_version_falls_back_to_fps_mode(self) -> None:
+        # Nightly/git builds have no version number, and they are always newer than 5.0.
+        self.assertEqual(self.run_with_version_output("ffmpeg version N-119043-g1234567"), "fps_mode")
+
+    def test_missing_ffmpeg_falls_back_to_fps_mode(self) -> None:
+        with patch("ffmpeg4discord.twopass.subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(fps_mode_flag(), "fps_mode")
+
+    def test_result_is_cached(self) -> None:
+        with patch("ffmpeg4discord.twopass.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="ffmpeg version 9.0")
+            fps_mode_flag()
+            fps_mode_flag()
+        mock_run.assert_called_once()
+
+
+class TestRunPass(unittest.TestCase):
+    def test_returns_ffmpeg_output_and_forwards_kwargs(self) -> None:
+        ffoutput = MagicMock()
+        ffoutput.run.return_value = (b"out", b"err")
+
+        result = run_pass(ffoutput, "first", capture_stdout=True)
+
+        self.assertEqual(result, (b"out", b"err"))
+        ffoutput.run.assert_called_once_with(capture_stdout=True)
+
+    def test_ffmpeg_error_becomes_readable_runtime_error(self) -> None:
+        ffoutput = MagicMock()
+        ffoutput.run.side_effect = ffmpeg.Error("ffmpeg", b"", b"")
+        # compile() mixes strings and Path objects, which is why run_pass stringifies each argument.
+        ffoutput.compile.return_value = ["ffmpeg", "-i", Path("in.mp4"), "out.mp4"]
+
+        with self.assertRaises(RuntimeError) as ctx:
+            run_pass(ffoutput, "second", overwrite_output=True)
+
+        message = str(ctx.exception)
+        self.assertIn("second pass", message)
+        self.assertIn("ffmpeg -i in.mp4 out.mp4", message)
+        self.assertIsInstance(ctx.exception.__cause__, ffmpeg.Error)
 
 
 if __name__ == "__main__":
