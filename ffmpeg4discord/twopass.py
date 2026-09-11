@@ -9,6 +9,8 @@ Classes:
 - TwoPass: Encodes and resizes video files using FFmpeg's two-pass encoding to meet a specified target file size.
 
 Functions:
+- fps_mode_flag: Returns the frame rate flag name supported by the installed ffmpeg.
+- run_pass: Runs one encoding pass and reports ffmpeg failures with a readable message.
 - seconds_from_ts_string: Converts a timestamp string into an integer representing seconds.
 - seconds_to_timestamp: Converts an integer representing seconds into a timestamp string.
 """
@@ -31,6 +33,57 @@ logging.getLogger().setLevel(logging.INFO)
 # while Windows File Explorer reports in mebibytes (but labels as MB).
 # This can cause discrepancies in reported file sizes between the two systems.
 FILE_SIZE_MULT = 0.00000095367432
+
+
+def fps_mode_flag(probe: dict) -> str:
+    """Return the frame rate flag name this system's ffmpeg understands.
+
+    ffmpeg 5.0 replaced `-vsync` with `-fps_mode`, and 9.0 removed `-vsync` entirely. The version
+    comes from the `-show_program_version` section of the probe we already run, so this costs us
+    nothing extra. That reports ffprobe's version, but ffmpeg and ffprobe ship together in every
+    packaging we support, so they agree in practice.
+
+    Version strings vary by build ("9.0.1", "n7.1", "4.4.2-0ubuntu0.22.04.1"), so we only take the
+    leading number. We assume the modern flag whenever it can't be read, because unparseable
+    versions are git/nightly builds ("N-119043-g1234567"), which are always newer than 5.0.
+    """
+
+    version = probe.get("program_version", {}).get("version", "")
+
+    try:
+        major = int(version.split(".")[0].lstrip("nN"))
+    except ValueError:
+        return "fps_mode"
+
+    return "fps_mode" if major >= 5 else "vsync"
+
+
+def run_pass(ffoutput, pass_name: str, **run_kwargs):
+    """Run a single encoding pass, replacing ffmpeg-python's detail-free exception with a useful one.
+
+    ffmpeg-python raises `Error("ffmpeg error (see stderr output for detail)")`, which tells the user
+    nothing. ffmpeg has already printed the real reason to the terminal, so we say where to look and
+    include the command we ran.
+    """
+
+    try:
+        return ffoutput.run(**run_kwargs)
+    except ffmpeg.Error as exc:
+        # compile() can contain Path objects, so stringify each argument before joining.
+        command = " ".join(str(arg) for arg in ffoutput.compile())
+        raise RuntimeError(
+            dedent(
+                f"""\033[31m
+                FFmpeg failed during the {pass_name} pass.
+
+                Look for FFmpeg's error message printed above this traceback -- it names the actual
+                problem (an unsupported option, a bad filter, a missing encoder, etc.).
+
+                The command that failed was:
+                {command}
+                \033[0m"""
+            )
+        ) from exc
 
 
 # Per-codec tweaks for `_generate_params()`.
@@ -126,7 +179,8 @@ class TwoPass:
         # create a Path from the output string
         self.output = Path(self.output).resolve()
 
-        self.probe = ffmpeg.probe(filename=filename)
+        # `show_program_version` adds the ffmpeg version to the probe output, which fps_mode_flag() needs.
+        self.probe = ffmpeg.probe(filename=filename, show_program_version=None)
         self._process_probe()
         self._process_times(filename_times)
 
@@ -244,7 +298,7 @@ class TwoPass:
             "pass1": {
                 "pass": 1,
                 "f": "null",
-                "vsync": "cfr",  # not sure if this is unique to x264 or not
+                fps_mode_flag(self.probe): "cfr",  # force CFR; flag name varies by ffmpeg version
                 "c:v": codec_map.get(codec, codec),
             },
             "pass2": {
@@ -470,14 +524,15 @@ class TwoPass:
         video = self._apply_video_filters(ffinput.video)
         audio = self._apply_audio_filters(ffinput)
 
-        # set our logging level
-        loglevel = "quiet" if not self.verbose else "verbose"
+        # Set our logging level. We use "error" rather than "quiet" so that ffmpeg's own failure
+        # messages reach the user; "-stats" still prints the progress line either way.
+        loglevel = "verbose" if self.verbose else "error"
 
         # First Pass
         ffoutput = ffmpeg.output(video, "pipe:", **params["pass1"])
         ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
         print("Performing first pass")
-        _, _ = ffoutput.run(capture_stdout=True)
+        _, _ = run_pass(ffoutput, "first", capture_stdout=True)
 
         # set our output streams
         output_streams = [video, audio] if audio and not self.no_audio else [video]
@@ -486,7 +541,7 @@ class TwoPass:
         ffoutput = ffmpeg.output(*output_streams, self.output_filename, **params["pass2"])
         ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
         print("\nPerforming second pass")
-        ffoutput.run(overwrite_output=True)
+        run_pass(ffoutput, "second", overwrite_output=True)
 
         # save the output file size and return it
         self.output_filesize = os.path.getsize(self.output_filename) * FILE_SIZE_MULT
