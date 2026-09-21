@@ -198,7 +198,8 @@ def _search_for_default_config(args: dict) -> dict:
             return args
 
         logging.info("no default configuration files found")
-        return args
+
+    return args
 
 
 def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:

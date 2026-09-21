@@ -505,6 +505,14 @@ class TestArguments(unittest.TestCase):
                 result = _search_for_default_config(args)
         self.assertEqual(result["config"], Path("/tmp/ffmpeg4discord.json"))
 
+    def test_search_for_default_config_preserves_explicit_config(self):
+        args = {"config": "custom.json", "no_config": False}
+        self.assertIs(_search_for_default_config(args), args)
+
+    def test_search_for_default_config_preserves_no_config(self):
+        args = {"config": None, "no_config": True}
+        self.assertIs(_search_for_default_config(args), args)
+
     def test_search_for_default_config_no_defaults_found(self):
         args = {"config": None, "no_config": False}
         with (
