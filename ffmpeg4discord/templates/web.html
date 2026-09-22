@@ -289,12 +289,17 @@
         updateStartTimeLabel();
         updateEndTimeLabel();
 
+        // Number() drops trailing zeros, so a slider value of "20.0" shows as "20 seconds"
+        function formatSeconds(value) {
+            return Number(value) + ' seconds';
+        }
+
         function updateStartTimeLabel() {
-            startTimeLabel.textContent = startTimeInput.value + ' seconds';
+            startTimeLabel.textContent = formatSeconds(startTimeInput.value);
         }
 
         function updateEndTimeLabel() {
-            endTimeLabel.textContent = endTimeInput.value + ' seconds';
+            endTimeLabel.textContent = formatSeconds(endTimeInput.value);
         }
 
         function setTime(type) {
@@ -303,10 +308,10 @@
 
             if (type === 'start') {
                 startTimeInput.value = currentTime;
-                startTimeLabel.textContent = currentTime + ' seconds';
+                startTimeLabel.textContent = formatSeconds(currentTime);
             } else if (type === 'end') {
                 endTimeInput.value = currentTime;
-                endTimeLabel.textContent = currentTime + ' seconds';
+                endTimeLabel.textContent = formatSeconds(currentTime);
             }
         }
 
