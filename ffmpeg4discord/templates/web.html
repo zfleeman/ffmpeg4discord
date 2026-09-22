@@ -277,6 +277,8 @@
         video.addEventListener('loadedmetadata', () => {
             startTimeInput.value = "{{ twopass.from_seconds if twopass.from_seconds else 0 }}"
             endTimeInput.value = "{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}"
+            // Open the player at the start time so trimmed clips don't begin at 0:00.
+            video.currentTime = startTimeInput.value
         });
 
         startTimeInput.addEventListener('input', updateStartTimeLabel);
