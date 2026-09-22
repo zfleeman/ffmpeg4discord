@@ -101,23 +101,25 @@ def tonemap_filters(probe: dict) -> Optional[list[tuple[str, dict]]]:
     """Return the filters that convert HDR video to SDR, as (filter name, options) pairs.
 
     Both chains convert the picture to linear light, squeeze the bright HDR highlights into SDR's
-    range with the `hable` curve, then convert back to standard BT.709 video. They differ in which
-    filter does the color math:
+    range with the `mobius` curve, then convert back to standard BT.709 video. `mobius` keeps game
+    footage about as bright as the source, where `hable` came out noticeably darker. They differ in
+    which filter does the color math:
 
     - `zscale` is the usual choice, but it only exists when ffmpeg was built with libzimg. The
       probe's `configuration` string lists the build flags, so checking it costs nothing.
     - ffmpeg 8.0 taught the built-in `scale` filter the same color conversions, so it works as a
-      fallback on builds without `zscale` (like Homebrew's).
+      fallback on builds without `zscale` (like Homebrew's). It treats 203 nits as SDR white, so
+      the `zscale` chain sets `npl=203` to make both chains look the same.
 
     Returns None when neither is available.
     """
 
     configuration = probe.get("program_version", {}).get("configuration", "")
-    tonemap = ("tonemap", {"tonemap": "hable", "desat": 0})
+    tonemap = ("tonemap", {"tonemap": "mobius", "desat": 0})
 
     if "--enable-libzimg" in configuration:
         return [
-            ("zscale", {"t": "linear", "npl": 100}),
+            ("zscale", {"t": "linear", "npl": 203}),
             ("format", {"pix_fmts": "gbrpf32le"}),
             ("zscale", {"p": "bt709"}),
             tonemap,
