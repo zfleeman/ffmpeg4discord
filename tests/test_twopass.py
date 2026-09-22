@@ -10,6 +10,7 @@ import ffmpeg
 
 from ffmpeg4discord.twopass import (
     TwoPass,
+    available_codecs,
     fps_mode_flag,
     run_pass,
     seconds_from_ts_string,
@@ -522,6 +523,29 @@ class TestTwoPass(unittest.TestCase):
         tp._create_bitrate_dict()
         self.assertEqual(tp.bitrate_dict["b:v"], 91000)
 
+    def test_generate_params_hardware_codec_has_no_pass_flags(self) -> None:
+        tp = self.make_twopass(codec="h264_videotoolbox")
+        tp.bitrate_dict = {"b:v": 1000000}
+        params = tp._generate_params(codec="h264_videotoolbox")
+        self.assertNotIn("pass", params["pass1"])
+        self.assertNotIn("pass", params["pass2"])
+        self.assertEqual(params["pass2"]["c:v"], "h264_videotoolbox")
+        self.assertEqual(params["pass2"]["c:a"], "aac")
+
+    @patch("ffmpeg4discord.twopass.os.path.getsize")
+    @patch("ffmpeg4discord.twopass.ffmpeg.output")
+    @patch("ffmpeg4discord.twopass.ffmpeg.input")
+    def test_run_hardware_codec_skips_first_pass(
+        self, mock_input: MagicMock, mock_output: MagicMock, mock_getsize: MagicMock
+    ) -> None:
+        self.patch_ffmpeg_input_output(mock_input, mock_output)
+        mock_getsize.return_value = 10485760
+        tp = self.make_twopass(codec="hevc_videotoolbox")
+        tp.run()
+        # Only the real output is written; there is no first pass to "pipe:".
+        self.assertEqual(mock_output.call_count, 1)
+        self.assertNotIn("pipe:", mock_output.call_args.args)
+
     def test_warning_no_audio_stream(self) -> None:
         # Remove audio stream
         self.fake_probe_result["streams"] = [self.fake_probe_result["streams"][0]]
@@ -714,6 +738,19 @@ class TestFpsModeFlag(unittest.TestCase):
         self.assertIn("show_program_version", kwargs)
 
 
+class TestAvailableCodecs(unittest.TestCase):
+    def test_lists_videotoolbox_on_macos(self) -> None:
+        with patch("ffmpeg4discord.twopass.sys.platform", "darwin"):
+            self.assertIn("h264_videotoolbox", available_codecs())
+
+    def test_hides_videotoolbox_off_macos(self) -> None:
+        with patch("ffmpeg4discord.twopass.sys.platform", "linux"):
+            codecs = available_codecs()
+        self.assertNotIn("h264_videotoolbox", codecs)
+        self.assertNotIn("hevc_videotoolbox", codecs)
+        self.assertIn("h264_nvenc", codecs)
+
+
 class TestRunPass(unittest.TestCase):
     def test_returns_ffmpeg_output_and_forwards_kwargs(self) -> None:
         ffoutput = MagicMock()
@@ -737,6 +774,16 @@ class TestRunPass(unittest.TestCase):
         self.assertIn("second pass", message)
         self.assertIn("ffmpeg -i in.mp4 out.mp4", message)
         self.assertIsInstance(ctx.exception.__cause__, ffmpeg.Error)
+
+    def test_hint_is_added_to_the_error(self) -> None:
+        ffoutput = MagicMock()
+        ffoutput.run.side_effect = ffmpeg.Error("ffmpeg", b"", b"")
+        ffoutput.compile.return_value = ["ffmpeg"]
+
+        with self.assertRaises(RuntimeError) as ctx:
+            run_pass(ffoutput, "single", hint="try x264")
+
+        self.assertIn("try x264", str(ctx.exception))
 
 
 if __name__ == "__main__":

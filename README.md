@@ -60,7 +60,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `-o`<br>`--output` | current working directory | `-o "C:/Users/zflee/A Folder"`<br>`-o "C:/Users/zflee/Desktop/A Folder/filename.mp4"` | Output directory **or** full output filename. If you provide a directory, `ff4d` will generate a timestamped filename. If you provide a filename, `ff4d` will use it (and will correct the extension if it doesn’t match the selected codec). |
 | `-s`<br>`--target-filesize` | 10 | `-s 50` | Target output file size in MiB. The encoder will iterate until it gets under this size (unless `--approx` is used). |
 | `-a`<br>`--audio-br` | 96 | `-a 128` | Audio bitrate in kbps. Lowering this allows a slightly higher video bitrate for the same target file size. |
-| `-c`<br>`--codec` | x264 | `-c hevc_nvenc` | Video "codec profile". These aren't 1:1 titles with the FFmpeg codec choices, because modern codecs require more tweaking for encoding performance, so I've setup a profile for `vp9` and `av1` speed. Options are ordered from "most compatible" to "least compatible": `x264`, `h264_nvenc`, `x265`, `hevc_nvenc`, `vp9`, `av1`. See [Notes on Codec Selection](#notes-on-codec-selection) for more information. |
+| `-c`<br>`--codec` | x264 | `-c hevc_nvenc` | Video "codec profile". These aren't 1:1 titles with the FFmpeg codec choices, because modern codecs require more tweaking for encoding performance, so I've setup a profile for `vp9` and `av1` speed. Options are ordered from "most compatible" to "least compatible": `x264`, `h264_nvenc`, `h264_videotoolbox`, `x265`, `hevc_nvenc`, `hevc_videotoolbox`, `vp9`, `av1`. The VideoToolbox codecs are only offered on macOS. See [Notes on Codec Selection](#notes-on-codec-selection) for more information. |
 | `-r`<br>`--resolution` | off | `-r 1280x720` | Scale the output video to a specific resolution (format: `WIDTHxHEIGHT`). |
 | `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | Crop the input before encoding (format: `x_offsetx y_offsetx widthx height`). See [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). |
 | `-f`<br>`--framerate` | off | `-f 30` | Output frame rate (FPS). If you specify a value higher than the input video’s FPS, the original FPS will be kept. |
@@ -180,6 +180,10 @@ Different codecs have different trade-offs in terms of quality, speed, file size
   Hardware‑accelerated H.264 using an NVIDIA GPU. Typically faster than `x264` with slightly lower quality at the same bitrate. Compatibility of the output files is essentially the same as `x264`; the difference is how the video is encoded, not how it is played.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
 
+- **`h264_videotoolbox` (H.264, Apple VideoToolbox, macOS only)**
+  Hardware‑accelerated H.264 on Macs, including Apple Silicon (M‑series). Much faster than `x264`, with the same playback compatibility. Only offered on macOS.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#VideoToolbox)
+
 - **`x265` (HEVC, CPU)**
   HEVC encoder that can provide approximately 25–50% lower bitrate than H.264 (`x264`) at comparable visual quality. Playback support is more limited than H.264: many newer devices and players support HEVC, but older hardware, some browsers, and certain embeds may not.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/H.265)
@@ -187,6 +191,12 @@ Different codecs have different trade-offs in terms of quality, speed, file size
 - **`hevc_nvenc` (HEVC, NVENC GPU)**
   Hardware‑accelerated HEVC using an NVIDIA GPU. Similar compression benefits and compatibility characteristics as `x265`, but significantly faster encoding due to GPU offload.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
+
+- **`hevc_videotoolbox` (HEVC, Apple VideoToolbox, macOS only)**
+  Hardware‑accelerated HEVC on Macs. Similar compression benefits and compatibility as `x265`, but much faster. Only offered on macOS.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#VideoToolbox)
+
+Hardware encoders (NVENC and VideoToolbox) don't support ffmpeg's two-pass encoding, so `ff4d` encodes them in a single pass. This is faster, but the output size is less precise, so `ff4d` may need an extra retry to get under your target.
 
 - **`vp9` (VP9, CPU, `.webm`)**
   Produces `.webm` video. VP9 can save about 20–50% bitrate compared to H.264 (`x264`) at similar quality. It is well supported in modern browsers (especially for web streaming) but may have more limited support in older devices, legacy players, and some hardware decoders.
