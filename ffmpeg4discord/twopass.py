@@ -13,8 +13,8 @@ Functions:
 - ffmpeg_major_version: Returns the installed ffmpeg's major version from the probe data.
 - fps_mode_flag: Returns the frame rate flag name supported by the installed ffmpeg.
 - run_pass: Runs one encoding pass and reports ffmpeg failures with a readable message.
-- seconds_from_ts_string: Converts a timestamp string into an integer representing seconds.
-- seconds_to_timestamp: Converts an integer representing seconds into a timestamp string.
+- seconds_from_ts_string: Converts a timestamp string into seconds.
+- seconds_to_timestamp: Converts seconds into a timestamp string.
 - timestamp_from_percentage: Converts a percentage of the video's duration into a timestamp string.
 - tonemap_filters: Returns the HDR-to-SDR filter chain this system's ffmpeg can run.
 """
@@ -306,7 +306,7 @@ class TwoPass:
         Processes the ffmpeg probe output to set duration, ratio, framerate, and audio bitrate attributes.
         """
         # set the total video duration -- for use throughout the call and the web ui
-        self.duration = math.floor(float(self.probe["format"]["duration"]))
+        self.duration = float(self.probe["format"]["duration"])
 
         # The file size comparison below uses mebibytes (MiB, 1 MiB = 1,048,576 bytes).
         input_filesize_mib = float(self.probe["format"]["size"]) * FILE_SIZE_MULT
@@ -358,24 +358,15 @@ class TwoPass:
 
         # times are provided by the flags or config file
         elif self.times:
-            for key in ("from", "to"):
-                if self.times.get(key):
-                    self.times[key] = timestamp_from_percentage(self.times[key], self.duration)
-
-            if self.times.get("from"):
-                self.times["ss"] = self.times["from"] or "00:00:00"
-                self.times.pop("from", None)
-            else:
-                self.times["ss"] = "00:00:00"
-
-            self.from_seconds = seconds_from_ts_string(self.times["ss"])
-
-            if self.times.get("to"):
-                self.to_seconds = seconds_from_ts_string(self.times["to"])
-                self.length = self.to_seconds - self.from_seconds
-            else:
-                self.length = self.duration - self.from_seconds
-                self.times["to"] = seconds_to_timestamp(self.duration)
+            # Accept any supported format (timestamp, seconds, or percentage), then hand ffmpeg one standard format.
+            start = self.times.get("from") or "0"
+            end = self.times.get("to")
+            self.from_seconds = seconds_from_ts_string(timestamp_from_percentage(start, self.duration))
+            self.to_seconds = (
+                seconds_from_ts_string(timestamp_from_percentage(end, self.duration)) if end else self.duration
+            )
+            self.length = self.to_seconds - self.from_seconds
+            self.times = {"ss": seconds_to_timestamp(self.from_seconds), "to": seconds_to_timestamp(self.to_seconds)}
 
         # no trimming times were provided
         else:
@@ -491,7 +482,7 @@ class TwoPass:
         # Long clips with small targets can leave nothing for video after audio is subtracted.
         if br <= 0:
             raise ValueError(
-                f"Target file size of {self.target_filesize:.2f} MiB is too small for a {self.length}-second clip "
+                f"Target file size of {self.target_filesize:.2f} MiB is too small for a {self.length:g}-second clip "
                 f"with {audio_kbps:g} kbps audio: there is no bitrate left for video. "
                 "Try a larger target size (-s), a shorter clip, a lower audio bitrate (-a), or no audio (-an)."
             )
@@ -693,14 +684,26 @@ class TwoPass:
         return self.output_filesize
 
 
-def seconds_from_ts_string(ts_string: str) -> int:
+def seconds_from_ts_string(ts_string: str) -> float:
     """
-    Take a "timestamp string" and convert it into an integer in seconds
+    Convert "HH:MM:SS", "MM:SS", or plain seconds, each with optional decimals like "01:30.250", into seconds.
     """
-    return int(ts_string[0:2]) * 60 * 60 + int(ts_string[3:5]) * 60 + int(ts_string[6:8])
+    parts = ts_string.strip().split(":")
+    try:
+        numbers = [float(part) for part in parts]
+    except ValueError:
+        numbers = []
+
+    if not 1 <= len(numbers) <= 3 or any(n < 0 or not math.isfinite(n) for n in numbers):
+        raise ValueError(f"Invalid time '{ts_string}'. Use HH:MM:SS, MM:SS, or seconds, e.g. 00:01:30.250 or 90.25.")
+
+    seconds = 0.0
+    for number in numbers:
+        seconds = seconds * 60 + number
+    return seconds
 
 
-def timestamp_from_percentage(value: str, duration: int) -> str:
+def timestamp_from_percentage(value: str, duration: float) -> str:
     """
     Convert a percentage like "75%" into a timestamp string for a video of `duration` seconds.
     Values without a "%" are returned unchanged.
@@ -716,17 +719,18 @@ def timestamp_from_percentage(value: str, duration: int) -> str:
     if not 0 <= percent <= 100:
         raise ValueError(f"Invalid percentage '{value}'. It must be between 0% and 100%.")
 
-    return seconds_to_timestamp(math.floor(duration * percent / 100))
+    return seconds_to_timestamp(duration * percent / 100)
 
 
-def seconds_to_timestamp(seconds: int) -> str:
+def seconds_to_timestamp(seconds: float) -> str:
     """
-    Take seconds (as an integer) and convert it into a "timestamp string"
+    Convert seconds into an "HH:MM:SS" string, adding ".mmm" when there are milliseconds.
     """
-    hours, remainder = divmod(seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
+    # Work in whole milliseconds so float noise like 1.9999999 doesn't turn into "00:00:01.1000".
+    ms = round(seconds * 1000)
+    hours, ms = divmod(ms, 3_600_000)
+    minutes, ms = divmod(ms, 60_000)
+    secs, ms = divmod(ms, 1000)
 
-    # Use f-strings to format the timestamp
-    timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-
-    return timestamp
+    timestamp = f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{timestamp}.{ms:03d}" if ms else timestamp
