@@ -158,7 +158,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "coverage" },
+    { name = "coverage", extra = ["toml"] },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -173,7 +173,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "coverage", specifier = "==7.10.2" },
+    { name = "coverage", extras = ["toml"], specifier = "==7.10.2" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-cov", specifier = "==6.3.0" },
     { name = "ruff", specifier = "==0.12.1" },
