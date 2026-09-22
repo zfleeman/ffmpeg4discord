@@ -55,12 +55,12 @@
             <div class="row mb-3">
                 <div class="col">
                     <label for="startTime" class="form-label padding-top">Start Time:</label>
-                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="1" max="{{ twopass.duration }}" value="{{ twopass.from_seconds if twopass.from_seconds else 0 }}">
+                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="0.001" max="{{ twopass.duration }}" value="{{ twopass.from_seconds if twopass.from_seconds else 0 }}">
                     <span id="startTimeLabel">{{ twopass.from_seconds|string + " seconds" if twopass.from_seconds else "0 seconds" }}</span>
                 </div>
                 <div class="col">
                     <label for="endTime" class="form-label">End Time:</label>
-                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="1" max="{{ twopass.duration }}" value="{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}">
+                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="0.001" max="{{ twopass.duration }}" value="{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}">
                     <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.duration|string + " seconds" }}</span>
                 </div>
             </div>
@@ -286,6 +286,8 @@
 
         startTimeInput.addEventListener('input', updateStartTimeLabel);
         endTimeInput.addEventListener('input', updateEndTimeLabel);
+        updateStartTimeLabel();
+        updateEndTimeLabel();
 
         function updateStartTimeLabel() {
             startTimeLabel.textContent = startTimeInput.value + ' seconds';
@@ -296,8 +298,9 @@
         }
 
         function setTime(type) {
-            const currentTime = Math.floor(video.currentTime);
-            
+            // Keep milliseconds, which is what the slider's 0.001 step can hold
+            const currentTime = Math.round(video.currentTime * 1000) / 1000;
+
             if (type === 'start') {
                 startTimeInput.value = currentTime;
                 startTimeLabel.textContent = currentTime + ' seconds';
@@ -308,8 +311,8 @@
         }
 
         function selectVideoPart() {
-            const startTime = parseInt(startTimeInput.value);
-            const endTime = parseInt(endTimeInput.value);
+            const startTime = parseFloat(startTimeInput.value);
+            const endTime = parseFloat(endTimeInput.value);
 
             if (!isNaN(startTime) && !isNaN(endTime) && startTime < endTime) {
                 video.currentTime = startTime;

@@ -180,6 +180,14 @@ def test_encode_applies_the_form_to_twopass(web):
     assert kwargs == {"twopass": tp, "target_filesize": 8, "approx": True}
 
 
+def test_encode_keeps_milliseconds(web):
+    web.client.post("/encode", data=encode_form(startTime="10.25", endTime="40.5"))
+    tp = web.twopass_loop.call_args.kwargs["twopass"]
+    assert tp.times == {"ss": "00:00:10.250", "to": "00:00:40.500"}
+    assert tp.length == pytest.approx(30.25)
+    assert (tp.from_seconds, tp.to_seconds) == (10.25, 40.5)
+
+
 def test_encode_unchecked_audio_means_no_audio(web):
     form = encode_form()
     del form["include_audio"]
