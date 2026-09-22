@@ -14,6 +14,7 @@ Functions:
 - run_pass: Runs one encoding pass and reports ffmpeg failures with a readable message.
 - seconds_from_ts_string: Converts a timestamp string into an integer representing seconds.
 - seconds_to_timestamp: Converts an integer representing seconds into a timestamp string.
+- timestamp_from_percentage: Converts a percentage of the video's duration into a timestamp string.
 """
 
 import logging
@@ -276,6 +277,10 @@ class TwoPass:
 
         # times are provided by the flags or config file
         elif self.times:
+            for key in ("from", "to"):
+                if self.times.get(key):
+                    self.times[key] = timestamp_from_percentage(self.times[key], self.duration)
+
             if self.times.get("from"):
                 self.times["ss"] = self.times["from"] or "00:00:00"
                 self.times.pop("from", None)
@@ -605,6 +610,25 @@ def seconds_from_ts_string(ts_string: str) -> int:
     Take a "timestamp string" and convert it into an integer in seconds
     """
     return int(ts_string[0:2]) * 60 * 60 + int(ts_string[3:5]) * 60 + int(ts_string[6:8])
+
+
+def timestamp_from_percentage(value: str, duration: int) -> str:
+    """
+    Convert a percentage like "75%" into a timestamp string for a video of `duration` seconds.
+    Values without a "%" are returned unchanged.
+    """
+    if not value.endswith("%"):
+        return value
+
+    try:
+        percent = float(value[:-1])
+    except ValueError as e:
+        raise ValueError(f"Invalid percentage '{value}'. Use a number followed by %, e.g. 75%.") from e
+
+    if not 0 <= percent <= 100:
+        raise ValueError(f"Invalid percentage '{value}'. It must be between 0% and 100%.")
+
+    return seconds_to_timestamp(math.floor(duration * percent / 100))
 
 
 def seconds_to_timestamp(seconds: int) -> str:

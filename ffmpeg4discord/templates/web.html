@@ -55,12 +55,12 @@
             <div class="row mb-3">
                 <div class="col">
                     <label for="startTime" class="form-label padding-top">Start Time:</label>
-                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="1" max="{{ twopass.duration }}">
+                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="1" max="{{ twopass.duration }}" value="{{ twopass.from_seconds if twopass.from_seconds else 0 }}">
                     <span id="startTimeLabel">{{ twopass.from_seconds|string + " seconds" if twopass.from_seconds else "0 seconds" }}</span>
                 </div>
                 <div class="col">
                     <label for="endTime" class="form-label">End Time:</label>
-                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="1" max="{{ twopass.duration }}">
+                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="1" max="{{ twopass.duration }}" value="{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}">
                     <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.duration|string + " seconds" }}</span>
                 </div>
             </div>
@@ -274,10 +274,15 @@
         const startTimeLabel = document.getElementById('startTimeLabel');
         const endTimeLabel = document.getElementById('endTimeLabel');
 
-        video.addEventListener('loadedmetadata', () => {
-            startTimeInput.value = "{{ twopass.from_seconds if twopass.from_seconds else 0 }}"
-            endTimeInput.value = "{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}"
-        });
+        // Open the player at the start time. The metadata may already be loaded before this script runs.
+        function seekToStart() {
+            video.currentTime = startTimeInput.value;
+        }
+        if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+            seekToStart();
+        } else {
+            video.addEventListener('loadedmetadata', seekToStart);
+        }
 
         startTimeInput.addEventListener('input', updateStartTimeLabel);
         endTimeInput.addEventListener('input', updateEndTimeLabel);
