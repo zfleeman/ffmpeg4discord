@@ -20,7 +20,7 @@ from glob import glob
 from pathlib import Path
 from textwrap import dedent
 
-from flask import Flask, render_template, request, url_for
+from flask import Flask, render_template, request, send_file, url_for
 
 from ffmpeg4discord import arguments
 from ffmpeg4discord.twopass import TwoPass, available_codecs, seconds_to_timestamp
@@ -89,7 +89,7 @@ def open_browser(port: int) -> None:
         port (int): The port number to open in the web browser.
     """
     time.sleep(0.5)
-    webbrowser.open(f"http://localhost:{port}")
+    webbrowser.open(f"http://127.0.0.1:{port}")
 
 
 def cleanup_files(pattern: str) -> None:
@@ -142,13 +142,18 @@ def main() -> None:
 
     if web:
         codecs = available_codecs()
-        app = Flask(__name__, static_folder=path.parent)
+        # No static folder: serving the video's folder would expose every file next to it.
+        app = Flask(__name__, static_folder=None)
+
+        @app.route("/video")
+        def video():
+            return send_file(path)
 
         @app.route("/")
         def index():
             return render_template(
                 "web.html",
-                file_url=url_for("static", filename=path.name),
+                file_url=url_for("video"),
                 twopass=twopass,
                 codecs=codecs,
                 version_info=version_info,
@@ -209,7 +214,7 @@ def main() -> None:
 
             return render_template(
                 "web.html",
-                file_url=url_for("static", filename=path.name),
+                file_url=url_for("video"),
                 twopass=twopass,
                 codecs=codecs,
                 version_info=version_info,
@@ -217,7 +222,8 @@ def main() -> None:
             )
 
         threading.Thread(target=open_browser, args=[port], name="Open Browser").start()
-        app.run("0.0.0.0", port=port)
+        # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
+        app.run("127.0.0.1", port=port)
     else:
         twopass_loop(twopass=twopass, target_filesize=twopass.target_filesize, approx=approx)
         print(twopass.message)

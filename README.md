@@ -149,7 +149,7 @@ The web UI can be activated by adding `--web` to your `ff4d` call.
 ff4d cool_clip.mp4 -r 1280x720 -s 20 --web
 ```
 
-That command will spin up a Flask server on your local machine and launch a rendered webpage with the video as the centerpiece. The flags you provide to `ff4d` will fill in the defaults for the form. You can override/replace the values with the web form.
+That command will spin up a Flask server on your local machine and launch a rendered webpage with the video as the centerpiece. The flags you provide to `ff4d` will fill in the defaults for the form. You can override/replace the values with the web form. The server only accepts connections from your own computer, so you can't open the page from another device.
 
 You can drag the video playhead to different portions of the video and click the "Set Start/End Time" buttons to specify the section of the video you want to be clipped out. You can also use the range sliders underneath the buttons if you prefer. A "Preview Selection" button is provided for your convenience, and it does what it sounds like.
 
