@@ -324,11 +324,14 @@ class TwoPass:
                 "f": "null",
                 fps_mode_flag(self.probe): "cfr",  # force CFR; flag name varies by ffmpeg version
                 "c:v": CODEC_ENCODERS.get(codec, codec),
+                "pix_fmt": "yuv420p",
             },
             "pass2": {
                 "pass": 2,
                 "b:a": self.audio_br,
                 "c:v": CODEC_ENCODERS.get(codec, codec),
+                # 8-bit 4:2:0 is the only format browsers, phones, and Discord's player reliably decode
+                "pix_fmt": "yuv420p",
                 "ac": 2,  # downmix to stereo b/c current audio compression technique doesn't like 5.1 channel tracks
                 "map_chapters": -1,  # remove chapters from output files, as it messes up total video length
             },
