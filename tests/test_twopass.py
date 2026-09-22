@@ -1,4 +1,5 @@
 import logging
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -6,6 +7,7 @@ from unittest.mock import MagicMock
 import ffmpeg
 import pytest
 
+from ffmpeg4discord.__main__ import twopass_loop
 from ffmpeg4discord.twopass import (
     CODEC_ENCODERS,
     CODEC_OVERRIDES,
@@ -18,21 +20,6 @@ from ffmpeg4discord.twopass import (
     timestamp_from_percentage,
     tonemap_filters,
 )
-
-
-@pytest.fixture
-def probe(monkeypatch):
-    """Fake `ffmpeg.probe` output for a 2-minute 1080p30 clip with one audio track. Edit it before building a TwoPass."""
-    data = {
-        "program_version": {"version": "9.0.1", "configuration": ""},
-        "format": {"duration": "120.0", "size": "53000000"},
-        "streams": [
-            {"codec_type": "video", "width": 1920, "height": 1080, "r_frame_rate": "30/1", "index": 0},
-            {"codec_type": "audio", "bit_rate": "128000", "index": 1},
-        ],
-    }
-    monkeypatch.setattr("ffmpeg4discord.twopass.ffmpeg.probe", lambda *args, **kwargs: data)
-    return data
 
 
 @pytest.fixture
@@ -170,10 +157,16 @@ def test_target_larger_than_input_raises(make_twopass):
 
 
 def test_create_bitrate_dict(make_twopass):
+    # 10 MiB over 100 seconds is 819.2 kbps total. Minus 128 kbps audio leaves 691 kbps for video.
     tp = make_twopass()
     tp.length = 100
     tp._create_bitrate_dict()
-    assert {"b:v", "minrate", "maxrate", "bufsize"} <= tp.bitrate_dict.keys()
+    assert tp.bitrate_dict == {
+        "b:v": 691000,
+        "minrate": 691000 * 0.5,
+        "maxrate": 691000 * 1.45,
+        "bufsize": 691000 * 2,
+    }
 
 
 def test_create_bitrate_dict_raises_on_zero_length(make_twopass):
@@ -275,8 +268,8 @@ def test_apply_video_filters_crop_and_resolution(make_twopass):
     video.crop.return_value = video
     video.filter.return_value = video
     make_twopass(crop="10x20x640x360", resolution="1280x720")._apply_video_filters(video)
-    video.crop.assert_called_once()
-    video.filter.assert_called_once()
+    video.crop.assert_called_once_with(x="10", y="20", width="640", height="360")
+    video.filter.assert_called_once_with("scale", "1280x720")
 
 
 def test_apply_video_filters_warns_on_aspect_ratio_mismatch(make_twopass, caplog):
@@ -294,10 +287,14 @@ def test_apply_audio_filters_without_mixing_keeps_first_track(make_twopass, astr
     assert audio == ffinput.audio
 
 
-def test_apply_audio_filters_mixes_selected_tracks(make_twopass):
-    audio = make_twopass(amix=True, astreams=[0])._apply_audio_filters(ffmpeg.input("test.mp4"))
+def test_apply_audio_filters_mixes_selected_tracks(probe, make_twopass):
+    # three audio tracks; 5 is out of range and gets dropped
+    for index in (2, 3):
+        probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": index})
+    audio = make_twopass(amix=True, astreams=[0, 2, 5])._apply_audio_filters(ffmpeg.input("test.mp4"))
     assert audio.node.name == "amix"
-    assert audio.node.kwargs["inputs"] == 1
+    assert audio.node.kwargs == {"normalize": 0, "inputs": 2}
+    assert [edge.upstream_selector for edge in audio.node.incoming_edges] == ["a:0", "a:2"]
 
 
 def test_apply_audio_filters_mixes_all_tracks_when_none_selected(probe, make_twopass):
@@ -512,3 +509,25 @@ def test_hdr_on_old_ffmpeg_warns_and_skips(probe, make_twopass, caplog):
         tp = make_twopass()
     assert tp.tonemap is None
     assert "HDR" in caplog.text
+
+
+# --- a real encode ---
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
+def test_real_encode_lands_under_target(tmp_path, monkeypatch):
+    # ffmpeg writes its two-pass log files to the working directory
+    monkeypatch.chdir(tmp_path)
+
+    # a 2-second test pattern with a tone. Noise keeps it from compressing below the target.
+    clip = tmp_path / "clip.mp4"
+    video = ffmpeg.input("testsrc=duration=2:size=640x360:rate=30", f="lavfi").filter("noise", alls=60, allf="t")
+    audio = ffmpeg.input("sine=duration=2", f="lavfi")
+    ffmpeg.output(video, audio, str(clip), **{"b:v": "4M"}).run(quiet=True)
+
+    tp = TwoPass(filename=clip, target_filesize=0.5, output=str(tmp_path / "small.mp4"))
+    twopass_loop(tp, target_filesize=0.5)
+
+    assert Path(tp.output_filename).exists()
+    assert tp.output_filesize < 0.5

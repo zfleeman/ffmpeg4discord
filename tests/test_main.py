@@ -1,6 +1,8 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from flask import Flask
 
 import ffmpeg4discord.__main__ as mainmod
 from ffmpeg4discord.versioning import VersionInfo
@@ -106,3 +108,88 @@ def test_main_web_starts_flask_on_port(run_main, monkeypatch):
     run_main(web=True, approx=True, port=5000)
     mainmod.threading.Thread.assert_called_once()
     app.run.assert_called_once_with("0.0.0.0", port=5000)
+
+
+# --- web UI routes ---
+
+
+@pytest.fixture
+def web(monkeypatch, probe):
+    """Run main() in web mode with a real TwoPass, then return a Flask test client instead of starting a server."""
+    apps = []
+
+    class CapturedFlask(Flask):
+        def run(self, *args, **kwargs):
+            apps.append(self)
+
+    cli_args = {"web": True, "approx": False, "port": 5000, "filename": "file.mp4", "target_filesize": 10}
+    monkeypatch.setattr(mainmod, "check_for_update", lambda **_: VersionInfo("0.1.9", "0.1.9"))
+    monkeypatch.setattr(mainmod.arguments, "get_args", lambda: cli_args)
+    monkeypatch.setattr(mainmod, "Flask", CapturedFlask)
+    monkeypatch.setattr(mainmod.threading, "Thread", MagicMock())
+    monkeypatch.setattr(mainmod, "twopass_loop", MagicMock())
+    mainmod.main()
+    return SimpleNamespace(client=apps[0].test_client(), twopass_loop=mainmod.twopass_loop)
+
+
+def encode_form(**overrides):
+    """The form the web UI posts to /encode, with the values a user would leave in place."""
+    form = {
+        "startTime": "10",
+        "endTime": "40",
+        "target_filesize": "8",
+        "resolution": "",
+        "crop": "",
+        "output": "out.mp4",
+        "codec": "x264",
+        "framerate": "",
+        "audio_br": "96",
+        "include_audio": "True",
+        "amix_mode": "none",
+    }
+    return {**form, **overrides}
+
+
+def test_index_page_renders(web):
+    response = web.client.get("/")
+    assert response.status_code == 200
+    assert b"ffmpeg4discord v0.1.9" in response.data
+    assert b"file.mp4" in response.data
+
+
+def test_encode_applies_the_form_to_twopass(web):
+    response = web.client.post("/encode", data=encode_form(framerate="30", approx="True"))
+    assert response.status_code == 200
+
+    kwargs = web.twopass_loop.call_args.kwargs
+    tp = kwargs["twopass"]
+    assert tp.times == {"ss": "00:00:10", "to": "00:00:40"}
+    assert tp.length == 30
+    assert tp.target_filesize == 8
+    assert tp.framerate == 30
+    assert tp.audio_br == 96000
+    assert tp.no_audio is False
+    assert kwargs == {"twopass": tp, "target_filesize": 8, "approx": True}
+
+
+def test_encode_unchecked_audio_means_no_audio(web):
+    form = encode_form()
+    del form["include_audio"]
+    web.client.post("/encode", data=form)
+    assert web.twopass_loop.call_args.kwargs["twopass"].no_audio is True
+
+
+@pytest.mark.parametrize(
+    "amix_mode, amix, normalize",
+    [("none", False, False), ("mix", True, False), ("mix_normalize", True, True)],
+)
+def test_encode_amix_mode(web, amix_mode, amix, normalize):
+    web.client.post("/encode", data=encode_form(amix_mode=amix_mode))
+    tp = web.twopass_loop.call_args.kwargs["twopass"]
+    assert (tp.amix, tp.amix_normalize) == (amix, normalize)
+
+
+@pytest.mark.parametrize("astreams, expected", [(["0", "2"], [0, 2]), ([], None)])
+def test_encode_audio_stream_selection(web, astreams, expected):
+    web.client.post("/encode", data=encode_form(astreams=astreams))
+    assert web.twopass_loop.call_args.kwargs["twopass"].astreams == expected

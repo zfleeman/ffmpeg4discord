@@ -46,7 +46,8 @@ def test_update_available(current, latest, available):
 
 def test_get_current_version_falls_back_to_pyproject(monkeypatch):
     monkeypatch.setattr(versioning.metadata, "version", raise_(metadata.PackageNotFoundError))
-    assert get_current_version() is not None
+    monkeypatch.setattr(versioning, "_get_version_from_pyproject", lambda: "1.2.3")
+    assert get_current_version() == "1.2.3"
 
 
 def test_get_current_version_unexpected_error_returns_none(monkeypatch):
@@ -72,6 +73,12 @@ def test_get_version_from_pyproject_missing_file(monkeypatch):
     assert _get_version_from_pyproject() is None
 
 
+def test_get_version_from_pyproject(monkeypatch):
+    monkeypatch.setattr(versioning.Path, "exists", lambda self: True)
+    monkeypatch.setattr(versioning.Path, "read_text", lambda self, **kwargs: '[project]\nversion = "1.2.3"\n')
+    assert _get_version_from_pyproject() == "1.2.3"
+
+
 def test_get_version_from_pyproject_without_version(monkeypatch):
     monkeypatch.setattr(versioning.Path, "exists", lambda self: True)
     monkeypatch.setattr(versioning.Path, "read_text", lambda self, **kwargs: "[project]\nname='ffmpeg4discord'\n")
@@ -86,6 +93,6 @@ def test_get_version_from_pyproject_unexpected_error_returns_none(monkeypatch):
 def test_check_for_update_survives_network_failure(monkeypatch):
     monkeypatch.setattr(versioning, "get_latest_pypi_version", lambda **kwargs: None)
     info = check_for_update(timeout_s=0.01)
-    assert info.current_version is not None  # read from pyproject.toml in this repo
+    assert info.current_version is not None
     assert info.latest_version is None
     assert not info.update_available

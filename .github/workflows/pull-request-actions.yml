@@ -33,3 +33,28 @@ jobs:
 
       - name: Pytest
         run: uv run pytest --cov=ffmpeg4discord --cov-report=term-missing
+  # Runs the tests against the built wheel instead of the source folder, so a file missing from the
+  # package (like templates/web.html) fails here instead of after a PyPI release. ffmpeg is installed
+  # so the real-encode test runs too; the matrix jobs above skip it.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Build
+        run: uv build --wheel
+
+      - name: Install the wheel into a clean environment
+        run: |
+          uv venv /tmp/wheel-env
+          uv pip install --python /tmp/wheel-env dist/*.whl pytest
+
+      # importlib mode keeps the repo folder off sys.path, so `import ffmpeg4discord` loads the wheel
+      - name: Pytest against the wheel
+        run: /tmp/wheel-env/bin/pytest --import-mode=importlib -p no:cacheprovider tests

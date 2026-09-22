@@ -55,6 +55,7 @@ exclude = ["tests*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: runs a real ffmpeg encode (skip with -m \"not slow\")"]
 
 [tool.ruff]
 line-length = 120
