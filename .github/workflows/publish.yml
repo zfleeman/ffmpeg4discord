@@ -1,0 +1,33 @@
+name: Publish to PyPI
+
+# Runs when a GitHub Release is published. Uploads use PyPI Trusted Publishing, so no API token is stored.
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # Stop if the release tag (e.g. v0.2.4) doesn't match the version in pyproject.toml.
+      - name: Check tag matches version
+        run: |
+          version="$(uv version --short)"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match pyproject version ${version}"
+            exit 1
+          fi
+
+      - name: Build
+        run: uv build
+
+      - name: Publish
+        run: uv publish

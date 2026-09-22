@@ -217,3 +217,7 @@ The `ffmpeg` that `install-ffmpeg-windows` downloads includes `zscale`, and so d
 Yes, this is a simple collection of Python files using FFmpeg tricks that is masquerading as a robust Audio/Video tool. But! I use this nearly every day to quickly share videos with people on various messaging apps that have built-in video players. I don't have to share a link that embeds a video player this way, and I guess that's important to me?
 
 I like working on this! Enjoy!
+
+## License
+
+Copyright (C) 2024 Zach Fleeman. ffmpeg4discord is licensed under the [GNU General Public License v3.0 or later](LICENSE).
