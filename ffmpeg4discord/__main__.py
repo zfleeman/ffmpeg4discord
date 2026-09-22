@@ -26,6 +26,9 @@ from ffmpeg4discord import arguments
 from ffmpeg4discord.twopass import TwoPass, available_codecs, seconds_to_timestamp
 from ffmpeg4discord.versioning import check_for_update
 
+# smallest fraction the target size is cut by on each retry
+MIN_RETRY_STEP = 0.02
+
 
 def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False) -> None:
     """
@@ -62,8 +65,9 @@ def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False)
         Path(twopass.output_filename).unlink()
 
         # adjust the class's target file size to set a lower bitrate for the next run
-        # scale by how far off we are to avoid tiny incremental retries
-        adjustment_ratio = target_filesize / current_filesize
+        # scale by how far off we are, but always cut by at least MIN_RETRY_STEP so an output
+        # that lands just over the target doesn't retry at a near-identical bitrate
+        adjustment_ratio = min(target_filesize / current_filesize, 1 - MIN_RETRY_STEP)
         twopass.target_filesize = max(twopass.target_filesize * adjustment_ratio, 0.1)
 
     # set the final message
