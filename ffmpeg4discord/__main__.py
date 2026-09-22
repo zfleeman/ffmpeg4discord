@@ -23,7 +23,7 @@ from textwrap import dedent
 from flask import Flask, render_template, request, url_for
 
 from ffmpeg4discord import arguments
-from ffmpeg4discord.twopass import TwoPass, seconds_to_timestamp
+from ffmpeg4discord.twopass import TwoPass, available_codecs, seconds_to_timestamp
 from ffmpeg4discord.versioning import check_for_update
 
 
@@ -137,6 +137,7 @@ def main() -> None:
     twopass = TwoPass(**args)
 
     if web:
+        codecs = available_codecs()
         app = Flask(__name__, static_folder=path.parent)
 
         @app.route("/")
@@ -145,6 +146,7 @@ def main() -> None:
                 "web.html",
                 file_url=url_for("static", filename=path.name),
                 twopass=twopass,
+                codecs=codecs,
                 version_info=version_info,
                 alert_hidden=True,
                 approx=approx,
@@ -205,6 +207,7 @@ def main() -> None:
                 "web.html",
                 file_url=url_for("static", filename=path.name),
                 twopass=twopass,
+                codecs=codecs,
                 version_info=version_info,
                 approx=approx,
             )
