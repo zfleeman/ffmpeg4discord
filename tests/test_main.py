@@ -80,7 +80,7 @@ def test_open_browser(monkeypatch):
     monkeypatch.setattr(mainmod.time, "sleep", MagicMock())
     monkeypatch.setattr(mainmod.webbrowser, "open", MagicMock())
     mainmod.open_browser(1234)
-    mainmod.webbrowser.open.assert_called_once_with("http://localhost:1234")
+    mainmod.webbrowser.open.assert_called_once_with("http://127.0.0.1:1234")
 
 
 def test_cleanup_files(tmp_path, monkeypatch):
@@ -107,16 +107,19 @@ def test_main_web_starts_flask_on_port(run_main, monkeypatch):
     monkeypatch.setattr(mainmod.threading, "Thread", MagicMock())
     run_main(web=True, approx=True, port=5000)
     mainmod.threading.Thread.assert_called_once()
-    app.run.assert_called_once_with("0.0.0.0", port=5000)
+    app.run.assert_called_once_with("127.0.0.1", port=5000)
 
 
 # --- web UI routes ---
 
 
 @pytest.fixture
-def web(monkeypatch, probe):
+def web(monkeypatch, probe, tmp_path):
     """Run main() in web mode with a real TwoPass, then return a Flask test client instead of starting a server."""
     apps = []
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "file.mp4").write_bytes(b"video bytes")
+    (tmp_path / "secret.txt").write_text("not for the browser")
 
     class CapturedFlask(Flask):
         def run(self, *args, **kwargs):
@@ -154,7 +157,12 @@ def test_index_page_renders(web):
     response = web.client.get("/")
     assert response.status_code == 200
     assert b"ffmpeg4discord v0.1.9" in response.data
-    assert b"file.mp4" in response.data
+    assert b'src="/video"' in response.data
+
+
+def test_video_route_serves_only_the_input_file(web):
+    assert web.client.get("/video").data == b"video bytes"
+    assert web.client.get("/static/secret.txt").status_code == 404
 
 
 def test_encode_applies_the_form_to_twopass(web):
