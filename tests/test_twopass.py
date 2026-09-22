@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import ffmpeg
 
 from ffmpeg4discord.twopass import (
+    CODEC_ENCODERS,
     TwoPass,
     available_codecs,
     fps_mode_flag,
@@ -323,13 +324,25 @@ class TestTwoPass(unittest.TestCase):
 
         with patch.dict(
             "ffmpeg4discord.twopass.CODEC_OVERRIDES",
-            {"x264": {"both": {"pix_fmt": "yuv420p"}}},
+            {"x264": {"both": {"preset": "slow"}}},
             clear=False,
         ):
             params = tp._generate_params(codec="x264")
 
-        self.assertEqual(params["pass1"]["pix_fmt"], "yuv420p")
-        self.assertEqual(params["pass2"]["pix_fmt"], "yuv420p")
+        self.assertEqual(params["pass1"]["preset"], "slow")
+        self.assertEqual(params["pass2"]["preset"], "slow")
+
+    def test_generate_params_forces_yuv420p_for_every_codec(self) -> None:
+        """10-bit and 4:4:4 sources must be converted to 8-bit 4:2:0 so the output plays everywhere."""
+
+        tp = self.make_twopass()
+        tp.bitrate_dict = {"b:v": 1000000}
+
+        for codec in CODEC_ENCODERS:
+            with self.subTest(codec=codec):
+                params = tp._generate_params(codec=codec)
+                self.assertEqual(params["pass1"]["pix_fmt"], "yuv420p")
+                self.assertEqual(params["pass2"]["pix_fmt"], "yuv420p")
 
     def test_generate_params_x265_uses_x265_params_and_removes_pass(self) -> None:
         """Covers twopass.py lines 262-265 (x265 two-pass special casing).
