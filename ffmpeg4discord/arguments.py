@@ -94,10 +94,12 @@ def build_parser() -> ArgumentParser:
         help="The job will not loop to output the file under the target size.",
     )
     parser.add_argument(
-        "--from", help="Start clipping at this timestamp or percentage of the video, e.g. 00:00:10 or 75%%"
+        "--from",
+        help="Start clipping at this timestamp, seconds, or percentage of the video, e.g. 00:00:10.5, 90, or 75%%",
     )
     parser.add_argument(
-        "--to", help="Stop clipping at this timestamp or percentage of the video, e.g. 00:00:20 or 95%%"
+        "--to",
+        help="Stop clipping at this timestamp, seconds, or percentage of the video, e.g. 00:00:20.25, 95, or 95%%",
     )
     parser.add_argument(
         "-s",

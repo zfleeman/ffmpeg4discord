@@ -52,12 +52,33 @@ def passes(monkeypatch):
 
 # --- timestamp helpers ---
 
-TIMESTAMPS = [("01:02:03", 3723), ("00:00:00", 0), ("10:00:00", 36000)]
+TIMESTAMPS = [("01:02:03", 3723), ("00:00:00", 0), ("10:00:00", 36000), ("00:01:30.250", 90.25)]
 
 
 @pytest.mark.parametrize("timestamp, seconds", TIMESTAMPS)
 def test_seconds_from_ts_string(timestamp, seconds):
     assert seconds_from_ts_string(timestamp) == seconds
+
+
+@pytest.mark.parametrize(
+    "timestamp, seconds",
+    [("1:30", 90), ("01:30.5", 90.5), ("90", 90), ("90.25", 90.25), ("5.750", 5.75), ("1:02:03.004", 3723.004)],
+)
+def test_seconds_from_ts_string_short_forms(timestamp, seconds):
+    assert seconds_from_ts_string(timestamp) == pytest.approx(seconds)
+
+
+@pytest.mark.parametrize("timestamp", ["", "abc", "1:2:3:4", "-5", "00:-1:00", "1::2", "inf", "nan"])
+def test_seconds_from_ts_string_invalid(timestamp):
+    with pytest.raises(ValueError, match="Invalid time"):
+        seconds_from_ts_string(timestamp)
+
+
+@pytest.mark.parametrize(
+    "seconds, timestamp", [(5.75, "00:00:05.750"), (1.9999999, "00:00:02"), (0.001, "00:00:00.001")]
+)
+def test_seconds_to_timestamp_milliseconds(seconds, timestamp):
+    assert seconds_to_timestamp(seconds) == timestamp
 
 
 @pytest.mark.parametrize("timestamp, seconds", TIMESTAMPS)
@@ -71,7 +92,7 @@ def test_seconds_to_timestamp(timestamp, seconds):
         ("75%", 60, "00:00:45"),
         ("0%", 60, "00:00:00"),
         ("100%", 60, "00:01:00"),
-        ("33.3%", 100, "00:00:33"),
+        ("33.3%", 100, "00:00:33.300"),
         ("00:00:10", 60, "00:00:10"),  # timestamps pass through unchanged
     ],
 )
@@ -96,6 +117,14 @@ def test_probe_values_are_read(make_twopass):
     assert tp.audio_br == 128000
 
 
+def test_fractional_duration_is_kept(probe, make_twopass):
+    # rounding 5.9 s down to 5 would budget about 18% too much bitrate
+    probe["format"]["duration"] = "5.9"
+    tp = make_twopass()
+    assert tp.length == 5.9
+    assert tp.times == {"ss": "00:00:00", "to": "00:00:05.900"}
+
+
 def test_audio_br_is_converted_to_bps(make_twopass):
     assert make_twopass(audio_br=128).audio_br == 128000
 
@@ -115,6 +144,7 @@ def test_warns_when_no_audio_stream(probe, make_twopass, caplog):
         ({}, "00:00:00", "00:02:00", 120),
         ({"from": "50%", "to": "75%"}, "00:01:00", "00:01:30", 30),
         ({"from": "00:00:30", "to": "50%"}, "00:00:30", "00:01:00", 30),
+        ({"from": "1:05.5", "to": "90.25"}, "00:01:05.500", "00:01:30.250", 24.75),
     ],
 )
 def test_trim_times(make_twopass, times, ss, to, length):

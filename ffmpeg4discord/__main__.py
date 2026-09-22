@@ -164,8 +164,9 @@ def main() -> None:
         @app.route("/encode", methods=["POST"])
         def form_twopass():
             # generate new times from the selection
-            ss = int(request.form.get("startTime"))
-            to = int(request.form.get("endTime"))
+            ss = float(request.form.get("startTime"))
+            to = float(request.form.get("endTime"))
+            twopass.from_seconds, twopass.to_seconds = ss, to
             twopass.length = to - ss
             twopass.times = {
                 "ss": seconds_to_timestamp(ss),
