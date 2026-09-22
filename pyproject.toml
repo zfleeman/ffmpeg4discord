@@ -42,6 +42,8 @@ install-ffmpeg-windows = "ffmpeg4discord.windows:install"
 [dependency-groups]
 dev = [
     "coverage==7.10.2",
+    "pytest==9.1.1",
+    "pytest-cov==6.3.0",
     "ruff==0.12.1",
 ]
 
@@ -50,6 +52,9 @@ ffmpeg4discord = ["templates/*.html"]
 
 [tool.setuptools.packages.find]
 exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120

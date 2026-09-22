@@ -1,16 +1,15 @@
-# pylint: disable=W0212, C0114, C0115, C0116
 import json
+import logging
 import socket
 import sys
-import tempfile
-import unittest
-from argparse import ArgumentParser
-from pathlib import Path
-from unittest.mock import patch
 
+import pytest
+
+from ffmpeg4discord import arguments
 from ffmpeg4discord.arguments import (
     _assign_port,
     _extract_times,
+    _merge_config_args,
     _normalize_amix_args,
     _parse_astreams,
     _search_for_default_config,
@@ -22,529 +21,285 @@ from ffmpeg4discord.arguments import (
 )
 
 
-class TestArguments(unittest.TestCase):
-    def setUp(self) -> None:
-        self.parser = build_parser()
-        self.default_args = {
-            "filename": "file.mp4",
-            "output": "",
-            "target_filesize": 20,
-            "filename_times": False,
-            "audio_br": 96,
-            "codec": "libx264",
-            "approx": False,
-            "from": None,
-            "to": None,
-            "verbose": False,
-            "crop": "",
-            "resolution": "",
-            "framerate": None,
-            "config": None,
-            "web": False,
-            "port": None,
-            "astreams": None,
-        }
-        self.default_config = {
-            "output": "mydir",
-            "target_filesize": 20,
-            "audio_br": 128,
-            "codec": "vp9",
-            "filename_times": True,
-            "approx": True,
-            "from": "00:00:10",
-            "to": "00:00:20",
-            "verbose": True,
-            "crop": "10x10x100x100",
-            "resolution": "1280x720",
-            "framerate": 60,
-            "web": True,
-            "port": 5050,
-            "astreams": "0,2",
-        }
+@pytest.fixture
+def parser():
+    return build_parser()
 
-    def tearDown(self) -> None:
-        pass
 
-    def get_args(self, overrides=None):
-        args = self.default_args.copy()
-        if overrides:
-            args.update(overrides)
-        return args
+@pytest.fixture
+def default_args(parser):
+    """The args dict argparse produces for `ff4d file.mp4`, before any config file or post-processing."""
+    return vars(parser.parse_args(["file.mp4"]))
 
-    def get_config(self, overrides=None):
-        config = self.default_config.copy()
-        if overrides:
-            config.update(overrides)
-        return config
 
-    def test_build_parser_returns_argumentparser(self):
-        self.assertIsInstance(self.parser, ArgumentParser)
+@pytest.fixture
+def write_config(tmp_path):
+    """Write a dict to a JSON file in a temporary folder and return its path."""
 
-    def test_parser_required_filename(self):
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args([])  # filename is required
+    def _write(data, name="config.json"):
+        path = tmp_path / name
+        path.write_text(json.dumps(data))
+        return path
 
-    def test_parser_accepts_filename(self):
-        args = self.parser.parse_args(["input.mp4"])
-        self.assertEqual(args.filename, "input.mp4")
+    return _write
 
-    def test_parser_defaults_and_types(self):
-        args = self.parser.parse_args(["file.mp4"])
-        self.assertEqual(args.output, "")
-        self.assertFalse(args.filename_times)
-        self.assertFalse(args.approx)
-        self.assertEqual(args.target_filesize, 20)
-        self.assertEqual(args.audio_br, 96)
-        self.assertEqual(args.codec, "x264")
-        self.assertFalse(args.verbose)
-        self.assertEqual(args.crop, "")
-        self.assertEqual(args.resolution, "")
-        self.assertIsNone(args.framerate)
-        self.assertIsNone(args.config)
-        self.assertFalse(args.web)
-        self.assertIsNone(args.port)
-        self.assertIsNone(getattr(args, "astreams", None))
 
-    def test_parser_optional_arguments(self):
-        args = self.parser.parse_args(
-            [
-                "file.mp4",
-                "-o",
-                "outdir",
-                "--filename-times",
-                "--approx",
-                "--from",
-                "00:01:00",
-                "--to",
-                "00:02:00",
-                "-s",
-                "20",
-                "-a",
-                "128",
-                "-c",
-                "vp9",
-                "-v",
-                "-x",
-                "10x10x100x100",
-                "-r",
-                "1280x720",
-                "-f",
-                "30",
-                "--config",
-                "config.json",
-                "--web",
-                "-p",
-                "5050",
-                "--astreams",
-                "0,2",
-            ]
-        )
-        self.assertEqual(args.output, "outdir")
-        self.assertTrue(args.filename_times)
-        self.assertTrue(args.approx)
-        self.assertEqual(getattr(args, "from"), "00:01:00")
-        self.assertEqual(args.to, "00:02:00")
-        self.assertEqual(args.target_filesize, 20)
-        self.assertEqual(args.audio_br, 128)
-        self.assertEqual(args.codec, "vp9")
-        self.assertTrue(args.verbose)
-        self.assertEqual(args.crop, "10x10x100x100")
-        self.assertEqual(args.resolution, "1280x720")
-        self.assertEqual(args.framerate, 30)
-        self.assertEqual(args.config, "config.json")
-        self.assertTrue(args.web)
-        self.assertEqual(args.port, 5050)
-        self.assertEqual(args.astreams, "0,2")
+# --- the argument parser ---
 
-    def test_parser_boolean_optional_action_false(self):
-        args = self.parser.parse_args(
-            [
-                "file.mp4",
-                "--no-filename-times",
-                "--no-approx",
-                "--no-web",
-                "--no-verbose",
-            ]
-        )
-        self.assertFalse(args.filename_times)
-        self.assertFalse(args.approx)
-        self.assertFalse(args.web)
-        self.assertFalse(args.verbose)
 
-    def test_parser_codec_choices(self):
-        args = self.parser.parse_args(["file.mp4", "-c", "x264"])
-        self.assertEqual(args.codec, "x264")
-        args = self.parser.parse_args(["file.mp4", "-c", "vp9"])
-        self.assertEqual(args.codec, "vp9")
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["file.mp4", "-c", "invalid_codec"])
+def test_parser_requires_filename(parser):
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
 
-    def test_is_port_in_use_false_for_unused_port(self):
-        # Find an unused port by binding to port 0 (OS assigns a free port)
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("localhost", 0))
-            unused_port = s.getsockname()[1]
-        # After closing the socket, the port should be free
-        self.assertFalse(is_port_in_use(unused_port))
 
-    def test_is_port_in_use_true_for_used_port(self):
-        # Bind to a port and keep it open to simulate a port in use
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def test_parser_defaults(default_args):
+    assert default_args["filename"] == "file.mp4"
+    assert default_args["output"] == ""
+    assert default_args["target_filesize"] == 20
+    assert default_args["audio_br"] == 96
+    assert default_args["codec"] == "x264"
+    assert default_args["crop"] == ""
+    assert default_args["resolution"] == ""
+    for flag in ("filename_times", "approx", "verbose", "web"):
+        assert default_args[flag] is False
+    for option in ("framerate", "config", "port", "astreams"):
+        assert default_args[option] is None
+
+
+def test_parser_optional_arguments(parser):
+    args = parser.parse_args(
+        [
+            "file.mp4",
+            *("-o", "outdir", "--filename-times", "--approx"),
+            *("--from", "00:01:00", "--to", "00:02:00"),
+            *("-s", "20", "-a", "128", "-c", "vp9", "-v"),
+            *("-x", "10x10x100x100", "-r", "1280x720", "-f", "30"),
+            *("--config", "config.json", "--web", "-p", "5050", "--astreams", "0,2"),
+        ]
+    )
+    expected = {
+        "output": "outdir",
+        "filename_times": True,
+        "approx": True,
+        "from": "00:01:00",
+        "to": "00:02:00",
+        "target_filesize": 20,
+        "audio_br": 128,
+        "codec": "vp9",
+        "verbose": True,
+        "crop": "10x10x100x100",
+        "resolution": "1280x720",
+        "framerate": 30,
+        "config": "config.json",
+        "web": True,
+        "port": 5050,
+        "astreams": "0,2",
+    }
+    # every expected key/value pair appears in the parsed args
+    assert expected.items() <= vars(args).items()
+
+
+def test_parser_no_flags_turn_options_off(parser):
+    args = parser.parse_args(["file.mp4", "--no-filename-times", "--no-approx", "--no-web", "--no-verbose"])
+    assert not args.filename_times
+    assert not args.approx
+    assert not args.web
+    assert not args.verbose
+
+
+@pytest.mark.parametrize("codec", ["x264", "vp9"])
+def test_parser_accepts_codec(parser, codec):
+    assert parser.parse_args(["file.mp4", "-c", codec]).codec == codec
+
+
+def test_parser_rejects_unknown_codec(parser):
+    with pytest.raises(SystemExit):
+        parser.parse_args(["file.mp4", "-c", "invalid_codec"])
+
+
+# --- web UI port ---
+
+
+def test_is_port_in_use_false_for_unused_port():
+    # Binding to port 0 makes the OS pick a free port, which is free again once the socket closes.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("localhost", 0))
-        used_port = s.getsockname()[1]
+        unused_port = s.getsockname()[1]
+    assert not is_port_in_use(unused_port)
+
+
+def test_is_port_in_use_true_for_used_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))
         s.listen(1)
-        try:
-            self.assertTrue(is_port_in_use(used_port))
-        finally:
-            s.close()
-
-    def test_load_config_valid_json(self):
-        config_data = {"key1": "value1", "key2": 2}
-        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as tmp:
-            json.dump(config_data, tmp)
-            tmp_path = Path(tmp.name)
-        try:
-            loaded = load_config(tmp_path)
-            self.assertEqual(loaded, config_data)
-        finally:
-            tmp_path.unlink()
-
-    def test_load_config_invalid_json_raises(self):
-        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as tmp:
-            tmp.write("{invalid json}")
-            tmp_path = Path(tmp.name)
-        try:
-            with self.assertRaises(json.JSONDecodeError):
-                load_config(tmp_path)
-        finally:
-            tmp_path.unlink()
-
-    def test_load_config_file_not_found(self):
-        non_existent = Path("this_file_should_not_exist_12345.json")
-        with self.assertRaises(FileNotFoundError):
-            load_config(non_existent)
-
-    def test_update_args_from_config_overwrites_default_and_empty(self):
-        parser = build_parser()
-        # args with default and empty values
-        args = {
-            "output": "",
-            "target_filesize": 20,
-            "audio_br": 96,
-            "filename": "file.mp4",
-            "codec": "x264",
-            "filename_times": False,
-            "approx": False,
-            "from": None,
-            "to": None,
-            "verbose": False,
-            "crop": "",
-            "resolution": "",
-            "framerate": None,
-            "config": None,
-            "web": False,
-            "port": None,
-            "astreams": None,
-        }
-        config = {
-            "output": "mydir",
-            "target_filesize": 20,
-            "audio_br": 128,
-            "codec": "vp9-speed",
-            "filename_times": True,
-            "approx": True,
-            "from": "00:00:10",
-            "to": "00:00:20",
-            "verbose": True,
-            "crop": "10x10x100x100",
-            "resolution": "1280x720",
-            "framerate": 60,
-            "web": True,
-            "port": 5050,
-            "astreams": "0,2",
-        }
-        update_args_from_config(args, config, parser)
-        self.assertEqual(args["output"], "mydir")
-        self.assertEqual(args["target_filesize"], 20)
-        self.assertEqual(args["audio_br"], 128)
-        self.assertEqual(args["codec"], "vp9-speed")
-        self.assertTrue(args["filename_times"])
-        self.assertTrue(args["approx"])
-        self.assertEqual(args["from"], "00:00:10")
-        self.assertEqual(args["to"], "00:00:20")
-        self.assertTrue(args["verbose"])
-        self.assertEqual(args["crop"], "10x10x100x100")
-        self.assertEqual(args["resolution"], "1280x720")
-        self.assertEqual(args["framerate"], 60)
-        self.assertTrue(args["web"])
-        self.assertEqual(args["port"], 5050)
-
-    def test_update_args_from_config_missing_keys(self):
-        parser = build_parser()
-        args = {
-            "output": "",
-            "filename": "file.mp4",
-        }
-        config = {
-            "output": "mydir",
-            "target_filesize": 20,
-        }
-        # Missing keys should be inserted without raising
-        update_args_from_config(args, config, parser)
-        self.assertEqual(args["output"], "mydir")
-        self.assertEqual(args["target_filesize"], 20)
-
-    def test_merge_config_args_merges_and_removes_config(self):
-        # Prepare args with config file
-        parser = build_parser()
-        config_data = {
-            "output": "from_config",
-            "target_filesize": 20,
-            "filename_times": True,
-        }
-        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as tmp:
-            json.dump(config_data, tmp)
-            tmp_path = Path(tmp.name)
-        try:
-            args = {
-                "filename": "file.mp4",
-                "output": "",
-                "target_filesize": 20,
-                "filename_times": False,
-                "config": str(tmp_path),
-                "audio_br": 96,
-                "codec": "libx264",
-                "approx": False,
-                "from": None,
-                "to": None,
-                "verbose": False,
-                "crop": "",
-                "resolution": "",
-                "framerate": None,
-                "web": False,
-                "port": None,
-                "astreams": None,
-            }
-            result = __import__("ffmpeg4discord.arguments").arguments._merge_config_args(args.copy(), parser)
-            self.assertEqual(result["output"], "from_config")
-            self.assertEqual(result["target_filesize"], 20)
-            self.assertTrue(result["filename_times"])
-            self.assertNotIn("config", result)
-        finally:
-            tmp_path.unlink()
-
-    def test_merge_config_args_no_config_key(self):
-        parser = build_parser()
-        args = {
-            "filename": "file.mp4",
-            "output": "",
-            "target_filesize": 20,
-            "filename_times": False,
-            "audio_br": 96,
-            "codec": "libx264",
-            "approx": False,
-            "from": None,
-            "to": None,
-            "verbose": False,
-            "crop": "",
-            "resolution": "",
-            "framerate": None,
-            "web": False,
-            "port": None,
-            "astreams": None,
-        }
-        result = __import__("ffmpeg4discord.arguments").arguments._merge_config_args(args.copy(), parser)
-        self.assertNotIn("config", result)
-        self.assertEqual(result["output"], "")
-
-    def test_merge_config_args_config_file_not_found(self):
-        parser = build_parser()
-        args = {
-            "filename": "file.mp4",
-            "output": "",
-            "target_filesize": 20,
-            "filename_times": False,
-            "config": "nonexistent_config_file_12345.json",
-            "audio_br": 96,
-            "codec": "libx264",
-            "approx": False,
-            "from": None,
-            "to": None,
-            "verbose": False,
-            "crop": "",
-            "resolution": "",
-            "framerate": None,
-            "web": False,
-            "port": None,
-            "astreams": None,
-        }
-        with self.assertRaises(FileNotFoundError):
-            __import__("ffmpeg4discord.arguments").arguments._merge_config_args(args.copy(), parser)
-
-    def test_assign_port_removes_port_when_web_false(self):
-        args = {"web": False, "port": 5555}
-        result = _assign_port(args)
-        self.assertNotIn("port", result)
-
-    def test_assign_port_assigns_and_checks_port(self):
-        # Patch is_port_in_use to simulate port in use once, then free
-        import ffmpeg4discord.arguments as arguments_mod  # pylint: disable=C0415
-
-        calls = []
-
-        def fake_is_port_in_use(port):
-            calls.append(port)
-            return len(calls) == 1  # First call: in use, second: free
-
-        old_is_port_in_use = arguments_mod.is_port_in_use
-        arguments_mod.is_port_in_use = fake_is_port_in_use
-        try:
-            args = {"web": True, "port": 5555}
-            result = _assign_port(args)
-            self.assertIn("port", result)
-            self.assertNotEqual(result["port"], 5555)  # Should not be the first port if in use
-            self.assertTrue(5000 <= result["port"] <= 6000)
-        finally:
-            arguments_mod.is_port_in_use = old_is_port_in_use
-
-    def test_extract_times_both_from_and_to(self):
-        args = {"from": "00:00:10", "to": "00:00:20"}
-        result = _extract_times(args)
-        self.assertEqual(result["times"], {"from": "00:00:10", "to": "00:00:20"})
-        self.assertNotIn("from", result)
-        self.assertNotIn("to", result)
-
-    def test_extract_times_only_from(self):
-        args = {"from": "00:00:10"}
-        result = _extract_times(args)
-        self.assertEqual(result["times"], {"from": "00:00:10"})
-        self.assertNotIn("from", result)
-        self.assertNotIn("to", result)
-
-    def test_extract_times_only_to(self):
-        args = {"to": "00:00:20"}
-        result = _extract_times(args)
-        self.assertEqual(result["times"], {"to": "00:00:20"})
-        self.assertNotIn("from", result)
-        self.assertNotIn("to", result)
-
-    def test_extract_times_neither(self):
-        args = {}
-        result = _extract_times(args)
-        self.assertEqual(result["times"], {})
-        self.assertNotIn("from", result)
-        self.assertNotIn("to", result)
-
-    def test_parse_astreams_valid(self):
-        args = {"astreams": "0, 2,2"}
-        result = _parse_astreams(args)
-        self.assertEqual(result["astreams"], [0, 2])
-
-    def test_parse_astreams_invalid(self):
-        args = {"astreams": "0, no"}
-        with self.assertLogs(level="ERROR") as cm:
-            result = _parse_astreams(args)
-        self.assertIsNone(result["astreams"])
-        self.assertTrue(any("invalid --astreams format" in msg.lower() for msg in cm.output))
-
-    def test_parse_astreams_empty_string(self):
-        args = {"astreams": ""}
-        result = _parse_astreams(args)
-        self.assertIsNone(result["astreams"])
-
-    def test_parse_astreams_list_valid(self):
-        args = {"astreams": ["0", 2, "2"]}
-        result = _parse_astreams(args)
-        # Note: list-input mode does not de-dupe; normalize loop does.
-        self.assertEqual(result["astreams"], [0, 2])
-
-    def test_parse_astreams_list_invalid(self):
-        args = {"astreams": ["nope"]}
-        with self.assertLogs(level="ERROR") as cm:
-            result = _parse_astreams(args)
-        self.assertIsNone(result["astreams"])
-        self.assertTrue(any("invalid astreams list" in msg.lower() for msg in cm.output))
-
-    def test_parse_astreams_negative_index_warns_and_is_ignored(self):
-        args = {"astreams": "0,-1,2"}
-        with self.assertLogs(level="WARNING") as cm:
-            result = _parse_astreams(args)
-        self.assertEqual(result["astreams"], [0, 2])
-        self.assertTrue(any("ignoring negative audio stream index" in msg.lower() for msg in cm.output))
-
-    def test_normalize_amix_args_implies_amix(self):
-        args = {"amix": False, "amix_normalize": True}
-        result = _normalize_amix_args(args)
-        self.assertTrue(result["amix"])
-
-    def test_search_for_default_config_linux_config_found(self):
-        args = {"config": None, "no_config": False}
-        with (
-            patch("ffmpeg4discord.arguments.sys.platform", "linux"),
-            patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
-        ):
-            mock_user_config_path.return_value = Path("/tmp")
-            with (
-                patch.object(Path, "exists", return_value=True),
-                patch.object(Path, "is_file", return_value=True),
-            ):
-                result = _search_for_default_config(args)
-        self.assertEqual(result["config"], Path("/tmp/ffmpeg4discord.json"))
-
-    def test_search_for_default_config_non_linux_config_found(self):
-        args = {"config": None, "no_config": False}
-        with (
-            patch("ffmpeg4discord.arguments.sys.platform", "Windows"),
-            patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
-        ):
-            mock_user_config_path.return_value = Path("/tmp")
-            with (
-                patch.object(Path, "exists", return_value=True),
-                patch.object(Path, "is_file", return_value=True),
-            ):
-                result = _search_for_default_config(args)
-        self.assertEqual(result["config"], Path("/tmp/ffmpeg4discord.json"))
-
-    def test_search_for_default_config_preserves_explicit_config(self):
-        args = {"config": "custom.json", "no_config": False}
-        self.assertIs(_search_for_default_config(args), args)
-
-    def test_search_for_default_config_preserves_no_config(self):
-        args = {"config": None, "no_config": True}
-        self.assertIs(_search_for_default_config(args), args)
-
-    def test_search_for_default_config_no_defaults_found(self):
-        args = {"config": None, "no_config": False}
-        with (
-            patch("ffmpeg4discord.arguments.sys.platform", "darwin"),
-            patch("ffmpeg4discord.arguments.platformdirs.user_config_path") as mock_user_config_path,
-        ):
-            mock_user_config_path.return_value = Path("/tmp")
-            with (
-                patch.object(Path, "exists", return_value=False),
-                patch.object(Path, "is_file", return_value=False),
-            ):
-                with self.assertLogs(level="INFO") as cm:
-                    result = _search_for_default_config(args)
-        self.assertIsNone(result.get("config"))
-        self.assertTrue(any("no default configuration files found" in msg.lower() for msg in cm.output))
-
-    def test_get_args_parses_astreams_and_amix_normalize(self):
-        test_argv = ["prog", "file.mp4", "--amix-normalize", "--astreams", "0,1"]
-        with patch.object(sys, "argv", test_argv):
-            args = get_args()
-        self.assertEqual(args["astreams"], [0, 1])
-        self.assertTrue(args["amix_normalize"])
-        self.assertTrue(args["amix"])  # implied by normalize
-
-    def test_get_args_basic(self):
-        test_argv = ["prog", "file.mp4", "-o", "outdir", "--target-filesize", "20"]
-        with patch.object(sys, "argv", test_argv):
-            args = get_args()
-            self.assertEqual(args["filename"], "file.mp4")
-            self.assertEqual(args["output"], "outdir")
-            self.assertEqual(args["target_filesize"], 20)
+        assert is_port_in_use(s.getsockname()[1])
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_assign_port_removes_port_when_web_is_off():
+    assert "port" not in _assign_port({"web": False, "port": 5555})
+
+
+def test_assign_port_picks_a_new_port_when_taken(monkeypatch):
+    # the requested port is taken, and the next random pick is free
+    monkeypatch.setattr(arguments, "is_port_in_use", lambda port: port == 5555)
+    port = _assign_port({"web": True, "port": 5555})["port"]
+    assert port != 5555
+    assert 5000 <= port <= 6000
+
+
+# --- config files ---
+
+
+def test_load_config_valid_json(write_config):
+    data = {"key1": "value1", "key2": 2}
+    assert load_config(write_config(data)) == data
+
+
+def test_load_config_invalid_json_raises(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text("{invalid json}")
+    with pytest.raises(json.JSONDecodeError):
+        load_config(path)
+
+
+def test_load_config_missing_file_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_config(tmp_path / "missing.json")
+
+
+def test_update_args_from_config_overwrites_defaults(parser, default_args):
+    config = {
+        "output": "mydir",
+        "audio_br": 128,
+        "codec": "vp9-speed",
+        "filename_times": True,
+        "from": "00:00:10",
+        "framerate": 60,
+        "port": 5050,
+    }
+    update_args_from_config(default_args, config, parser)
+    assert config.items() <= default_args.items()
+
+
+def test_update_args_from_config_keeps_values_set_on_the_command_line(parser):
+    args = vars(parser.parse_args(["file.mp4", "-a", "64"]))
+    update_args_from_config(args, {"audio_br": 128}, parser)
+    assert args["audio_br"] == 64
+
+
+def test_update_args_from_config_adds_missing_keys(parser):
+    args = {"output": "", "filename": "file.mp4"}
+    update_args_from_config(args, {"output": "mydir", "target_filesize": 20}, parser)
+    assert args == {"output": "mydir", "filename": "file.mp4", "target_filesize": 20}
+
+
+def test_merge_config_args_merges_and_removes_config(parser, default_args, write_config):
+    default_args["config"] = str(write_config({"output": "from_config", "filename_times": True}))
+    result = _merge_config_args(default_args, parser)
+    assert result["output"] == "from_config"
+    assert result["filename_times"] is True
+    assert "config" not in result
+
+
+def test_merge_config_args_without_config(parser, default_args):
+    result = _merge_config_args(default_args, parser)
+    assert "config" not in result
+    assert result["output"] == ""
+
+
+def test_merge_config_args_missing_file_raises(parser, default_args, tmp_path):
+    default_args["config"] = str(tmp_path / "missing.json")
+    with pytest.raises(FileNotFoundError):
+        _merge_config_args(default_args, parser)
+
+
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_search_for_default_config_found(monkeypatch, tmp_path, platform):
+    (tmp_path / "ffmpeg4discord.json").write_text("{}")
+    monkeypatch.setattr(arguments.sys, "platform", platform)
+    monkeypatch.setattr(arguments.platformdirs, "user_config_path", lambda *args: tmp_path)
+    result = _search_for_default_config({"config": None, "no_config": False})
+    assert result["config"] == tmp_path / "ffmpeg4discord.json"
+
+
+def test_search_for_default_config_none_found(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(arguments.sys, "platform", "darwin")
+    monkeypatch.setattr(arguments.platformdirs, "user_config_path", lambda *args: tmp_path)
+    with caplog.at_level(logging.INFO):
+        result = _search_for_default_config({"config": None, "no_config": False})
+    assert result["config"] is None
+    assert "no default configuration files found" in caplog.text.lower()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [{"config": "custom.json", "no_config": False}, {"config": None, "no_config": True}],
+    ids=["explicit-config", "no-config-flag"],
+)
+def test_search_for_default_config_skipped(args):
+    assert _search_for_default_config(args) is args
+
+
+# --- post-processing ---
+
+
+@pytest.mark.parametrize(
+    "args, times",
+    [
+        ({"from": "00:00:10", "to": "00:00:20"}, {"from": "00:00:10", "to": "00:00:20"}),
+        ({"from": "00:00:10"}, {"from": "00:00:10"}),
+        ({"to": "00:00:20"}, {"to": "00:00:20"}),
+        ({}, {}),
+    ],
+)
+def test_extract_times(args, times):
+    assert _extract_times(args) == {"times": times}
+
+
+@pytest.mark.parametrize(
+    "raw, parsed",
+    [
+        ("0, 2,2", [0, 2]),
+        ("", None),
+        (["0", 2, "2"], [0, 2]),  # a config file can give a list; duplicates are still removed
+    ],
+)
+def test_parse_astreams(raw, parsed):
+    assert _parse_astreams({"astreams": raw})["astreams"] == parsed
+
+
+@pytest.mark.parametrize(
+    "raw, message",
+    [("0, no", "invalid --astreams format"), (["nope"], "invalid astreams list")],
+)
+def test_parse_astreams_invalid_logs_error(caplog, raw, message):
+    assert _parse_astreams({"astreams": raw})["astreams"] is None
+    assert message in caplog.text.lower()
+
+
+def test_parse_astreams_ignores_negative_index(caplog):
+    assert _parse_astreams({"astreams": "0,-1,2"})["astreams"] == [0, 2]
+    assert "ignoring negative audio stream index" in caplog.text.lower()
+
+
+def test_amix_normalize_implies_amix():
+    assert _normalize_amix_args({"amix": False, "amix_normalize": True})["amix"] is True
+
+
+# --- get_args end to end ---
+
+
+def test_get_args_basic(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["ff4d", "file.mp4", "-o", "outdir", "--target-filesize", "20", "--no-config"])
+    args = get_args()
+    assert args["filename"] == "file.mp4"
+    assert args["output"] == "outdir"
+    assert args["target_filesize"] == 20
+
+
+def test_get_args_parses_astreams_and_amix_normalize(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["ff4d", "file.mp4", "--amix-normalize", "--astreams", "0,1", "--no-config"])
+    args = get_args()
+    assert args["astreams"] == [0, 1]
+    assert args["amix_normalize"] is True
+    assert args["amix"] is True

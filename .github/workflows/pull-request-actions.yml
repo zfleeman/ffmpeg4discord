@@ -31,5 +31,5 @@ jobs:
           uv run ruff format --check .
           uv run ruff check .
 
-      - name: Unittest
-        run: uv run python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Pytest
+        run: uv run pytest --cov=ffmpeg4discord --cov-report=term-missing
