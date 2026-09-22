@@ -44,6 +44,20 @@ class TestMain(unittest.TestCase):
         self.assertTrue(any("The output file size" in str(call) for call in mock_print.call_args_list))
         self.assertIn("Your compressed video file", tp.message)
 
+    @patch("ffmpeg4discord.__main__.cleanup_files")
+    def test_twopass_loop_min_step(self, mock_cleanup: MagicMock) -> None:
+        _ = mock_cleanup
+        tp: MagicMock = MagicMock()
+        # just over the target: the size ratio alone would barely lower the bitrate
+        tp.run.side_effect = [8.0005, 7.8]
+        tp.output_filesize = 7.8
+        tp.output_filename = "output.mp4"
+        tp.target_filesize = 8
+        tp.message = ""
+        with patch("builtins.print"):
+            mainmod.twopass_loop(tp, target_filesize=8, approx=False)
+        self.assertAlmostEqual(tp.target_filesize, 8 * (1 - mainmod.MIN_RETRY_STEP))
+
     @patch("webbrowser.open")
     @patch("time.sleep")
     def test_open_browser(self, mock_sleep: MagicMock, mock_open: MagicMock) -> None:
