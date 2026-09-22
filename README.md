@@ -64,8 +64,8 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `-r`<br>`--resolution` | off | `-r 1280x720` | Scale the output video to a specific resolution (format: `WIDTHxHEIGHT`). |
 | `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | Crop the input before encoding (format: `x_offsetx y_offsetx widthx height`). See [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). |
 | `-f`<br>`--framerate` | off | `-f 30` | Output frame rate (FPS). If you specify a value higher than the input video’s FPS, the original FPS will be kept. |
-| `--from` | No default | `--from 00:01:00` | Start time for trimming the input (timestamp format `HH:MM:SS`). |
-| `--to` | No default | `--to 00:01:20` | End time for trimming the input (timestamp format `HH:MM:SS`). |
+| `--from` | No default | `--from 00:01:00`<br>`--from 75%` | Start time for trimming the input, as a timestamp (`HH:MM:SS`) or a percentage of the video's length. Percentages work well in a config file because they adjust to each clip. |
+| `--to` | No default | `--to 00:01:20`<br>`--to 95%` | End time for trimming the input, as a timestamp (`HH:MM:SS`) or a percentage of the video's length. |
 | `--filename-times` | false | `--filename-times` | Parse From/To timestamps from the input filename. See [File Name Formatting](#file-name-formatting). |
 | `--approx` | false | `--approx` | Approximate the target size: do a single 2-pass encode and **do not** loop to get under the target. |
 | `-an`<br>`--no-audio` | false | `-an` | Do not include any audio stream in the output. (Overrides `--amix` / `--astreams`.) To explicitly re-enable audio after setting this in a config, use `--no-no-audio`. |

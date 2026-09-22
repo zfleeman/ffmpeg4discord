@@ -16,6 +16,7 @@ from ffmpeg4discord.twopass import (
     run_pass,
     seconds_from_ts_string,
     seconds_to_timestamp,
+    timestamp_from_percentage,
 )
 
 
@@ -24,6 +25,18 @@ class TestTwoPassUtils(unittest.TestCase):
         self.assertEqual(seconds_from_ts_string("01:02:03"), 3723)
         self.assertEqual(seconds_from_ts_string("00:00:00"), 0)
         self.assertEqual(seconds_from_ts_string("10:00:00"), 36000)
+
+    def test_timestamp_from_percentage(self) -> None:
+        self.assertEqual(timestamp_from_percentage("75%", 60), "00:00:45")
+        self.assertEqual(timestamp_from_percentage("0%", 60), "00:00:00")
+        self.assertEqual(timestamp_from_percentage("100%", 60), "00:01:00")
+        self.assertEqual(timestamp_from_percentage("33.3%", 100), "00:00:33")
+        self.assertEqual(timestamp_from_percentage("00:00:10", 60), "00:00:10")
+
+    def test_timestamp_from_percentage_invalid(self) -> None:
+        for value in ("abc%", "150%", "-5%"):
+            with self.assertRaises(ValueError):
+                timestamp_from_percentage(value, 60)
 
     def test_seconds_to_timestamp(self) -> None:
         self.assertEqual(seconds_to_timestamp(3723), "01:02:03")
@@ -136,6 +149,20 @@ class TestTwoPass(unittest.TestCase):
         self.assertEqual(tp.times["to"], "00:02:00")
         self.assertEqual(tp.from_seconds, 10)
         self.assertEqual(tp.length, 110)
+
+    def test_process_times_percentages(self) -> None:
+        tp = self.make_twopass(times={"from": "50%", "to": "75%"})
+        self.assertEqual(tp.times["ss"], "00:01:00")
+        self.assertEqual(tp.times["to"], "00:01:30")
+        self.assertEqual(tp.from_seconds, 60)
+        self.assertEqual(tp.to_seconds, 90)
+        self.assertEqual(tp.length, 30)
+
+    def test_process_times_mixed_percentage_and_timestamp(self) -> None:
+        tp = self.make_twopass(times={"from": "00:00:30", "to": "50%"})
+        self.assertEqual(tp.from_seconds, 30)
+        self.assertEqual(tp.to_seconds, 60)
+        self.assertEqual(tp.length, 30)
 
     def test_time_from_file_name(self) -> None:
         tp = self.make_twopass(filename=Path("000010-000030.mp4"), filename_times=True)
