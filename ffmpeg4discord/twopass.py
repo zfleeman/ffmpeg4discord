@@ -363,7 +363,18 @@ class TwoPass:
                 "Invalid clip length (length must be > 0 seconds). Check your Start/End times (start must be < end)."
             )
 
-        br = math.floor((self.target_filesize * 8192) / self.length - (self.audio_br / 1000)) * 1000
+        # No audio track is written with --no-audio, so it shouldn't take any of the size budget.
+        audio_kbps = 0 if self.no_audio or not self.audio_br else self.audio_br / 1000
+        br = math.floor((self.target_filesize * 8192) / self.length - audio_kbps) * 1000
+
+        # Long clips with small targets can leave nothing for video after audio is subtracted.
+        if br <= 0:
+            raise ValueError(
+                f"Target file size of {self.target_filesize:.2f} MiB is too small for a {self.length}-second clip "
+                f"with {audio_kbps:g} kbps audio: there is no bitrate left for video. "
+                "Try a larger target size (-s), a shorter clip, a lower audio bitrate (-a), or no audio (-an)."
+            )
+
         self.bitrate_dict = {
             "b:v": br,
             "minrate": br * 0.5,
