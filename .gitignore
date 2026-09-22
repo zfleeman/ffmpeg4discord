@@ -1,0 +1,16 @@
+# Ignore everything at the repo root, then allow back only what belongs in the repo.
+# New top-level files and folders stay untracked until they're added to this list.
+/*
+!/.gitignore
+!/.github/
+!/ffmpeg4discord/
+!/tests/
+!/LICENSE
+!/README.md
+!/pyproject.toml
+!/uv.lock
+
+# Generated files that can show up inside the allowed folders
+__pycache__/
+*.pyc
+.DS_Store
