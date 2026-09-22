@@ -9,6 +9,7 @@ Classes:
 - TwoPass: Encodes and resizes video files using FFmpeg's two-pass encoding to meet a specified target file size.
 
 Functions:
+- available_codecs: Returns the codec choices for this operating system.
 - fps_mode_flag: Returns the frame rate flag name supported by the installed ffmpeg.
 - run_pass: Runs one encoding pass and reports ffmpeg failures with a readable message.
 - seconds_from_ts_string: Converts a timestamp string into an integer representing seconds.
@@ -18,6 +19,7 @@ Functions:
 import logging
 import math
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
@@ -33,6 +35,32 @@ logging.getLogger().setLevel(logging.INFO)
 # while Windows File Explorer reports in mebibytes (but labels as MB).
 # This can cause discrepancies in reported file sizes between the two systems.
 FILE_SIZE_MULT = 0.00000095367432
+
+
+# ff4d codec names mapped to ffmpeg encoder names, ordered from most to least compatible.
+CODEC_ENCODERS = {
+    "x264": "libx264",
+    "h264_nvenc": "h264_nvenc",
+    "h264_videotoolbox": "h264_videotoolbox",
+    "x265": "libx265",
+    "hevc_nvenc": "hevc_nvenc",
+    "hevc_videotoolbox": "hevc_videotoolbox",
+    "vp9": "libvpx-vp9",
+    "av1": "libaom-av1",
+}
+
+# Hardware encoders ignore ffmpeg's two-pass stats file, so ff4d encodes them in a single pass.
+HARDWARE_CODECS = {"h264_nvenc", "hevc_nvenc", "h264_videotoolbox", "hevc_videotoolbox"}
+
+
+def available_codecs() -> list[str]:
+    """Return the codecs from `CODEC_ENCODERS` that this operating system can use.
+
+    VideoToolbox only exists on macOS, so it is hidden elsewhere. NVENC is always listed because we
+    can't cheaply tell whether an NVIDIA GPU is present; `run_pass` explains that failure if it happens.
+    """
+
+    return [c for c in CODEC_ENCODERS if "videotoolbox" not in c or sys.platform == "darwin"]
 
 
 def fps_mode_flag(probe: dict) -> str:
@@ -58,12 +86,12 @@ def fps_mode_flag(probe: dict) -> str:
     return "fps_mode" if major >= 5 else "vsync"
 
 
-def run_pass(ffoutput, pass_name: str, **run_kwargs):
+def run_pass(ffoutput, pass_name: str, hint: str = "", **run_kwargs):
     """Run a single encoding pass, replacing ffmpeg-python's detail-free exception with a useful one.
 
     ffmpeg-python raises `Error("ffmpeg error (see stderr output for detail)")`, which tells the user
     nothing. ffmpeg has already printed the real reason to the terminal, so we say where to look and
-    include the command we ran.
+    include the command we ran. `hint` adds a suggestion to the message, e.g. for hardware encoders.
     """
 
     try:
@@ -83,6 +111,7 @@ def run_pass(ffoutput, pass_name: str, **run_kwargs):
                 {command}
                 \033[0m"""
             )
+            + (f"\033[31m{hint}\033[0m\n" if hint else "")
         ) from exc
 
 
@@ -94,6 +123,8 @@ CODEC_OVERRIDES = {
     "x265": {"pass2": {"tag:v": "hvc1", "c:a": "aac"}},
     "h264_nvenc": {"pass2": {"c:a": "aac"}},
     "hevc_nvenc": {"pass2": {"tag:v": "hvc1", "c:a": "aac"}},
+    "h264_videotoolbox": {"pass2": {"c:a": "aac"}},
+    "hevc_videotoolbox": {"pass2": {"tag:v": "hvc1", "c:a": "aac"}},
     "vp9": {
         "pass2": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
     },
@@ -287,24 +318,17 @@ class TwoPass:
         :return: dictionary containing parameters for ffmpeg's first and second pass.
         """
 
-        codec_map = {
-            "x264": "libx264",
-            "x265": "libx265",
-            "vp9": "libvpx-vp9",
-            "av1": "libaom-av1",
-        }
-
         params = {
             "pass1": {
                 "pass": 1,
                 "f": "null",
                 fps_mode_flag(self.probe): "cfr",  # force CFR; flag name varies by ffmpeg version
-                "c:v": codec_map.get(codec, codec),
+                "c:v": CODEC_ENCODERS.get(codec, codec),
             },
             "pass2": {
                 "pass": 2,
                 "b:a": self.audio_br,
-                "c:v": codec_map.get(codec, codec),
+                "c:v": CODEC_ENCODERS.get(codec, codec),
                 "ac": 2,  # downmix to stereo b/c current audio compression technique doesn't like 5.1 channel tracks
                 "map_chapters": -1,  # remove chapters from output files, as it messes up total video length
             },
@@ -332,6 +356,10 @@ class TwoPass:
             _ = params["pass2"].pop("pass")
             params["pass1"]["x265-params"] = "pass=1"
             params["pass2"]["x265-params"] = "pass=2"
+        elif codec in HARDWARE_CODECS:
+            # single pass: without -pass 2, ffmpeg won't look for a stats file that was never written
+            _ = params["pass1"].pop("pass")
+            _ = params["pass2"].pop("pass")
 
         overrides = CODEC_OVERRIDES.get(codec)
         if overrides:
@@ -539,11 +567,20 @@ class TwoPass:
         # messages reach the user; "-stats" still prints the progress line either way.
         loglevel = "verbose" if self.verbose else "error"
 
-        # First Pass
-        ffoutput = ffmpeg.output(video, "pipe:", **params["pass1"])
-        ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
-        print("Performing first pass")
-        _, _ = run_pass(ffoutput, "first", capture_stdout=True)
+        hardware = self.codec in HARDWARE_CODECS
+        hint = (
+            f"{self.codec} is a hardware encoder and needs matching hardware and drivers. "
+            "If yours doesn't have it, try a software codec like x264 (-c x264)."
+            if hardware
+            else ""
+        )
+
+        # First Pass (skipped for hardware encoders, which can't use its stats)
+        if not hardware:
+            ffoutput = ffmpeg.output(video, "pipe:", **params["pass1"])
+            ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
+            print("Performing first pass")
+            _, _ = run_pass(ffoutput, "first", capture_stdout=True)
 
         # set our output streams
         output_streams = [video, audio] if audio and not self.no_audio else [video]
@@ -551,8 +588,8 @@ class TwoPass:
         # Second Pass
         ffoutput = ffmpeg.output(*output_streams, self.output_filename, **params["pass2"])
         ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
-        print("\nPerforming second pass")
-        run_pass(ffoutput, "second", overwrite_output=True)
+        print("Performing single pass (hardware encoder)" if hardware else "\nPerforming second pass")
+        run_pass(ffoutput, "single" if hardware else "second", hint=hint, overwrite_output=True)
 
         # save the output file size and return it
         self.output_filesize = os.path.getsize(self.output_filename) * FILE_SIZE_MULT

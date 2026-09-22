@@ -20,6 +20,8 @@ from textwrap import dedent
 
 import platformdirs
 
+from ffmpeg4discord.twopass import available_codecs
+
 
 def is_port_in_use(port: int) -> bool:
     """
@@ -106,8 +108,8 @@ def build_parser() -> ArgumentParser:
         "--codec",
         type=str,
         default="x264",
-        choices=["x264", "h264_nvenc", "x265", "hevc_nvenc", "vp9", "av1"],
-        help="Video codec.",
+        choices=available_codecs(),
+        help="Video codec. VideoToolbox codecs are only listed on macOS.",
     )
     parser.add_argument(
         "-v",
