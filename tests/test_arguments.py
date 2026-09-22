@@ -23,6 +23,7 @@ from ffmpeg4discord.arguments import (
 
 @pytest.fixture
 def parser():
+    """A fresh copy of the real ff4d argument parser."""
     return build_parser()
 
 
