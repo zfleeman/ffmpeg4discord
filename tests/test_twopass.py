@@ -17,6 +17,7 @@ from ffmpeg4discord.twopass import (
     seconds_from_ts_string,
     seconds_to_timestamp,
     timestamp_from_percentage,
+    tonemap_filters,
 )
 
 
@@ -828,3 +829,68 @@ class TestRunPass(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestToneMapping(unittest.TestCase):
+    """HDR sources get tone mapped to SDR when the installed ffmpeg can do it (issue #77)."""
+
+    @staticmethod
+    def probe_for(version: str, configuration: str = "", color_transfer: str = "smpte2084") -> Dict[str, Any]:
+        return {
+            "program_version": {"version": version, "configuration": configuration},
+            "format": {"duration": "120.0", "size": "53000000"},
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "width": 1920,
+                    "height": 1080,
+                    "r_frame_rate": "30/1",
+                    "index": 0,
+                    "color_transfer": color_transfer,
+                },
+                {"codec_type": "audio", "bit_rate": "128000", "index": 1},
+            ],
+        }
+
+    def make_twopass(self, probe: Dict[str, Any]) -> TwoPass:
+        with patch("ffmpeg4discord.twopass.ffmpeg.probe", return_value=probe):
+            tp = TwoPass(filename=Path("input.mp4"), target_filesize=10)
+        tp.bitrate_dict = {"b:v": 1000000}
+        return tp
+
+    def test_zscale_preferred_when_built_with_libzimg(self) -> None:
+        chain = tonemap_filters(self.probe_for("7.1", "--enable-gpl --enable-libzimg"))
+        self.assertEqual([name for name, _ in chain], ["zscale", "format", "zscale", "tonemap", "zscale"])
+
+    def test_scale_fallback_on_ffmpeg_8(self) -> None:
+        for version in ("8.1.2", "N-119043-g1234567"):
+            chain = tonemap_filters(self.probe_for(version))
+            self.assertEqual([name for name, _ in chain], ["scale", "format", "tonemap", "scale"])
+
+    def test_old_ffmpeg_without_zscale_has_no_chain(self) -> None:
+        self.assertIsNone(tonemap_filters(self.probe_for("7.1")))
+
+    def test_hdr_source_is_tone_mapped_and_tagged_bt709(self) -> None:
+        for transfer in ("smpte2084", "arib-std-b67"):
+            tp = self.make_twopass(self.probe_for("8.1.2", color_transfer=transfer))
+            self.assertIsNotNone(tp.tonemap)
+
+            params = tp._generate_params(codec="x264")
+            self.assertEqual(params["pass2"]["color_trc"], "bt709")
+            self.assertEqual(params["pass2"]["colorspace"], "bt709")
+
+            video = MagicMock()
+            video.filter.return_value = video
+            tp._apply_video_filters(video)
+            self.assertIn("tonemap", [c.args[0] for c in video.filter.call_args_list])
+
+    def test_sdr_source_is_left_alone(self) -> None:
+        tp = self.make_twopass(self.probe_for("8.1.2", color_transfer="bt709"))
+        self.assertIsNone(tp.tonemap)
+        self.assertNotIn("color_trc", tp._generate_params(codec="x264")["pass2"])
+
+    def test_hdr_on_old_ffmpeg_warns_and_skips(self) -> None:
+        with self.assertLogs(level="WARNING") as logs:
+            tp = self.make_twopass(self.probe_for("7.1"))
+        self.assertIsNone(tp.tonemap)
+        self.assertTrue(any("HDR" in line for line in logs.output))

@@ -206,6 +206,12 @@ Hardware encoders (NVENC and VideoToolbox) don't support ffmpeg's two-pass encod
   AV1 can offer around 30% better compression than VP9 and roughly 50% better than H.264 at comparable quality. However, playback support is still maturing: recent browsers and newer devices increasingly support AV1, but compatibility with older hardware, embedded players, and some software remains limited. Encoding is typically slower than the other options. I have had issues with using this codec to create shorter clips (< 15 seconds).
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/AV1)
 
+## HDR Video
+
+HDR clips (HDR10, HLG, Dolby Vision) are converted to SDR automatically when your ffmpeg supports it (ffmpeg 8.0+ or a build with `zscale`). The conversion runs on the CPU, so HDR encodes take about twice as long, even with a hardware encoder like NVENC.
+
+The `ffmpeg` that `install-ffmpeg-windows` downloads includes `zscale`, and so do most other Windows and Linux builds. If yours has neither, `ff4d` warns you and encodes without converting, and the output may look washed out. Check with `ffmpeg -version`: you need version 8.0 or newer, or `--enable-libzimg` in the configuration line.
+
 ## Thanks!
 
 Yes, this is a simple collection of Python files using FFmpeg tricks that is masquerading as a robust Audio/Video tool. But! I use this nearly every day to quickly share videos with people on various messaging apps that have built-in video players. I don't have to share a link that embeds a video player this way, and I guess that's important to me?

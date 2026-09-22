@@ -10,11 +10,13 @@ Classes:
 
 Functions:
 - available_codecs: Returns the codec choices for this operating system.
+- ffmpeg_major_version: Returns the installed ffmpeg's major version from the probe data.
 - fps_mode_flag: Returns the frame rate flag name supported by the installed ffmpeg.
 - run_pass: Runs one encoding pass and reports ffmpeg failures with a readable message.
 - seconds_from_ts_string: Converts a timestamp string into an integer representing seconds.
 - seconds_to_timestamp: Converts an integer representing seconds into a timestamp string.
 - timestamp_from_percentage: Converts a percentage of the video's duration into a timestamp string.
+- tonemap_filters: Returns the HDR-to-SDR filter chain this system's ffmpeg can run.
 """
 
 import logging
@@ -53,6 +55,9 @@ CODEC_ENCODERS = {
 # Hardware encoders ignore ffmpeg's two-pass stats file, so ff4d encodes them in a single pass.
 HARDWARE_CODECS = {"h264_nvenc", "hevc_nvenc", "h264_videotoolbox", "hevc_videotoolbox"}
 
+# ffprobe `color_transfer` values that mean the video is HDR: PQ (HDR10, Dolby Vision) and HLG.
+HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
+
 
 def available_codecs() -> list[str]:
     """Return the codecs from `CODEC_ENCODERS` that this operating system can use.
@@ -64,27 +69,83 @@ def available_codecs() -> list[str]:
     return [c for c in CODEC_ENCODERS if "videotoolbox" not in c or sys.platform == "darwin"]
 
 
-def fps_mode_flag(probe: dict) -> str:
-    """Return the frame rate flag name this system's ffmpeg understands.
+def ffmpeg_major_version(probe: dict) -> Optional[int]:
+    """Return ffmpeg's major version from the `-show_program_version` section of the probe.
 
-    ffmpeg 5.0 replaced `-vsync` with `-fps_mode`, and 9.0 removed `-vsync` entirely. The version
-    comes from the `-show_program_version` section of the probe we already run, so this costs us
-    nothing extra. That reports ffprobe's version, but ffmpeg and ffprobe ship together in every
-    packaging we support, so they agree in practice.
-
-    Version strings vary by build ("9.0.1", "n7.1", "4.4.2-0ubuntu0.22.04.1"), so we only take the
-    leading number. We assume the modern flag whenever it can't be read, because unparseable
-    versions are git/nightly builds ("N-119043-g1234567"), which are always newer than 5.0.
+    That reports ffprobe's version, but ffmpeg and ffprobe ship together in every packaging we
+    support, so they agree in practice. Version strings vary by build ("9.0.1", "n7.1",
+    "4.4.2-0ubuntu0.22.04.1"), so we only take the leading number. Returns None when it can't be
+    read, which happens with git/nightly builds ("N-119043-g1234567"). Those are always recent.
     """
 
     version = probe.get("program_version", {}).get("version", "")
 
     try:
-        major = int(version.split(".")[0].lstrip("nN"))
+        return int(version.split(".")[0].lstrip("nN"))
     except ValueError:
-        return "fps_mode"
+        return None
 
-    return "fps_mode" if major >= 5 else "vsync"
+
+def fps_mode_flag(probe: dict) -> str:
+    """Return the frame rate flag name this system's ffmpeg understands.
+
+    ffmpeg 5.0 replaced `-vsync` with `-fps_mode`, and 9.0 removed `-vsync` entirely. We assume the
+    modern flag when the version can't be read, because those are newer nightly builds.
+    """
+
+    major = ffmpeg_major_version(probe)
+    return "fps_mode" if major is None or major >= 5 else "vsync"
+
+
+def tonemap_filters(probe: dict) -> Optional[list[tuple[str, dict]]]:
+    """Return the filters that convert HDR video to SDR, as (filter name, options) pairs.
+
+    Both chains convert the picture to linear light, squeeze the bright HDR highlights into SDR's
+    range with the `mobius` curve, then convert back to standard BT.709 video. `mobius` keeps game
+    footage about as bright as the source, where `hable` came out noticeably darker. They differ in
+    which filter does the color math:
+
+    - `zscale` is the usual choice, but it only exists when ffmpeg was built with libzimg. The
+      probe's `configuration` string lists the build flags, so checking it costs nothing.
+    - ffmpeg 8.0 taught the built-in `scale` filter the same color conversions, so it works as a
+      fallback on builds without `zscale` (like Homebrew's). It treats 203 nits as SDR white, so
+      the `zscale` chain sets `npl=203` to make both chains look the same.
+
+    Returns None when neither is available.
+    """
+
+    configuration = probe.get("program_version", {}).get("configuration", "")
+    tonemap = ("tonemap", {"tonemap": "mobius", "desat": 0})
+
+    if "--enable-libzimg" in configuration:
+        return [
+            ("zscale", {"t": "linear", "npl": 203}),
+            ("format", {"pix_fmts": "gbrpf32le"}),
+            ("zscale", {"p": "bt709"}),
+            tonemap,
+            ("zscale", {"t": "bt709", "m": "bt709", "r": "tv"}),
+        ]
+
+    major = ffmpeg_major_version(probe)
+    if major is None or major >= 8:
+        return [
+            ("scale", {"out_transfer": "linear", "out_primaries": "bt709"}),
+            ("format", {"pix_fmts": "gbrpf32le"}),
+            tonemap,
+            (
+                "scale",
+                {
+                    "in_transfer": "linear",
+                    "in_primaries": "bt709",
+                    "out_transfer": "bt709",
+                    "out_primaries": "bt709",
+                    "out_color_matrix": "bt709",
+                    "out_range": "tv",
+                },
+            ),
+        ]
+
+    return None
 
 
 def run_pass(ffoutput, pass_name: str, hint: str = "", **run_kwargs):
@@ -207,6 +268,7 @@ class TwoPass:
         self.length = None
         self.audio_streams = []
         self.video_stream = None
+        self.tonemap = None
 
         # create a Path from the output string
         self.output = Path(self.output).resolve()
@@ -266,6 +328,25 @@ class TwoPass:
                 self.audio_br = self.audio_br * 1000
         else:
             logging.warning("No audio stream found in the media file.")
+
+        self._check_hdr()
+
+    def _check_hdr(self):
+        """Pick a tone-mapping filter chain when the source is HDR, or warn if ffmpeg can't do it."""
+
+        if not self.video_stream or self.video_stream.get("color_transfer") not in HDR_TRANSFERS:
+            return
+
+        self.tonemap = tonemap_filters(self.probe)
+        if not self.tonemap:
+            logging.warning(
+                dedent(
+                    """\033[31m
+                    This video is HDR, but your ffmpeg can't convert it to SDR. It needs ffmpeg 8.0
+                    or newer, or a build with zscale (libzimg). The output may look washed out.
+                    \033[0m"""
+                )
+            )
 
     def _process_times(self, filename_times: bool):
         """
@@ -341,6 +422,10 @@ class TwoPass:
                 "map_chapters": -1,  # remove chapters from output files, as it messes up total video length
             },
         }
+
+        # Tone-mapped video is SDR now. Without these, ffmpeg copies the source's HDR labels.
+        if self.tonemap:
+            params["pass2"].update({"color_primaries": "bt709", "color_trc": "bt709", "colorspace": "bt709"})
 
         # assign the output framerate
         if self.framerate:
@@ -484,6 +569,10 @@ class TwoPass:
                         \033[0m"""
                     )
                 )
+
+        # Tone map last, so a smaller --resolution means fewer pixels to process.
+        for name, options in self.tonemap or []:
+            video = video.filter(name, **options)
 
         return video
 
