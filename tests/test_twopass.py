@@ -280,11 +280,12 @@ def test_apply_video_filters_warns_on_aspect_ratio_mismatch(make_twopass, caplog
     assert "aspect ratio does not match" in caplog.text.lower()
 
 
-@pytest.mark.parametrize("astreams", [None, [1]])
-def test_apply_audio_filters_without_mixing_keeps_first_track(make_twopass, astreams):
-    ffinput = ffmpeg.input("test.mp4")
-    audio = make_twopass(amix=False, astreams=astreams)._apply_audio_filters(ffinput)
-    assert audio == ffinput.audio
+@pytest.mark.parametrize("astreams, expected", [(None, "a:0"), ([1, 0], "a:1"), ([5, 1], "a:1")])
+def test_apply_audio_filters_without_mixing_keeps_one_track(probe, make_twopass, astreams, expected):
+    # two audio tracks, like ShadowPlay with a separate mic track; only one fits the bitrate budget
+    probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": 2})
+    audio = make_twopass(amix=False, astreams=astreams)._apply_audio_filters(ffmpeg.input("test.mp4"))
+    assert audio.selector == expected
 
 
 def test_apply_audio_filters_mixes_selected_tracks(probe, make_twopass):
@@ -325,19 +326,19 @@ def test_run_two_passes_with_audio(make_twopass, passes):
     assert "pipe:" in first.args
     assert first.run_kwargs == {"capture_stdout": True}
     assert tp.output_filename in second.args
-    assert "0:a" in second.args
+    assert "0:a:0" in second.args
     assert second.run_kwargs == {"overwrite_output": True}
 
 
 def test_run_without_audio_stream_outputs_video_only(probe, make_twopass, passes):
     probe["streams"].pop()
     make_twopass(audio_br=96).run()
-    assert "0:a" not in passes[-1].args
+    assert "0:a:0" not in passes[-1].args
 
 
 def test_run_no_audio_flag_omits_audio(make_twopass, passes):
     make_twopass(no_audio=True).run()
-    assert "0:a" not in passes[-1].args
+    assert "0:a:0" not in passes[-1].args
 
 
 def test_run_hardware_codec_skips_first_pass(make_twopass, passes):

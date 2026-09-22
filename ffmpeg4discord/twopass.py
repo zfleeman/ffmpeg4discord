@@ -589,12 +589,6 @@ class TwoPass:
         if not self.audio_streams:
             return None
 
-        # Non-mixing mode: we only support a single audio output stream.
-        # Preserve the original behavior: keep the default/first audio track.
-        if not self.amix:
-            return ffinput.audio
-
-        # Mixing mode: optionally select a subset; otherwise mix all.
         if self.astreams is None:
             selected_positions = list(range(len(self.audio_streams)))
         else:
@@ -602,6 +596,11 @@ class TwoPass:
 
         if not selected_positions:
             return None
+
+        # The bitrate budget covers one audio track, so without mixing we keep only the first selected one.
+        # (`ffinput.audio` would map every track and push the output over the target size.)
+        if not self.amix:
+            return ffinput[f"a:{selected_positions[0]}"]
 
         to_merge = [ffinput[f"a:{i}"] for i in selected_positions]
         return ffmpeg.filter(
