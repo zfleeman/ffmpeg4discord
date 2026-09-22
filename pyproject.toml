@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,8 +11,22 @@ authors = [{ name = "Zach Fleeman", email = "zfleeman@gmail.com" }]
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 requires-python = ">= 3.10"
+keywords = ["ffmpeg", "discord", "video", "compression", "file size", "two-pass", "encoding"]
+classifiers = [
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Video :: Conversion",
+]
 dependencies = [
-    "Flask==3.0.1",
+    "Flask>=3.0,<4",
     "ffmpeg-python==0.2.0",
     "platformdirs~=4.5",
 ]
@@ -25,28 +39,20 @@ Issues = "https://github.com/zfleeman/ffmpeg4discord/issues"
 ff4d = "ffmpeg4discord.__main__:main"
 install-ffmpeg-windows = "ffmpeg4discord.windows:install"
 
-[tool.setuptools.package-data]
-ffmpeg4discord = ["templates/*.html"]
-
-[tool.setuptools.packages.find]
-exclude = ["tests*", "tests"]
-
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "coverage==7.10.2",
     "ruff==0.12.1",
 ]
 
-[tool.uv]
-package = true
+[tool.setuptools.package-data]
+ffmpeg4discord = ["templates/*.html"]
+
+[tool.setuptools.packages.find]
+exclude = ["tests*"]
 
 [tool.ruff]
-target-version = "py310"
 line-length = 120
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]

@@ -139,7 +139,7 @@ dependencies = [
     { name = "platformdirs" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "coverage" },
     { name = "ruff" },
@@ -147,13 +147,16 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "coverage", marker = "extra == 'dev'", specifier = "==7.10.2" },
     { name = "ffmpeg-python", specifier = "==0.2.0" },
-    { name = "flask", specifier = "==3.0.1" },
+    { name = "flask", specifier = ">=3.0,<4" },
     { name = "platformdirs", specifier = "~=4.5" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.1" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "coverage", specifier = "==7.10.2" },
+    { name = "ruff", specifier = "==0.12.1" },
+]
 
 [[package]]
 name = "flask"
