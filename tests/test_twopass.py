@@ -504,6 +504,24 @@ class TestTwoPass(unittest.TestCase):
         with self.assertRaises(ValueError):
             tp._create_bitrate_dict()
 
+    def test_create_bitrate_dict_raises_when_audio_uses_whole_budget(self) -> None:
+        # 20 MiB over 30 minutes is ~91 kbps total, less than the 96 kbps audio track.
+        tp = self.make_twopass()
+        tp.target_filesize = 20
+        tp.length = 1800
+        tp.audio_br = 96000
+        with self.assertRaisesRegex(ValueError, "no bitrate left for video"):
+            tp._create_bitrate_dict()
+
+    def test_create_bitrate_dict_ignores_audio_when_no_audio(self) -> None:
+        # Same budget as above, but without audio the whole ~91 kbps goes to video.
+        tp = self.make_twopass(no_audio=True)
+        tp.target_filesize = 20
+        tp.length = 1800
+        tp.audio_br = 96000
+        tp._create_bitrate_dict()
+        self.assertEqual(tp.bitrate_dict["b:v"], 91000)
+
     def test_warning_no_audio_stream(self) -> None:
         # Remove audio stream
         self.fake_probe_result["streams"] = [self.fake_probe_result["streams"][0]]
