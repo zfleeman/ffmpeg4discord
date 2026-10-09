@@ -10,6 +10,7 @@ Classes:
 
 Functions:
 - available_codecs: Returns the codec choices for this operating system.
+- command_for_display: Turns one encoding pass into a command the user can paste into a terminal.
 - ffmpeg_major_version: Returns the installed ffmpeg's major version from the probe data.
 - fps_mode_flag: Returns the frame rate flag name supported by the installed ffmpeg.
 - run_pass: Runs one encoding pass and reports ffmpeg failures with a readable message.
@@ -22,6 +23,8 @@ Functions:
 import logging
 import math
 import os
+import shlex
+import string
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -54,6 +57,9 @@ CODEC_ENCODERS = {
 
 # Hardware encoders ignore ffmpeg's two-pass stats file, so ff4d encodes them in a single pass.
 HARDWARE_CODECS = {"h264_nvenc", "hevc_nvenc", "h264_videotoolbox", "hevc_videotoolbox"}
+
+# Characters that cmd and PowerShell both leave alone, so an argument made only of these needs no quotes.
+WINDOWS_SAFE_CHARS = set(string.ascii_letters + string.digits + "-_./\\:=+")
 
 # ffprobe `color_transfer` values that mean the video is HDR: PQ (HDR10, Dolby Vision) and HLG.
 HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
@@ -146,6 +152,25 @@ def tonemap_filters(probe: dict) -> Optional[list[tuple[str, dict]]]:
         ]
 
     return None
+
+
+def command_for_display(ffoutput) -> str:
+    """Turn one encoding pass into a command the user can paste into their terminal.
+
+    Pass 1 sends its output to `pipe:` and throws it away, so we show the null device a person would type instead.
+    """
+    # compile() can contain Path objects, so stringify each argument.
+    args = [str(arg) for arg in ffoutput.compile()]
+    if args[-1] == "pipe:":
+        args[-1] = "NUL" if sys.platform == "win32" else "/dev/null"
+
+    if sys.platform != "win32":
+        return shlex.join(args)
+
+    # shlex quotes with single quotes, which cmd doesn't understand. Double quotes work in cmd and PowerShell.
+    return " ".join(
+        arg if arg and set(arg) <= WINDOWS_SAFE_CHARS else '"' + arg.replace('"', '\\"') + '"' for arg in args
+    )
 
 
 def run_pass(ffoutput, pass_name: str, hint: str = "", **run_kwargs):
@@ -253,6 +278,7 @@ class TwoPass:
         self.output_filesize = 0
         self.bitrate_dict = {}
         self.message = ""
+        self.commands = []
         self.no_audio = no_audio
 
         self.filename = filename
@@ -601,10 +627,11 @@ class TwoPass:
             inputs=len(selected_positions),
         )
 
-    def run(self) -> float:
+    def run(self, dry_run: bool = False) -> float:
         """
         Perform the CPU-intensive encoding job
-        :return: the output file's size
+        :param dry_run: build the ffmpeg commands and save them to `self.commands` without running them
+        :return: the output file's size, or 0 for a dry run
         """
 
         if "vp9" in self.codec:
@@ -663,20 +690,24 @@ class TwoPass:
         )
 
         # First Pass (skipped for hardware encoders, which can't use its stats)
-        if not hardware:
-            ffoutput = ffmpeg.output(video, "pipe:", **params["pass1"])
-            ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
-            print("Performing first pass")
-            _, _ = run_pass(ffoutput, "first", capture_stdout=True)
-
-        # set our output streams
-        output_streams = [video, audio] if audio and not self.no_audio else [video]
+        first_pass = None if hardware else ffmpeg.output(video, "pipe:", **params["pass1"])
 
         # Second Pass
-        ffoutput = ffmpeg.output(*output_streams, self.output_filename, **params["pass2"])
-        ffoutput = ffoutput.global_args("-loglevel", loglevel, "-stats")
+        output_streams = [video, audio] if audio and not self.no_audio else [video]
+        second_pass = ffmpeg.output(*output_streams, self.output_filename, **params["pass2"])
+
+        # Save the commands for the user before adding ff4d's logging flags, which they don't need.
+        self.commands = [command_for_display(p) for p in (first_pass, second_pass) if p is not None]
+        if dry_run:
+            return 0
+
+        if first_pass is not None:
+            print("Performing first pass")
+            run_pass(first_pass.global_args("-loglevel", loglevel, "-stats"), "first", capture_stdout=True)
+
         print("Performing single pass (hardware encoder)" if hardware else "\nPerforming second pass")
-        run_pass(ffoutput, "single" if hardware else "second", hint=hint, overwrite_output=True)
+        second_pass = second_pass.global_args("-loglevel", loglevel, "-stats")
+        run_pass(second_pass, "single" if hardware else "second", hint=hint, overwrite_output=True)
 
         # save the output file size and return it
         self.output_filesize = os.path.getsize(self.output_filename) * FILE_SIZE_MULT

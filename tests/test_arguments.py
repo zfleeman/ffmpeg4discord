@@ -61,7 +61,7 @@ def test_parser_defaults(default_args):
     assert default_args["codec"] == "x264"
     assert default_args["crop"] == ""
     assert default_args["resolution"] == ""
-    for flag in ("filename_times", "approx", "verbose", "web"):
+    for flag in ("filename_times", "approx", "dry_run", "verbose", "web"):
         assert default_args[flag] is False
     for option in ("framerate", "config", "port", "astreams"):
         assert default_args[option] is None

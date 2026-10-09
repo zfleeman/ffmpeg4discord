@@ -33,6 +33,9 @@
         <div class="row mt-3">
             <div class="alert alert-light" role="alert" {{ "hidden" if alert_hidden else "" }}>
                 <p>{{ twopass.message }}</p>
+                {% if commands_text %}
+                <pre class="bg-dark text-light p-3 rounded" style="white-space: pre-wrap; font-size: 0.8rem;"><code>{{ commands_text }}</code></pre>
+                {% endif %}
                 <span class="text-danger">The server is still running. Do not forget to terminate it.</span>
             </div>
         </div>        
