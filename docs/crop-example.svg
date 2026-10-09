@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 860" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18">
+  <title>Cropping a 3440x1440 video to a centered 16:9 area, then scaling it to 1920x1080</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#222"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d00"/>
+    </marker>
+  </defs>
+
+  <!-- Solid background so the drawing is readable in GitHub's dark mode too. -->
+  <rect width="940" height="860" rx="12" fill="#fff"/>
+
+  <!-- Input frame. Everything is drawn at 1/4 scale: 3440x1440 becomes 860x360. -->
+  <text x="40" y="36" fill="#222">Input: 3440×1440</text>
+  <rect x="40" y="50" width="860" height="360" fill="#d9d9d9" stroke="#222" stroke-width="2"/>
+
+  <!-- The kept area: 2560x1440, starting 440 px from the left edge and 0 px from the top. -->
+  <rect x="150" y="50" width="640" height="360" fill="#fde8e8" stroke="#d00" stroke-width="3" stroke-dasharray="10 6"/>
+  <text x="470" y="215" fill="#d00" text-anchor="middle" font-weight="bold">Crop: 2560×1440</text>
+  <text x="470" y="245" fill="#d00" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace">-x 440x0x2560x1440</text>
+  <text x="95" y="235" fill="#555" text-anchor="middle" font-size="15">cut off</text>
+  <text x="845" y="235" fill="#555" text-anchor="middle" font-size="15">cut off</text>
+
+  <!-- Measurements under the input frame. -->
+  <line x1="40" y1="410" x2="40" y2="445" stroke="#222"/>
+  <line x1="150" y1="410" x2="150" y2="445" stroke="#222"/>
+  <line x1="790" y1="410" x2="790" y2="445" stroke="#222"/>
+  <line x1="900" y1="410" x2="900" y2="445" stroke="#222"/>
+  <line x1="42" y1="435" x2="148" y2="435" stroke="#222" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <line x1="152" y1="435" x2="788" y2="435" stroke="#222" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <line x1="792" y1="435" x2="898" y2="435" stroke="#222" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="95" y="465" fill="#222" text-anchor="middle">x offset: 440</text>
+  <text x="470" y="465" fill="#222" text-anchor="middle">width: 2560</text>
+  <text x="845" y="465" fill="#222" text-anchor="middle">440</text>
+
+  <!-- Scale step. -->
+  <line x1="470" y1="490" x2="470" y2="548" stroke="#d00" stroke-width="4" marker-end="url(#arrow-red)"/>
+  <text x="490" y="525" fill="#d00">scale: <tspan font-family="ui-monospace, Menlo, Consolas, monospace">-r 1920x1080</tspan></text>
+
+  <!-- Output frame at the same 1/4 scale: 1920x1080 becomes 480x270. -->
+  <rect x="230" y="560" width="480" height="270" fill="#fde8e8" stroke="#d00" stroke-width="3"/>
+  <text x="470" y="702" fill="#d00" text-anchor="middle" font-weight="bold">Output: 1920×1080</text>
+</svg>
