@@ -62,7 +62,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `-a`<br>`--audio-br` | 96 | `-a 128` | Audio bitrate in kbps. Lowering this allows a slightly higher video bitrate for the same target file size. |
 | `-c`<br>`--codec` | x264 | `-c hevc_nvenc` | Video "codec profile". These aren't 1:1 titles with the FFmpeg codec choices, because modern codecs require more tweaking for encoding performance, so I've setup a profile for `vp9` and `av1` speed. Options are ordered from "most compatible" to "least compatible": `x264`, `h264_nvenc`, `h264_videotoolbox`, `x265`, `hevc_nvenc`, `hevc_videotoolbox`, `vp9`, `av1`. The VideoToolbox codecs are only offered on macOS. See [Notes on Codec Selection](#notes-on-codec-selection) for more information. |
 | `-r`<br>`--resolution` | off | `-r 1280x720` | Scale the output video to a specific resolution (format: `WIDTHxHEIGHT`). |
-| `-x`<br>`--crop` | No default | `-x 255x0x1410x1080` | Crop the input before encoding (format: `x_offsetx y_offsetx widthx height`). See [FFmpeg crop documentation](https://ffmpeg.org/ffmpeg-filters.html#Examples-61). |
+| `-x`<br>`--crop` | No default | `-x 440x0x2560x1440` | Crop the input before encoding. The format is four numbers joined by `x`: the left offset, top offset, width, and height of the area to keep, in pixels. The crop runs before `--resolution`. See the [Detailed Example](#detailed-example). |
 | `-f`<br>`--framerate` | off | `-f 30` | Output frame rate (FPS). If you specify a value higher than the input video’s FPS, the original FPS will be kept. |
 | `--from` | No default | `--from 00:01:00`<br>`--from 75%` | Start time for trimming the input, as a timestamp (`HH:MM:SS` or `MM:SS`), seconds (`90`), or a percentage of the video's length. Timestamps and seconds can include milliseconds, e.g. `00:01:30.250` or `90.25`. Percentages work well in a config file because they adjust to each clip. |
 | `--to` | No default | `--to 00:01:20`<br>`--to 95%` | End time for trimming the input, in the same formats as `--from`. |
@@ -134,7 +134,7 @@ When an encode finishes, `ff4d` prints what the job looks like as plain FFmpeg c
 
 ```
 ff4d 000050-000145.mp4 \
-    -x 1280x0x2560x1440 \
+    -x 440x0x2560x1440 \
     -r 1920x1080 \
     -s 50 \
     -a 48 \
@@ -142,9 +142,16 @@ ff4d 000050-000145.mp4 \
     --filename-times
 ```
 
-The example above takes a 5120x1440 resolution video as its input. The script trims the video from 00:00:50 to 00:01:45 (specified in the [file name](#file-name-formatting), and enabled with `--filename-times`). It crops a 2560x1440 section starting at 1280 pixels from the top-left and 0 pixels down (`-x`). The output file will be located in `D:/shadowplay/` (`-o`) with a new resolution of 1920x1080 (`-r`), and it will be 50MB (`-s`). The audio bitrate will be reduced to 48k (`-a`) as well, but that's probably going to sound terrible.
+This example takes a 3440x1440 ultrawide recording and turns it into a normal 16:9 1080p video.
 
-![](https://github.com/zfleeman/ffmpeg4discord/assets/1808564/ac0663ee-64df-4b22-a1c3-4a8556c2eb78)
+- **Trim:** It keeps 00:00:50 to 00:01:45, read from the [file name](#file-name-formatting) because of `--filename-times`.
+- **Crop (`-x`):** It keeps a 2560x1440 area from the middle of the frame. 2560x1440 is the widest 16:9 area that fits in 1440 pixels of height. To center it, the left offset is the leftover width split in half: (3440 − 2560) / 2 = 440. The top offset is 0 because the crop uses the full height.
+- **Scale (`-r`):** It shrinks the cropped 2560x1440 area to 1920x1080. Both are 16:9, so nothing gets stretched.
+- **Size and audio:** The output will be 50MB (`-s`) with 48k audio (`-a`), which will probably sound terrible. The file is saved in `D:/shadowplay/` (`-o`).
+
+![A 3440x1440 frame with a centered 2560x1440 crop and 440 pixels cut off each side, scaled down to 1920x1080](https://raw.githubusercontent.com/zfleeman/ffmpeg4discord/main/docs/crop-example.svg)
+
+The same math works for any input. For a 5120x1440 "super ultrawide" recording, the offset is (5120 − 2560) / 2 = 1280, so use `-x 1280x0x2560x1440`.
 
 ## Web UI
 
