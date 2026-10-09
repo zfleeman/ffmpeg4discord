@@ -107,16 +107,15 @@ def cleanup_files(pattern: str) -> None:
 
 def format_commands(commands: list[str]) -> str:
     """
-    Lists the ffmpeg commands for an encode, so users can see what ff4d ran or run it themselves.
+    Lists the ffmpeg commands for an encode, so users can see what ff4d did on their behalf.
 
     Args:
         commands (list[str]): The commands saved by `TwoPass.run()`.
     """
     if len(commands) == 1:
-        header = "The FFmpeg command for this encode:"
+        header = "Here's what this encode looks like as a plain FFmpeg command:"
     else:
-        # the second pass reads a stats file that the first pass writes to the current folder
-        header = "The FFmpeg commands for this encode. Run them in order, from the same folder:"
+        header = "Here's what this encode looks like as plain FFmpeg commands (a two-pass encode runs FFmpeg twice):"
     return "\n\n".join([header, *commands])
 
 

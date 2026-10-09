@@ -128,7 +128,7 @@ ff4d my-video.mp4 --config my-config.json
 
 ### Seeing the FFmpeg Commands
 
-When an encode finishes, `ff4d` prints the FFmpeg commands that made your file, and the Web UI shows them in its finished banner. You can paste them into a terminal to run the same encode yourself, or use them as a starting point for your own FFmpeg commands. Two-pass encodes print two commands: run them in order from the same folder, because the second pass reads a log file that the first pass writes. Add `--dry-run` to see the commands without encoding anything.
+When an encode finishes, `ff4d` prints what the job looks like as plain FFmpeg commands, and the Web UI shows them in its finished banner. It's a look at the work `ff4d` does for you, and a starting point if you ever want to write your own FFmpeg commands. Two-pass encodes show two commands because FFmpeg runs twice: the first pass writes a log file that the second pass reads. Add `--dry-run` to see the commands without encoding anything.
 
 ## Detailed Example
 

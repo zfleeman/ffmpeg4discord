@@ -126,12 +126,16 @@ def test_main_web_ignores_dry_run(run_main, monkeypatch, caplog):
 
 def test_format_commands_for_two_passes():
     lines = mainmod.format_commands(["ffmpeg -pass 1", "ffmpeg -pass 2"]).splitlines()
-    assert lines[0].startswith("The FFmpeg commands for this encode. Run them in order")
+    assert (
+        lines[0] == "Here's what this encode looks like as plain FFmpeg commands (a two-pass encode runs FFmpeg twice):"
+    )
     assert lines[1:] == ["", "ffmpeg -pass 1", "", "ffmpeg -pass 2"]
 
 
 def test_format_commands_for_one_pass():
-    assert mainmod.format_commands(["ffmpeg"]) == "The FFmpeg command for this encode:\n\nffmpeg"
+    assert (
+        mainmod.format_commands(["ffmpeg"]) == "Here's what this encode looks like as a plain FFmpeg command:\n\nffmpeg"
+    )
 
 
 def test_main_web_starts_flask_on_port(run_main, monkeypatch):
@@ -204,7 +208,7 @@ def test_index_page_renders(web):
 def test_encode_banner_shows_the_commands(web):
     web.twopass_loop.side_effect = lambda twopass, **_: setattr(twopass, "commands", ['ffmpeg -i "a b.mp4"'])
     response = web.client.post("/encode", data=encode_form())
-    assert b"The FFmpeg command for this encode:" in response.data
+    assert b"as a plain FFmpeg command:" in response.data
     assert b"ffmpeg -i &#34;a b.mp4&#34;" in response.data  # escaped for HTML
 
 
