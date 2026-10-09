@@ -94,6 +94,12 @@ def build_parser() -> ArgumentParser:
         help="The job will not loop to output the file under the target size.",
     )
     parser.add_argument(
+        "--dry-run",
+        action=BooleanOptionalAction,
+        default=False,
+        help="Print the FFmpeg commands for the first encode attempt without running them. Ignored with --web.",
+    )
+    parser.add_argument(
         "--from",
         help="Start clipping at this timestamp, seconds, or percentage of the video, e.g. 00:00:10.5, 90, or 75%%",
     )

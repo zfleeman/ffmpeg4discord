@@ -68,6 +68,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--to` | No default | `--to 00:01:20`<br>`--to 95%` | End time for trimming the input, in the same formats as `--from`. |
 | `--filename-times` | false | `--filename-times` | Parse From/To timestamps from the input filename. See [File Name Formatting](#file-name-formatting). |
 | `--approx` | false | `--approx` | Approximate the target size: do a single 2-pass encode and **do not** loop to get under the target. |
+| `--dry-run` | false | `--dry-run` | Print the FFmpeg commands for the first encode attempt and exit without encoding. Ignored with `--web`. |
 | `-an`<br>`--no-audio` | false | `-an` | Do not include any audio stream in the output. (Overrides `--amix` / `--astreams`.) To explicitly re-enable audio after setting this in a config, use `--no-no-audio`. |
 | `--amix` | false | `--amix` | Mix all (selected) audio streams into one output track. When off, only the default/first audio track is used. |
 | `--amix-normalize` | false | `--amix-normalize` | When mixing audio, normalize volume levels. Specifying this implies `--amix`. |
@@ -124,6 +125,10 @@ And then you would call `ff4d` like this:
 ```bash
 ff4d my-video.mp4 --config my-config.json
 ```
+
+### Seeing the FFmpeg Commands
+
+When an encode finishes, `ff4d` prints the FFmpeg commands that made your file, and the Web UI shows them in its finished banner. You can paste them into a terminal to run the same encode yourself, or use them as a starting point for your own FFmpeg commands. Two-pass encodes print two commands: run them in order from the same folder, because the second pass reads a log file that the first pass writes. Add `--dry-run` to see the commands without encoding anything.
 
 ## Detailed Example
 

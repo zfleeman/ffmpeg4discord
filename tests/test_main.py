@@ -18,6 +18,7 @@ def twopass():
     tp.output_filename = "output.mp4"
     tp.target_filesize = 10
     tp.message = ""
+    tp.commands = ["ffmpeg -i file.mp4 out.mp4"]
     return tp
 
 
@@ -35,7 +36,7 @@ def run_main(monkeypatch, twopass):
     """Run main() with the given command line args, without checking PyPI or encoding anything."""
 
     def _run(**args):
-        cli_args = {"web": False, "approx": False, "filename": "file.mp4", **args}
+        cli_args = {"web": False, "approx": False, "dry_run": False, "filename": "file.mp4", **args}
         monkeypatch.setattr(mainmod, "check_for_update", lambda **_: VersionInfo("0.1.9", "0.1.9"))
         monkeypatch.setattr(mainmod.arguments, "get_args", lambda: cli_args)
         monkeypatch.setattr(mainmod, "TwoPass", MagicMock(return_value=twopass))
@@ -98,7 +99,39 @@ def test_main_cli_encodes_and_prints_result(run_main, twopass, capsys):
     twopass.message = "done"
     twopass_loop = run_main()
     twopass_loop.assert_called_once()
-    assert "done" in capsys.readouterr().out.splitlines()
+    out = capsys.readouterr().out
+    assert "done" in out.splitlines()
+    assert "ffmpeg -i file.mp4 out.mp4" in out.splitlines()
+
+
+@pytest.mark.parametrize("approx", [False, True])
+def test_main_dry_run_prints_commands_without_encoding(run_main, twopass, capsys, approx):
+    twopass_loop = run_main(dry_run=True, approx=approx)
+    twopass_loop.assert_not_called()
+    twopass.run.assert_called_once_with(dry_run=True)
+    out = capsys.readouterr().out
+    assert "ffmpeg -i file.mp4 out.mp4" in out.splitlines()
+    # --approx never retries, so the retry note only shows without it
+    assert ("re-encodes it at a lower bitrate" in out) is not approx
+
+
+def test_main_web_ignores_dry_run(run_main, monkeypatch, caplog):
+    app = MagicMock()
+    monkeypatch.setattr(mainmod, "Flask", MagicMock(return_value=app))
+    monkeypatch.setattr(mainmod.threading, "Thread", MagicMock())
+    run_main(web=True, dry_run=True, port=5000)
+    assert "--dry-run is ignored with --web" in caplog.text
+    app.run.assert_called_once()
+
+
+def test_format_commands_for_two_passes():
+    lines = mainmod.format_commands(["ffmpeg -pass 1", "ffmpeg -pass 2"]).splitlines()
+    assert lines[0].startswith("The FFmpeg commands for this encode. Run them in order")
+    assert lines[1:] == ["", "ffmpeg -pass 1", "", "ffmpeg -pass 2"]
+
+
+def test_format_commands_for_one_pass():
+    assert mainmod.format_commands(["ffmpeg"]) == "The FFmpeg command for this encode:\n\nffmpeg"
 
 
 def test_main_web_starts_flask_on_port(run_main, monkeypatch):
@@ -125,7 +158,14 @@ def web(monkeypatch, probe, tmp_path):
         def run(self, *args, **kwargs):
             apps.append(self)
 
-    cli_args = {"web": True, "approx": False, "port": 5000, "filename": "file.mp4", "target_filesize": 10}
+    cli_args = {
+        "web": True,
+        "approx": False,
+        "dry_run": False,
+        "port": 5000,
+        "filename": "file.mp4",
+        "target_filesize": 10,
+    }
     monkeypatch.setattr(mainmod, "check_for_update", lambda **_: VersionInfo("0.1.9", "0.1.9"))
     monkeypatch.setattr(mainmod.arguments, "get_args", lambda: cli_args)
     monkeypatch.setattr(mainmod, "Flask", CapturedFlask)
@@ -158,6 +198,14 @@ def test_index_page_renders(web):
     assert response.status_code == 200
     assert b"ffmpeg4discord v0.1.9" in response.data
     assert b'src="/video"' in response.data
+    assert b"FFmpeg command" not in response.data  # nothing has been encoded yet
+
+
+def test_encode_banner_shows_the_commands(web):
+    web.twopass_loop.side_effect = lambda twopass, **_: setattr(twopass, "commands", ['ffmpeg -i "a b.mp4"'])
+    response = web.client.post("/encode", data=encode_form())
+    assert b"The FFmpeg command for this encode:" in response.data
+    assert b"ffmpeg -i &#34;a b.mp4&#34;" in response.data  # escaped for HTML
 
 
 def test_video_route_serves_only_the_input_file(web):

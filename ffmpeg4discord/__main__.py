@@ -10,9 +10,11 @@ Functions:
 - twopass_loop: Executes the two-pass encoding process in a loop until the target file size is achieved.
 - open_browser: Opens the default web browser to the specified port.
 - cleanup_files: Removes temporary files matching a given pattern.
+- format_commands: Lists the ffmpeg commands for an encode with a short explanation.
 - main: The main function that parses command-line arguments and starts the encoding process or web server.
 """
 
+import logging
 import threading
 import time
 import webbrowser
@@ -103,6 +105,21 @@ def cleanup_files(pattern: str) -> None:
         Path(file).unlink()
 
 
+def format_commands(commands: list[str]) -> str:
+    """
+    Lists the ffmpeg commands for an encode, so users can see what ff4d ran or run it themselves.
+
+    Args:
+        commands (list[str]): The commands saved by `TwoPass.run()`.
+    """
+    if len(commands) == 1:
+        header = "The FFmpeg command for this encode:"
+    else:
+        # the second pass reads a stats file that the first pass writes to the current folder
+        header = "The FFmpeg commands for this encode. Run them in order, from the same folder:"
+    return "\n\n".join([header, *commands])
+
+
 def main() -> None:
     """
     The main function that parses command-line arguments and starts the encoding process or web server.
@@ -130,6 +147,10 @@ def main() -> None:
     args = arguments.get_args()
     web = args.pop("web")
     approx = args.pop("approx")
+    dry_run = args.pop("dry_run")
+
+    if web and dry_run:
+        logging.warning("--dry-run is ignored with --web. Pick your settings in the browser instead.")
 
     if web:
         port = args.pop("port")
@@ -220,13 +241,20 @@ def main() -> None:
                 codecs=codecs,
                 version_info=version_info,
                 approx=approx,
+                commands_text=format_commands(twopass.commands),
             )
 
         threading.Thread(target=open_browser, args=[port], name="Open Browser").start()
         # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
         app.run("127.0.0.1", port=port)
+    elif dry_run:
+        twopass.run(dry_run=True)
+        print(format_commands(twopass.commands))
+        if not approx:
+            print("\nIf the output lands over the target size, ff4d re-encodes it at a lower bitrate.")
     else:
         twopass_loop(twopass=twopass, target_filesize=twopass.target_filesize, approx=approx)
+        print(f"\n{format_commands(twopass.commands)}\n")
         print(twopass.message)
 
 

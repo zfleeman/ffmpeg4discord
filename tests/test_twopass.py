@@ -1,4 +1,5 @@
 import logging
+import shlex
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ from ffmpeg4discord.twopass import (
     CODEC_OVERRIDES,
     TwoPass,
     available_codecs,
+    command_for_display,
     fps_mode_flag,
     run_pass,
     seconds_from_ts_string,
@@ -399,6 +401,57 @@ def test_run_output_directory_gets_generated_filename(make_twopass, passes, tmp_
     output = Path(tp.output_filename)
     assert output.parent == tmp_path.resolve()
     assert output.name.startswith("small_")
+
+
+# --- showing the ffmpeg commands (issue #92) ---
+
+
+def test_run_saves_the_commands_it_ran(make_twopass, passes, monkeypatch):
+    monkeypatch.setattr("ffmpeg4discord.twopass.sys.platform", "linux")
+    tp = make_twopass()
+    tp.run()
+    first, second = (shlex.split(command) for command in tp.commands)
+    # the same arguments ff4d ran, minus "-loglevel error -stats" at the end and with pass 1's pipe: swapped out
+    assert first == [*passes[0].args[:-4], "/dev/null"]
+    assert second == passes[1].args[:-3]
+
+
+def test_run_hardware_codec_saves_one_command(make_twopass, passes):
+    tp = make_twopass(codec="h264_nvenc")
+    tp.run()
+    assert len(tp.commands) == 1
+
+
+def test_dry_run_saves_commands_without_running_ffmpeg(make_twopass, passes):
+    tp = make_twopass()
+    assert tp.run(dry_run=True) == 0
+    assert passes == []
+    assert len(tp.commands) == 2
+
+
+@pytest.mark.parametrize(
+    "platform, expected",
+    [
+        (
+            "darwin",
+            "ffmpeg -i 'C:\\Videos\\my clip.mp4' -filter_complex '[0]scale=1280:-2[s0]' -map '[s0]' "
+            "-f null -metadata 'title=\"x\"' /dev/null",
+        ),
+        (
+            "win32",
+            'ffmpeg -i "C:\\Videos\\my clip.mp4" -filter_complex "[0]scale=1280:-2[s0]" -map "[s0]" '
+            '-f null -metadata "title=\\"x\\"" NUL',
+        ),
+    ],
+)
+def test_command_for_display_quotes_for_the_platform(monkeypatch, platform, expected):
+    monkeypatch.setattr("ffmpeg4discord.twopass.sys.platform", platform)
+    ffoutput = (
+        ffmpeg.input("C:\\Videos\\my clip.mp4")
+        .filter("scale", 1280, -2)
+        .output("pipe:", f="null", metadata='title="x"')
+    )
+    assert command_for_display(ffoutput) == expected
 
 
 # --- ffmpeg version detection (issue #66) ---
