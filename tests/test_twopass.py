@@ -1,6 +1,7 @@
 import logging
 import shlex
 import shutil
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -360,6 +361,50 @@ def test_run_two_passes_with_audio(make_twopass, passes):
     assert tp.output_filename in second.args
     assert "0:a:0" in second.args
     assert second.run_kwargs == {"overwrite_output": True}
+
+
+@pytest.mark.parametrize("codec", ["x264", "vp9", "av1", "x265"])
+def test_run_uses_unique_temporary_pass_stats(make_twopass, passes, monkeypatch, tmp_path, codec):
+    work_dir = tmp_path / "work"
+    temp_dir = tmp_path / "system-temp"
+    work_dir.mkdir()
+    temp_dir.mkdir()
+    monkeypatch.chdir(work_dir)
+    monkeypatch.setattr(tempfile, "tempdir", str(temp_dir))
+
+    first = make_twopass(codec=codec)
+    second = make_twopass(codec=codec)
+    first.run()
+    first_calls = passes[:]
+    passes.clear()
+    second.run()
+    second_calls = passes[:]
+
+    def stats_path(calls):
+        first_args, second_args = calls[0].args, calls[1].args
+        if codec == "x265":
+            first_params = first_args[first_args.index("-x265-params") + 1]
+            second_params = second_args[second_args.index("-x265-params") + 1]
+            assert "stats=" in first_params
+            assert "stats=" in second_params
+            first_path = first_params.split("stats=", 1)[1].replace(r"\:", ":", 1)
+            second_path = second_params.split("stats=", 1)[1].replace(r"\:", ":", 1)
+        else:
+            first_path = first_args[first_args.index("-passlogfile") + 1]
+            second_path = second_args[second_args.index("-passlogfile") + 1]
+
+        assert first_path == second_path
+        return Path(first_path)
+
+    first_path = stats_path(first_calls)
+    second_path = stats_path(second_calls)
+    assert first_path.parent.parent == temp_dir
+    assert second_path.parent.parent == temp_dir
+    assert first_path != second_path
+    assert not first_path.is_relative_to(work_dir)
+    assert not second_path.is_relative_to(work_dir)
+    assert not first_path.parent.exists()
+    assert not second_path.parent.exists()
 
 
 def test_run_without_audio_stream_outputs_video_only(probe, make_twopass, passes):

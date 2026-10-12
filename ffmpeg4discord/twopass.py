@@ -26,6 +26,8 @@ import os
 import shlex
 import string
 import sys
+import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
@@ -488,6 +490,21 @@ class TwoPass:
 
         return params
 
+    def _set_pass_stats_path(self, params: dict, passlog_prefix: Path, dry_run: bool) -> None:
+        """Keep this encode's two-pass stats separate from other jobs and user files."""
+        if self.codec == "x265":
+            stats_name = f"{passlog_prefix.name}-x265_2pass.log" if dry_run else "x265_2pass.log"
+            stats_path = passlog_prefix.parent / stats_name
+            stats_value = stats_path.as_posix()
+            if sys.platform == "win32":
+                # x265-params uses colons between options; escape the drive-letter colon.
+                stats_value = stats_value.replace(":", r"\:", 1)
+            params["pass1"]["x265-params"] += f":stats={stats_value}"
+            params["pass2"]["x265-params"] += f":stats={stats_value}"
+        elif self.codec not in HARDWARE_CODECS:
+            for pass_params in params.values():
+                pass_params["passlogfile"] = str(passlog_prefix)
+
     def _create_bitrate_dict(self) -> None:
         """Compute the video bitrate targets for the requested file size.
 
@@ -668,9 +685,23 @@ class TwoPass:
 
             self.output_filename = str(self.output)
 
+        # A dry run only prints commands, so give those commands a unique path in the system temp
+        # directory without creating an artefact. A real encode gets a private directory whose
+        # contents are deleted after both passes complete.
+        if dry_run:
+            passlog_prefix = Path(tempfile.gettempdir()) / f"ffmpeg4discord-{uuid.uuid4().hex}"
+            return self._run_with_pass_stats(dry_run=True, passlog_prefix=passlog_prefix)
+
+        with tempfile.TemporaryDirectory(prefix="ffmpeg4discord-") as temp_dir:
+            passlog_prefix = Path(temp_dir) / "ffmpeg2pass"
+            return self._run_with_pass_stats(dry_run=False, passlog_prefix=passlog_prefix)
+
+    def _run_with_pass_stats(self, dry_run: bool, passlog_prefix: Path) -> float:
+        """Build and run one encode using a private two-pass stats prefix."""
         # generate run parameters
         self._create_bitrate_dict()
         params = self._generate_params(codec=self.codec)
+        self._set_pass_stats_path(params, passlog_prefix, dry_run)
 
         # separate streams from ffinput
         ffinput = ffmpeg.input(self.filename, **self.times)

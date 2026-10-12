@@ -9,7 +9,6 @@ settings to meet the desired output file size.
 Functions:
 - twopass_loop: Executes the two-pass encoding process in a loop until the target file size is achieved.
 - open_browser: Opens the default web browser to the specified port.
-- cleanup_files: Removes temporary files matching a given pattern.
 - format_commands: Lists the ffmpeg commands for an encode with a short explanation.
 - main: The main function that parses command-line arguments and starts the encoding process or web server.
 """
@@ -18,7 +17,6 @@ import logging
 import threading
 import time
 import webbrowser
-from glob import glob
 from pathlib import Path
 from textwrap import dedent
 
@@ -42,12 +40,6 @@ def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False)
         approx (bool): Whether to approximate the target file size without looping.
     """
     while True:
-        # clean up before each run
-        if twopass.codec == "x265":
-            cleanup_files("x265_2pass*")
-        else:
-            cleanup_files("ffmpeg2pass*")
-
         # run the two-pass encoding
         current_filesize = twopass.run()
         output_fs = round(twopass.output_filesize, 2)
@@ -76,13 +68,6 @@ def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False)
     output_path = Path(twopass.output_filename).resolve()
     twopass.message = f"Your compressed video file ({output_fs}MB) is located at {output_path}"
 
-    # final cleanup
-    if twopass.codec == "x265":
-        cleanup_files("x265_2pass*")
-    else:
-        cleanup_files("ffmpeg2pass*")
-
-
 def open_browser(port: int) -> None:
     """
     Opens the default web browser to the specified port.
@@ -92,17 +77,6 @@ def open_browser(port: int) -> None:
     """
     time.sleep(0.5)
     webbrowser.open(f"http://127.0.0.1:{port}")
-
-
-def cleanup_files(pattern: str) -> None:
-    """
-    Removes temporary files matching a given pattern.
-
-    Args:
-        pattern (str): The glob pattern to match files for cleanup.
-    """
-    for file in glob(pattern):
-        Path(file).unlink()
 
 
 def format_commands(commands: list[str]) -> str:

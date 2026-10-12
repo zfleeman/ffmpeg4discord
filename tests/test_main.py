@@ -24,9 +24,8 @@ def twopass():
 
 @pytest.fixture
 def no_cleanup(monkeypatch):
-    """Stop twopass_loop from deleting files. Returns the mock that replaces `Path.unlink`."""
+    """Record output-file deletion when a failed size attempt is retried."""
     unlink = MagicMock()
-    monkeypatch.setattr(mainmod, "cleanup_files", MagicMock())
     monkeypatch.setattr(mainmod.Path, "unlink", unlink)
     return unlink
 
@@ -84,12 +83,15 @@ def test_open_browser(monkeypatch):
     mainmod.webbrowser.open.assert_called_once_with("http://127.0.0.1:1234")
 
 
-def test_cleanup_files(tmp_path, monkeypatch):
+def test_twopass_loop_preserves_existing_pass_logs(tmp_path, monkeypatch, twopass):
     monkeypatch.chdir(tmp_path)
-    for name in ("ffmpeg2pass-0.log", "ffmpeg2pass-0.log.mbtree", "keep.mp4"):
+    existing_logs = ["ffmpeg2pass-0.log", "ffmpeg2pass-0.log.mbtree", "x265_2pass.log"]
+    for name in existing_logs:
         (tmp_path / name).touch()
-    mainmod.cleanup_files("ffmpeg2pass*")
-    assert [p.name for p in tmp_path.iterdir()] == ["keep.mp4"]
+
+    mainmod.twopass_loop(twopass, target_filesize=10, approx=True)
+
+    assert all((tmp_path / name).exists() for name in existing_logs)
 
 
 # --- main() ---
