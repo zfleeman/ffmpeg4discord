@@ -245,16 +245,17 @@ def test_search_for_default_config_skipped(args):
 
 
 @pytest.mark.parametrize(
-    "args, times",
+    "args, start, end",
     [
-        ({"from": "00:00:10", "to": "00:00:20"}, {"from": "00:00:10", "to": "00:00:20"}),
-        ({"from": "00:00:10"}, {"from": "00:00:10"}),
-        ({"to": "00:00:20"}, {"to": "00:00:20"}),
-        ({}, {}),
+        ({"from": "00:00:10", "to": "00:00:20"}, "00:00:10", "00:00:20"),
+        ({"from": "00:00:10"}, "00:00:10", None),
+        ({"to": "00:00:20"}, None, "00:00:20"),
+        ({"from": "", "to": None}, None, None),
+        ({}, None, None),
     ],
 )
-def test_extract_times(args, times):
-    assert _extract_times(args) == {"times": times}
+def test_extract_times(args, start, end):
+    assert _extract_times(args) == {"start": start, "end": end}
 
 
 @pytest.mark.parametrize(

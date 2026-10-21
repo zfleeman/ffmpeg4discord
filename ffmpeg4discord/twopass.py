@@ -6,6 +6,8 @@ optimal video quality. It supports various encoding parameters such as codec, re
 The module also includes helper functions for timestamp conversion.
 
 Classes:
+- EncodeSettings: What the user asked for, like the target size, trim times, and codec.
+- EncodeResult: The output file, its size, and the ffmpeg commands from one encode.
 - TwoPass: Encodes and resizes video files using FFmpeg's two-pass encoding to meet a specified target file size.
 
 Functions:
@@ -26,6 +28,7 @@ import os
 import shlex
 import string
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
@@ -221,88 +224,88 @@ CODEC_OVERRIDES = {
 }
 
 
+@dataclass
+class EncodeSettings:
+    """
+    What the user asked for. The CLI builds one from its flags and the web UI builds one from its form.
+
+    Attributes:
+        target_filesize (float): Desired output size in MiB.
+        output (Path): The output file, or a folder to save a generated file name in.
+        start (str): Where the clip starts: a timestamp, seconds, or a percentage, e.g. "00:00:10.5", "90", or "75%".
+        end (str): Where the clip stops, in the same formats. None means the end of the video.
+        filename_times (bool): Read the start and end from the file name instead, e.g. "000010-000030.mp4".
+        audio_br (float): Audio bitrate in kbps. None means the input's audio bitrate.
+        codec (str): A key of `CODEC_ENCODERS`, e.g. "x264".
+        crop (str): x offset, y offset, width, and height joined by x, e.g. "255x0x1410x1080".
+        resolution (str): Output width and height, e.g. "1280x720".
+        framerate (int): Output frames per second. None keeps the input's frame rate.
+        no_audio (bool): Leave audio out of the output.
+        amix (bool): Mix the selected audio tracks into one.
+        amix_normalize (bool): Even out the volume while mixing.
+        astreams (list[int]): The 0-based audio tracks to use. None means all of them.
+        verbose (bool): Show ffmpeg's detailed logging.
+    """
+
+    target_filesize: float
+    output: Path = Path()
+    start: Optional[str] = None
+    end: Optional[str] = None
+    filename_times: bool = False
+    audio_br: Optional[float] = None
+    codec: str = "x264"
+    crop: str = ""
+    resolution: str = ""
+    framerate: Optional[int] = None
+    no_audio: bool = False
+    amix: bool = False
+    amix_normalize: bool = False
+    astreams: Optional[list[int]] = None
+    verbose: bool = False
+
+
+@dataclass
+class EncodeResult:
+    """What one call to `TwoPass.run()` produced."""
+
+    output_filename: str
+    output_filesize: float  # in MiB, or 0 for a dry run
+    commands: list[str]  # the ffmpeg commands, for showing to the user
+
+
 class TwoPass:
     """
-    Encodes and resizes video files using ffmpeg's two-pass encoding to meet a specified target file size.
+    Encodes a video to a target file size with ffmpeg's two-pass encoding.
 
-    The TwoPass class leverages the ffmpeg-python library to compress video files while allowing control
-    over attributes such as codec, resolution, and target file size. It performs two-pass encoding
-    to achieve optimal video quality at the desired size.
+    A TwoPass reads the input with ffprobe once and keeps what it learns, like the duration and audio tracks.
+    Each call to `run()` takes the `EncodeSettings` to encode with, so one TwoPass can run many encodes.
 
     Two-Pass encoding documentation: https://trac.ffmpeg.org/wiki/Encode/H.264#twopass
 
     Attributes:
-        filename (Path): Path to the input video file that needs compression.
-        target_filesize (float): Desired target filesize in megabytes (MB).
-        output (str): Output file path or directory where the compressed video will be saved.
-        times (dict): Dictionary with keys "from" and "to" specifying timestamps (in seconds) for encoding a segment.
-        audio_br (float): Audio bitrate in kilobits per second (kbps), if specified. Defaults to automatic calculation.
-        codec (str): Video codec to use for compression, e.g., 'x264' (default).
-        crop (str): Crop settings (if any) for the video.
-        resolution (str): Target resolution for the output video.
-        filename_times (bool): Flag to include timestamps in the output filename.
-        verbose (bool): Flag to allow verbose logging
+        filename (Path): The input video.
+        probe (dict): ffprobe's output for the input.
+        duration (float): The input's length in seconds.
+        input_filesize (float): The input's size in MiB.
+        ratio (float): The input's width divided by its height.
+        init_framerate (int): The input's frames per second, rounded.
+        audio_streams (list[dict]): The probe's audio streams, in order.
+        source_audio_br (float): The first audio track's bitrate in bits per second, or None without audio.
+        video_stream (dict): The probe's video stream.
+        tonemap (list): The HDR-to-SDR filters for an HDR input, or None.
     """
 
-    def __init__(
-        self,
-        filename: Path,
-        target_filesize: float,
-        output: str = "",
-        times: Optional[dict] = None,
-        audio_br: Optional[float] = None,
-        codec: str = "x264",
-        crop: str = "",
-        resolution: str = "",
-        filename_times: bool = False,
-        verbose: bool = False,
-        framerate: Optional[int] = None,
-        amix: bool = False,
-        amix_normalize: bool = False,
-        astreams: Optional[list[int]] = None,
-        no_audio: bool = False,
-    ) -> None:
-        self.target_filesize = target_filesize
-        self.crop = crop
-        self.resolution = resolution
-        self.times = times or {}
-        self.audio_br = audio_br
-        self.codec = codec
-        self.framerate = framerate
-        self.output = output
-        self.verbose = verbose
-        self.amix = amix
-        self.amix_normalize = amix_normalize
-        self.astreams = astreams
-        self.output_filename = ""
-        self.output_filesize = 0
-        self.bitrate_dict = {}
-        self.message = ""
-        self.commands = []
-        self.no_audio = no_audio
-
+    def __init__(self, filename: Path) -> None:
         self.filename = filename
-        self.fname = filename.name
-        self.split_fname = self.fname.split(".")
-
-        # Attributes set/updated by helper methods
-        self.duration = None
         self.ratio = None
         self.init_framerate = None
-        self.from_seconds = None
-        self.to_seconds = None
-        self.length = None
         self.audio_streams = []
         self.video_stream = None
         self.tonemap = None
 
-        # create a Path from the output string
-        self.output = Path(self.output).resolve()
-
         # `show_program_version` adds the ffmpeg version to the probe output, which fps_mode_flag() needs.
         self.probe = ffmpeg.probe(filename=filename, show_program_version=None)
         self._process_probe()
-        self._process_times(filename_times)
 
     def _parse_streams(self):
         """Helper to parse video and audio streams from the probe output.
@@ -329,29 +332,17 @@ class TwoPass:
 
     def _process_probe(self):
         """
-        Processes the ffmpeg probe output to set duration, ratio, framerate, and audio bitrate attributes.
+        Processes the ffmpeg probe output to set the duration, size, ratio, framerate, and audio bitrate attributes.
         """
-        # set the total video duration -- for use throughout the call and the web ui
         self.duration = float(self.probe["format"]["duration"])
-
-        # The file size comparison below uses mebibytes (MiB, 1 MiB = 1,048,576 bytes).
-        input_filesize_mib = float(self.probe["format"]["size"]) * FILE_SIZE_MULT
-        if input_filesize_mib < self.target_filesize:
-            raise ValueError(
-                f"Your target file size is larger than the input file.\n"
-                f"Input file size (in MiB):\t{input_filesize_mib:.2f} MiB\n"
-                f"Target file size (in MiB):\t{self.target_filesize:.2f} MiB\n"
-                "Note: File size is calculated in MiB (1 MiB = 1,048,576 bytes). "
-                "macOS Finder uses MB (1 MB = 1,000,000 bytes), which may differ."
-            )
+        # in mebibytes (MiB, 1 MiB = 1,048,576 bytes), like the target size
+        self.input_filesize = float(self.probe["format"]["size"]) * FILE_SIZE_MULT
 
         audio_stream = self._parse_streams()
 
+        self.source_audio_br = None
         if audio_stream is not None:
-            if not self.audio_br:
-                self.audio_br = float(self.probe["streams"][audio_stream]["bit_rate"])
-            else:
-                self.audio_br = self.audio_br * 1000
+            self.source_audio_br = float(self.probe["streams"][audio_stream]["bit_rate"])
         else:
             logging.warning("No audio stream found in the media file.")
 
@@ -374,32 +365,23 @@ class TwoPass:
                 )
             )
 
-    def _process_times(self, filename_times: bool):
+    def clip_times(self, settings: EncodeSettings) -> tuple[float, float]:
         """
-        Handles the logic for setting up trimming times and related attributes.
+        Returns where the clip starts and ends, in seconds.
+
+        The times come from the file name when `settings.filename_times` is set, otherwise from `settings.start`
+        and `settings.end`. Without either, the clip is the whole video.
         """
-        # times are supplied by the file's name
-        if filename_times:
-            self._time_from_file_name()
-
-        # times are provided by the flags or config file
-        elif self.times:
-            # Accept any supported format (timestamp, seconds, or percentage), then hand ffmpeg one standard format.
-            start = self.times.get("from") or "0"
-            end = self.times.get("to")
-            self.from_seconds = seconds_from_ts_string(timestamp_from_percentage(start, self.duration))
-            self.to_seconds = (
-                seconds_from_ts_string(timestamp_from_percentage(end, self.duration)) if end else self.duration
-            )
-            self.length = self.to_seconds - self.from_seconds
-            self.times = {"ss": seconds_to_timestamp(self.from_seconds), "to": seconds_to_timestamp(self.to_seconds)}
-
-        # no trimming times were provided
+        if settings.filename_times:
+            start, end = self._times_from_file_name()
         else:
-            self.times = {"ss": "00:00:00", "to": seconds_to_timestamp(self.duration)}
-            self.length = self.duration
+            # Accept any supported format (timestamp, seconds, or percentage).
+            start = seconds_from_ts_string(timestamp_from_percentage(settings.start or "0", self.duration))
+            end = self.duration
+            if settings.end:
+                end = seconds_from_ts_string(timestamp_from_percentage(settings.end, self.duration))
 
-        if self.length <= 0:
+        if end <= start:
             raise ValueError(
                 dedent(
                     f"""\033[31m
@@ -409,18 +391,46 @@ class TwoPass:
                     information to further diagnose the problem:
 
                     - Your video is {self.duration / 60} minutes long
-                    - Your clipping times are {self.times}
+                    - Your clipping times are {seconds_to_timestamp(start)} to {seconds_to_timestamp(end)}
                     \033[0m"""
                 )
             )
 
-    def _generate_params(self, codec: str) -> dict:
+        return start, end
+
+    def _times_from_file_name(self) -> tuple[float, float]:
+        """
+        Reads the start and optional end time from a file name like "HHMMSS.mp4" or "HHMMSS-HHMMSS.mp4".
+
+        Without an end time, the clip runs to the end of the video. A name in neither format gets the whole video.
+        """
+        fname = self.filename.name
+
+        try:
+            start = seconds_from_ts_string(f"{fname[0:2]}:{fname[2:4]}:{fname[4:6]}")
+        except ValueError:
+            logging.warning("Warning: Invalid time format in filename. Defaulting to full duration.")
+            return 0.0, self.duration
+
+        # Check if there is an additional six digits for end time
+        if len(fname) > 6 and fname[7:13].isdigit():
+            return start, seconds_from_ts_string(f"{fname[7:9]}:{fname[9:11]}:{fname[11:13]}")
+
+        return start, self.duration
+
+    def _audio_bitrate(self, settings: EncodeSettings) -> Optional[float]:
+        """The audio bitrate to encode with, in bits per second."""
+        return settings.audio_br * 1000 if settings.audio_br else self.source_audio_br
+
+    def _generate_params(self, settings: EncodeSettings, bitrate_targets: dict) -> dict:
         """
         Create params for the ffmpeg.output() function
-        :param codec: ffmpeg video codec to use during encoding
+        :param settings: the encode's settings
+        :param bitrate_targets: the video bitrate flags from `_bitrate_targets()`
         :return: dictionary containing parameters for ffmpeg's first and second pass.
         """
 
+        codec = settings.codec
         params = {
             "pass1": {
                 "pass": 1,
@@ -431,7 +441,7 @@ class TwoPass:
             },
             "pass2": {
                 "pass": 2,
-                "b:a": self.audio_br,
+                "b:a": self._audio_bitrate(settings),
                 "c:v": CODEC_ENCODERS.get(codec, codec),
                 # 8-bit 4:2:0 is the only format browsers, phones, and Discord's player reliably decode
                 "pix_fmt": "yuv420p",
@@ -445,15 +455,15 @@ class TwoPass:
             params["pass2"].update({"color_primaries": "bt709", "color_trc": "bt709", "colorspace": "bt709"})
 
         # assign the output framerate
-        if self.framerate:
-            if self.framerate < self.init_framerate:
-                params["pass1"]["r"] = self.framerate
-                params["pass2"]["r"] = self.framerate
+        if settings.framerate:
+            if settings.framerate < self.init_framerate:
+                params["pass1"]["r"] = settings.framerate
+                params["pass2"]["r"] = settings.framerate
             else:
                 logging.warning(
                     dedent(
                         f"""\033[31m
-                        Desired framerate ({self.framerate}) is more than original framerate ({self.init_framerate}).
+                        Desired framerate ({settings.framerate}) is more than original framerate ({self.init_framerate}).
                         Keeping the original framerate...
                         \033[0m"""
                     )
@@ -484,100 +494,78 @@ class TwoPass:
 
         # Apply bitrate targets to both passes
         for pass_params in params.values():
-            pass_params.update(**self.bitrate_dict)
+            pass_params.update(**bitrate_targets)
 
         return params
 
-    def _create_bitrate_dict(self) -> None:
-        """Compute the video bitrate targets for the requested file size.
+    def _bitrate_targets(self, settings: EncodeSettings, length: float) -> dict:
+        """Compute the video bitrate flags that fit `settings.target_filesize` into a `length`-second clip."""
 
-        Notes:
-            `self.length` is expected to be > 0. In the CLI path this is enforced by `_process_times()`,
-            but the Web UI mutates `self.times`/`self.length` directly, so we defensively guard here.
-        """
-
-        if not self.length or self.length <= 0:
-            raise ValueError(
-                "Invalid clip length (length must be > 0 seconds). Check your Start/End times (start must be < end)."
-            )
-
-        # No audio track is written with --no-audio, so it shouldn't take any of the size budget.
-        audio_kbps = 0 if self.no_audio or not self.audio_br else self.audio_br / 1000
-        br = math.floor((self.target_filesize * 8192) / self.length - audio_kbps) * 1000
+        # No audio track is written with --no-audio or without an audio stream, so neither takes any of the budget.
+        audio_bps = self._audio_bitrate(settings)
+        audio_kbps = 0 if settings.no_audio or not self.audio_streams or not audio_bps else audio_bps / 1000
+        br = math.floor((settings.target_filesize * 8192) / length - audio_kbps) * 1000
 
         # Long clips with small targets can leave nothing for video after audio is subtracted.
         if br <= 0:
             raise ValueError(
-                f"Target file size of {self.target_filesize:.2f} MiB is too small for a {self.length:g}-second clip "
+                f"Target file size of {settings.target_filesize:.2f} MiB is too small for a {length:g}-second clip "
                 f"with {audio_kbps:g} kbps audio: there is no bitrate left for video. "
                 "Try a larger target size (-s), a shorter clip, a lower audio bitrate (-a), or no audio (-an)."
             )
 
-        self.bitrate_dict = {
+        return {
             "b:v": br,
             "minrate": br * 0.5,
             "maxrate": br * 1.45,
             "bufsize": br * 2,
         }
 
-    def _time_from_file_name(self):
+    def _output_filename(self, settings: EncodeSettings) -> str:
         """
-        Extracts start (`-ss`) and optional end (`-to`) timestamps from the file name and updates the instance's
-        time-related attributes. Assumes the file name is in one of two formats:
-        - 'HHMMSS' (start time only)
-        - 'HHMMSS-HHMMSS' (start and end times)
-
-        If the end time is not provided, the function defaults the end time to the full video duration.
+        Returns the file to write. A folder gets a generated name, and a file name's extension is fixed to match the codec.
         """
-        fname = self.fname
-        times = {}
+        ext = ".webm" if "vp9" in settings.codec else ".mp4"
+        output = settings.output.resolve()
 
-        try:
-            # Parse start time from the first six characters
-            start_time_str = f"{fname[0:2]}:{fname[2:4]}:{fname[4:6]}"
-            self.from_seconds = seconds_from_ts_string(start_time_str)
-            times["ss"] = start_time_str
+        if output.is_dir():
+            name = "small_" + self.filename.stem.replace(" ", "_") + f"_{settings.codec}"
+            return str(output / (name + datetime.strftime(datetime.now(), f"_%Y%m%d%H%M%S{ext}")))
 
-            # Check if there is an additional six digits for end time
-            if len(fname) > 6 and fname[7:13].isdigit():
-                end_time_str = f"{fname[7:9]}:{fname[9:11]}:{fname[11:13]}"
-                self.to_seconds = seconds_from_ts_string(end_time_str)
-                times["to"] = end_time_str
-                self.length = self.to_seconds - self.from_seconds
-            else:
-                # Default to the full duration if end time is not provided
-                times["to"] = seconds_to_timestamp(self.duration)
-                self.length = self.duration - self.from_seconds
-                self.to_seconds = self.duration
+        if output.suffix != ext:
+            logging.warning(
+                dedent(
+                    f"""\033[31m
+                    You specified {settings.codec}, but your output file name ends with {output.suffix}.
+                    I've corrected this.
+                    \033[0m"""
+                )
+            )
+            output = output.with_suffix(ext)
 
-        except ValueError:
-            # Handle any issues with timestamp parsing by defaulting to full duration
-            self.length = self.duration
-            times = {"ss": "00:00:00", "to": seconds_to_timestamp(self.duration)}
-            logging.warning("Warning: Invalid time format in filename. Defaulting to full duration.")
+        return str(output)
 
-        # Update instance attributes with calculated times
-        self.times = times
-
-    def _apply_video_filters(self, video):
+    def _apply_video_filters(self, video, settings: EncodeSettings):
         """
         Function to apply the crop and resolution parameters to a video object
         :param video: the ffmpeg video object from the Class's input video file
+        :param settings: the encode's settings
         :return: the video object after it has been cropped or resized
         """
 
-        if self.crop:
-            crop = self.crop.split("x")
+        ratio = self.ratio
+        if settings.crop:
+            crop = settings.crop.split("x")
             video = video.crop(x=crop[0], y=crop[1], width=crop[2], height=crop[3])
-            self.ratio = int(crop[2]) / int(crop[3])
+            ratio = int(crop[2]) / int(crop[3])
 
-        if self.resolution:
-            video = video.filter("scale", self.resolution)
-            x = int(self.resolution.split("x")[0])
-            y = int(self.resolution.split("x")[1])
+        if settings.resolution:
+            video = video.filter("scale", settings.resolution)
+            x = int(settings.resolution.split("x")[0])
+            y = int(settings.resolution.split("x")[1])
             outputratio = x / y
 
-            if self.ratio != outputratio:
+            if ratio != outputratio:
                 logging.warning(
                     dedent(
                         """\033[31m
@@ -593,97 +581,74 @@ class TwoPass:
 
         return video
 
-    def _apply_audio_filters(self, ffinput):
+    def _apply_audio_filters(self, ffinput, settings: EncodeSettings):
         """Select and/or mix audio streams.
 
-        Selection is controlled by `self.astreams` (0-based *audio stream order*, not ffprobe index).
-        - If `self.astreams` is None: select all (historical behavior).
-        - If `self.astreams` is []: select none.
-        - If `self.amix` is True: merge the selected streams.
-        - If `self.amix` is False: pick the first selected stream.
+        Selection is controlled by `settings.astreams` (0-based *audio stream order*, not ffprobe index).
+        - If `settings.astreams` is None: select all (historical behavior).
+        - If `settings.astreams` is []: select none.
+        - If `settings.amix` is True: merge the selected streams.
+        - If `settings.amix` is False: pick the first selected stream.
         """
 
         if not self.audio_streams:
             return None
 
-        if self.astreams is None:
+        if settings.astreams is None:
             selected_positions = list(range(len(self.audio_streams)))
         else:
-            selected_positions = [i for i in self.astreams if 0 <= i < len(self.audio_streams)]
+            selected_positions = [i for i in settings.astreams if 0 <= i < len(self.audio_streams)]
 
         if not selected_positions:
             return None
 
         # The bitrate budget covers one audio track, so without mixing we keep only the first selected one.
         # (`ffinput.audio` would map every track and push the output over the target size.)
-        if not self.amix:
+        if not settings.amix:
             return ffinput[f"a:{selected_positions[0]}"]
 
         to_merge = [ffinput[f"a:{i}"] for i in selected_positions]
         return ffmpeg.filter(
             to_merge,
             "amix",
-            normalize=int(self.amix_normalize),
+            normalize=int(settings.amix_normalize),
             inputs=len(selected_positions),
         )
 
-    def run(self, dry_run: bool = False) -> float:
+    def run(self, settings: EncodeSettings, dry_run: bool = False) -> EncodeResult:
         """
         Perform the CPU-intensive encoding job
-        :param dry_run: build the ffmpeg commands and save them to `self.commands` without running them
-        :return: the output file's size, or 0 for a dry run
+        :param settings: what to encode and how
+        :param dry_run: build the ffmpeg commands without running them
+        :return: the output file, its size, and the ffmpeg commands
         """
 
-        if "vp9" in self.codec:
-            ext = ".webm"
-        else:
-            ext = ".mp4"
-
-        if self.output.is_dir():
-            self.output_filename = str(
-                self.output
-                / (
-                    "small_"
-                    + self.filename.stem.replace(" ", "_")
-                    + f"_{self.codec}"
-                    + datetime.strftime(datetime.now(), f"_%Y%m%d%H%M%S{ext}")
-                )
+        # The file size comparison uses mebibytes (MiB, 1 MiB = 1,048,576 bytes).
+        if settings.target_filesize > self.input_filesize:
+            raise ValueError(
+                f"Your target file size is larger than the input file.\n"
+                f"Input file size (in MiB):\t{self.input_filesize:.2f} MiB\n"
+                f"Target file size (in MiB):\t{settings.target_filesize:.2f} MiB\n"
+                "Note: File size is calculated in MiB (1 MiB = 1,048,576 bytes). "
+                "macOS Finder uses MB (1 MB = 1,000,000 bytes), which may differ."
             )
-        else:
-            if ext != self.output.suffix:
-                logging.warning(
-                    dedent(
-                        f"""\033[31m
-                        You specified {self.codec}, but your output file name ends with {self.output.suffix}.
-                        I've corrected this.
-                        \033[0m"""
-                    )
-                )
 
-                # correct the file suffix
-                if "vp9" in self.codec:
-                    self.output = self.output.with_suffix(".webm")
-                else:
-                    self.output = self.output.with_suffix(".mp4")
-
-            self.output_filename = str(self.output)
-
-        # generate run parameters
-        self._create_bitrate_dict()
-        params = self._generate_params(codec=self.codec)
+        start, end = self.clip_times(settings)
+        output_filename = self._output_filename(settings)
+        params = self._generate_params(settings, self._bitrate_targets(settings, end - start))
 
         # separate streams from ffinput
-        ffinput = ffmpeg.input(self.filename, **self.times)
-        video = self._apply_video_filters(ffinput.video)
-        audio = self._apply_audio_filters(ffinput)
+        ffinput = ffmpeg.input(self.filename, ss=seconds_to_timestamp(start), to=seconds_to_timestamp(end))
+        video = self._apply_video_filters(ffinput.video, settings)
+        audio = self._apply_audio_filters(ffinput, settings)
 
         # Set our logging level. We use "error" rather than "quiet" so that ffmpeg's own failure
         # messages reach the user; "-stats" still prints the progress line either way.
-        loglevel = "verbose" if self.verbose else "error"
+        loglevel = "verbose" if settings.verbose else "error"
 
-        hardware = self.codec in HARDWARE_CODECS
+        hardware = settings.codec in HARDWARE_CODECS
         hint = (
-            f"{self.codec} is a hardware encoder and needs matching hardware and drivers. "
+            f"{settings.codec} is a hardware encoder and needs matching hardware and drivers. "
             "If yours doesn't have it, try a software codec like x264 (-c x264)."
             if hardware
             else ""
@@ -693,13 +658,13 @@ class TwoPass:
         first_pass = None if hardware else ffmpeg.output(video, "pipe:", **params["pass1"])
 
         # Second Pass
-        output_streams = [video, audio] if audio and not self.no_audio else [video]
-        second_pass = ffmpeg.output(*output_streams, self.output_filename, **params["pass2"])
+        output_streams = [video, audio] if audio and not settings.no_audio else [video]
+        second_pass = ffmpeg.output(*output_streams, output_filename, **params["pass2"])
 
         # Save the commands for the user before adding ff4d's logging flags, which they don't need.
-        self.commands = [command_for_display(p) for p in (first_pass, second_pass) if p is not None]
+        commands = [command_for_display(p) for p in (first_pass, second_pass) if p is not None]
         if dry_run:
-            return 0
+            return EncodeResult(output_filename, 0, commands)
 
         if first_pass is not None:
             print("Performing first pass")
@@ -709,10 +674,7 @@ class TwoPass:
         second_pass = second_pass.global_args("-loglevel", loglevel, "-stats")
         run_pass(second_pass, "single" if hardware else "second", hint=hint, overwrite_output=True)
 
-        # save the output file size and return it
-        self.output_filesize = os.path.getsize(self.output_filename) * FILE_SIZE_MULT
-
-        return self.output_filesize
+        return EncodeResult(output_filename, os.path.getsize(output_filename) * FILE_SIZE_MULT, commands)
 
 
 def seconds_from_ts_string(ts_string: str) -> float:

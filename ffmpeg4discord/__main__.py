@@ -11,8 +11,9 @@ Functions:
 - open_browser: Opens the default web browser to the specified port.
 - cleanup_files: Removes temporary files matching a given pattern.
 - format_commands: Lists the ffmpeg commands for an encode with a short explanation.
+- success_message: The message shown when an encode finishes.
 - form_values: The values the web UI's form shows.
-- parse_encode_form: Checks the web UI's form and turns it into TwoPass settings.
+- parse_encode_form: Checks the web UI's form and turns it into EncodeSettings.
 - main: The main function that parses command-line arguments and starts the encoding process or web server.
 """
 
@@ -22,6 +23,7 @@ import re
 import threading
 import time
 import webbrowser
+from dataclasses import replace
 from glob import glob
 from pathlib import Path
 from textwrap import dedent
@@ -29,7 +31,7 @@ from textwrap import dedent
 from flask import Flask, render_template, request, send_file, url_for
 
 from ffmpeg4discord import arguments
-from ffmpeg4discord.twopass import FILE_SIZE_MULT, TwoPass, available_codecs, seconds_to_timestamp
+from ffmpeg4discord.twopass import EncodeResult, EncodeSettings, TwoPass, available_codecs
 from ffmpeg4discord.versioning import check_for_update
 
 # smallest fraction the target size is cut by on each retry
@@ -40,55 +42,51 @@ RESOLUTION_PATTERN = re.compile(r"\d+x\d+")
 CROP_PATTERN = re.compile(r"\d+x\d+x\d+x\d+")
 
 
-def twopass_loop(twopass: TwoPass, target_filesize: float, approx: bool = False) -> None:
+def twopass_loop(twopass: TwoPass, settings: EncodeSettings, approx: bool = False) -> EncodeResult:
     """
-    Executes the two-pass encoding process in a loop until the target file size is achieved.
+    Encodes with `settings`, then re-encodes at a lower bitrate until the output is under the target size.
 
     Args:
-        twopass (TwoPass): An instance of the TwoPass class.
-        target_filesize (float): The desired target file size in megabytes (MB).
-        approx (bool): Whether to approximate the target file size without looping.
+        twopass (TwoPass): The TwoPass for the input video.
+        settings (EncodeSettings): What to encode. Its `target_filesize` is the size to get under.
+        approx (bool): Keep the first encode, even if it's over the target.
+
+    Returns:
+        The last encode's result.
     """
+    target_filesize = settings.target_filesize
+    pass_logs = "x265_2pass*" if settings.codec == "x265" else "ffmpeg2pass*"
+
     while True:
         # clean up before each run
-        if twopass.codec == "x265":
-            cleanup_files("x265_2pass*")
-        else:
-            cleanup_files("ffmpeg2pass*")
+        cleanup_files(pass_logs)
 
         # run the two-pass encoding
-        current_filesize = twopass.run()
-        output_fs = round(twopass.output_filesize, 2)
+        result = twopass.run(settings)
 
         # check if the filesize is within the target
-        if current_filesize < target_filesize or approx:
+        if result.output_filesize < target_filesize or approx:
             break
 
         print(
             dedent(
                 f"""\033[31m
-                The output file size ({output_fs}MB) is still above the target of {target_filesize}MB.
+                The output file size ({round(result.output_filesize, 2)}MB) is still above the target of {target_filesize}MB.
                 Restarting...
                 \033[0m"""
             )
         )
-        Path(twopass.output_filename).unlink()
+        Path(result.output_filename).unlink()
 
-        # adjust the class's target file size to set a lower bitrate for the next run
+        # lower the target size for the next run, which lowers the bitrate.
         # scale by how far off we are, but always cut by at least MIN_RETRY_STEP so an output
         # that lands just over the target doesn't retry at a near-identical bitrate
-        adjustment_ratio = min(target_filesize / current_filesize, 1 - MIN_RETRY_STEP)
-        twopass.target_filesize = max(twopass.target_filesize * adjustment_ratio, 0.1)
-
-    # set the final message
-    output_path = Path(twopass.output_filename).resolve()
-    twopass.message = f"Your compressed video file ({output_fs}MB) is located at {output_path}"
+        adjustment_ratio = min(target_filesize / result.output_filesize, 1 - MIN_RETRY_STEP)
+        settings = replace(settings, target_filesize=max(settings.target_filesize * adjustment_ratio, 0.1))
 
     # final cleanup
-    if twopass.codec == "x265":
-        cleanup_files("x265_2pass*")
-    else:
-        cleanup_files("ffmpeg2pass*")
+    cleanup_files(pass_logs)
+    return result
 
 
 def open_browser(port: int) -> None:
@@ -118,7 +116,7 @@ def format_commands(commands: list[str]) -> str:
     Lists the ffmpeg commands for an encode, so users can see what ff4d did on their behalf.
 
     Args:
-        commands (list[str]): The commands saved by `TwoPass.run()`.
+        commands (list[str]): The commands from `EncodeResult.commands`.
     """
     if len(commands) == 1:
         header = "Here's what this encode looks like as a plain FFmpeg command:"
@@ -127,36 +125,45 @@ def format_commands(commands: list[str]) -> str:
     return "\n\n".join([header, *commands])
 
 
-def form_values(twopass: TwoPass, approx: bool, form=None) -> dict:
+def success_message(result: EncodeResult) -> str:
+    """The message shown when an encode finishes."""
+    output_path = Path(result.output_filename).resolve()
+    return f"Your compressed video file ({round(result.output_filesize, 2)}MB) is located at {output_path}"
+
+
+def form_values(twopass: TwoPass, settings: EncodeSettings, approx: bool, form=None) -> dict:
     """
-    The values the web UI's form shows. They come from `twopass`, or from `form` when the page is shown again
+    The values the web UI's form shows. They come from `settings`, or from `form` when the page is shown again
     after a bad submit, so the user keeps what they typed.
 
     Args:
-        twopass (TwoPass): The TwoPass whose settings fill the form.
+        twopass (TwoPass): The TwoPass for the input video.
+        settings (EncodeSettings): The settings that fill the form.
         approx (bool): Whether the "Approximate file size" switch is on.
         form: The submitted form (Flask's `request.form`), if any.
     """
-    if twopass.amix:
-        amix_mode = "mix_normalize" if twopass.amix_normalize else "mix"
+    if settings.amix:
+        amix_mode = "mix_normalize" if settings.amix_normalize else "mix"
     else:
         amix_mode = "off"
 
+    start, end = twopass.clip_times(settings)
+    source_kbps = twopass.source_audio_br / 1000 if twopass.source_audio_br else ""
     values = {
-        "startTime": twopass.from_seconds or 0,
-        "endTime": twopass.to_seconds or twopass.duration,
-        "target_filesize": twopass.target_filesize,
+        "startTime": start,
+        "endTime": end,
+        "target_filesize": settings.target_filesize,
         "approx": approx,
-        "resolution": twopass.resolution,
-        "crop": twopass.crop,
-        "output": twopass.output,
-        "codec": twopass.codec,
-        "framerate": twopass.framerate or "",
-        "audio_br": twopass.audio_br / 1000 if twopass.audio_br else "",
-        "include_audio": not twopass.no_audio,
+        "resolution": settings.resolution,
+        "crop": settings.crop,
+        "output": settings.output.resolve(),
+        "codec": settings.codec,
+        "framerate": settings.framerate or "",
+        "audio_br": settings.audio_br or source_kbps,
+        "include_audio": not settings.no_audio,
         "amix_mode": amix_mode,
-        "astreams": twopass.astreams,  # None means every track is checked
-        "verbose": twopass.verbose,
+        "astreams": settings.astreams,  # None means every track is checked
+        "verbose": settings.verbose,
     }
     if form is None:
         return values
@@ -193,9 +200,9 @@ def _number(text, convert=float):
     return value if math.isfinite(value) else None
 
 
-def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[dict, list[str]]:
+def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[EncodeSettings | None, list[str]]:
     """
-    Checks the web UI's form and turns it into TwoPass settings.
+    Checks the web UI's form and turns it into EncodeSettings.
 
     Args:
         form: The submitted form (Flask's `request.form`).
@@ -203,8 +210,7 @@ def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[dict, 
         codecs (list[str]): The codecs this computer can use.
 
     Returns:
-        The settings, keyed by TwoPass attribute name, and a list of error messages for the user.
-        Only use the settings when the list is empty.
+        The settings and an empty list, or None and a list of error messages for the user.
     """
     errors = []
 
@@ -218,11 +224,12 @@ def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[dict, 
         )
 
     target = _number(form.get("target_filesize"))
-    input_mib = float(twopass.probe["format"]["size"]) * FILE_SIZE_MULT
     if target is None or target <= 0:
         errors.append("The File Size must be a number above 0.")
-    elif target > input_mib:
-        errors.append(f"The File Size ({target:g} MiB) is larger than the input file ({input_mib:.2f} MiB).")
+    elif target > twopass.input_filesize:
+        errors.append(
+            f"The File Size ({target:g} MiB) is larger than the input file ({twopass.input_filesize:.2f} MiB)."
+        )
 
     codec = form.get("codec")
     if codec not in codecs:
@@ -258,24 +265,27 @@ def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[dict, 
     if include_audio and len(twopass.audio_streams) > 1 and not astreams:
         errors.append("Check at least one of the Audio Streams, or turn off Include Audio.")
 
+    if errors:
+        return None, errors
+
     amix_mode = form.get("amix_mode")
-    settings = {
-        "from_seconds": start,
-        "to_seconds": end,
-        "target_filesize": target,
-        "resolution": resolution,
-        "crop": crop,
-        "output": output,
-        "codec": codec,
-        "framerate": framerate,
-        "audio_br": audio_kbps * 1000 if audio_kbps else twopass.audio_br,
-        "verbose": "verbose" in form,
-        "no_audio": not include_audio,
-        "amix": amix_mode in ("mix", "mix_normalize"),
-        "amix_normalize": amix_mode == "mix_normalize",
-        "astreams": astreams or None,
-    }
-    return settings, errors
+    settings = EncodeSettings(
+        target_filesize=target,
+        output=output,
+        start=str(start),
+        end=str(end),
+        audio_br=audio_kbps,  # None (left blank) means the input's audio bitrate
+        codec=codec,
+        crop=crop,
+        resolution=resolution,
+        framerate=framerate,
+        no_audio=not include_audio,
+        amix=amix_mode in ("mix", "mix_normalize"),
+        amix_normalize=amix_mode == "mix_normalize",
+        astreams=astreams or None,
+        verbose="verbose" in form,
+    )
+    return settings, []
 
 
 def main() -> None:
@@ -313,13 +323,15 @@ def main() -> None:
     if web:
         port = args.pop("port")
 
-    path = Path(args["filename"]).resolve()
-    args["filename"] = path
-
-    # instantiate the TwoPass class
-    twopass = TwoPass(**args)
+    path = Path(args.pop("filename")).resolve()
+    args["output"] = Path(args["output"])
+    # the rest of the args are the encode settings
+    settings = EncodeSettings(**args)
+    twopass = TwoPass(path)
 
     if web:
+        # --from and --to fill in the form's starting trim, so check them before starting the server
+        twopass.clip_times(settings)
         codecs = available_codecs()
         # No static folder: serving the video's folder would expose every file next to it.
         app = Flask(__name__, static_folder=None)
@@ -341,24 +353,18 @@ def main() -> None:
 
         @app.route("/")
         def index():
-            return render_page(form_values(twopass, approx), alert_hidden=True)
+            return render_page(form_values(twopass, settings, approx), alert_hidden=True)
 
         @app.route("/encode", methods=["POST"])
         def form_twopass():
-            settings, errors = parse_encode_form(request.form, twopass, codecs)
+            # Each request builds its own settings, so nothing carries over from the last encode.
+            form_settings, errors = parse_encode_form(request.form, twopass, codecs)
             # to loop or not to loop
             approx = "approx" in request.form
 
             if not errors:
-                for name, value in settings.items():
-                    setattr(twopass, name, value)
-                twopass.length = twopass.to_seconds - twopass.from_seconds
-                twopass.times = {
-                    "ss": seconds_to_timestamp(twopass.from_seconds),
-                    "to": seconds_to_timestamp(twopass.to_seconds),
-                }
                 try:
-                    twopass_loop(twopass=twopass, target_filesize=twopass.target_filesize, approx=approx)
+                    result = twopass_loop(twopass, form_settings, approx)
                 except ValueError as exc:
                     # TwoPass raises ValueError for settings that can't work, e.g. no bitrate left for video
                     errors = [str(exc)]
@@ -368,22 +374,27 @@ def main() -> None:
                     errors = ["FFmpeg failed while encoding. Its error message is in the terminal running ff4d."]
 
             if errors:
-                return render_page(form_values(twopass, approx, request.form), alert_hidden=True, errors=errors), 400
+                values = form_values(twopass, settings, approx, request.form)
+                return render_page(values, alert_hidden=True, errors=errors), 400
 
-            return render_page(form_values(twopass, approx), commands_text=format_commands(twopass.commands))
+            return render_page(
+                form_values(twopass, form_settings, approx),
+                message=success_message(result),
+                commands_text=format_commands(result.commands),
+            )
 
         threading.Thread(target=open_browser, args=[port], name="Open Browser").start()
         # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
         app.run("127.0.0.1", port=port)
     elif dry_run:
-        twopass.run(dry_run=True)
-        print(format_commands(twopass.commands))
+        result = twopass.run(settings, dry_run=True)
+        print(format_commands(result.commands))
         if not approx:
             print("\nIf the output lands over the target size, ff4d re-encodes it at a lower bitrate.")
     else:
-        twopass_loop(twopass=twopass, target_filesize=twopass.target_filesize, approx=approx)
-        print(f"\n{format_commands(twopass.commands)}\n")
-        print(twopass.message)
+        result = twopass_loop(twopass, settings, approx)
+        print(f"\n{format_commands(result.commands)}\n")
+        print(success_message(result))
 
 
 if __name__ == "__main__":
