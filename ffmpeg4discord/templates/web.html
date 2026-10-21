@@ -58,7 +58,7 @@
             </video>
             <p class="text-muted"><em>Drag the video playhead, and use the buttons below to set the Start and End times.</em></p> 
         </div>
-        <form id="encodeForm" action="/encode" method="post">
+        <form id="encodeForm" action="/encode" method="post" novalidate>
             <div class="row mb-3">
                 <div class="col">
                     <button type="button" class="btn btn-outline-primary" onclick="setTime('start')"><span class="bi-skip-start-fill"></span> Set Start Time</button>
@@ -77,6 +77,7 @@
                     <label for="endTime" class="form-label">End Time:</label>
                     <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="0.001" max="{{ twopass.duration }}" value="{{ values.endTime }}">
                     <span id="endTimeLabel">{{ values.endTime }} seconds</span>
+                    <div id="endTimeFeedback" class="invalid-feedback"></div>
                 </div>
             </div>
             <div class="row">
@@ -90,22 +91,26 @@
                 <div class="col">
                     <label for="resolution" class="form-label">Resolution</label>
                     <input class="form-control" name="resolution" id="resolution" type="text" value="{{ values.resolution }}" />
+                    <div id="resolutionFeedback" class="invalid-feedback"></div>
                 </div>
                 <div class="col">
                     <label for="target_filesize" class="form-label"><span id="targetApprox">{{ "Approximate" if values.approx else "Target" }}</span> File Size (MB)</label>
-                    <input class="form-control mb-2" name="target_filesize" id="target_filesize" type="text" value="{{ values.target_filesize }}" />
-                    <div class="form-check form-switch">
+                    <input class="form-control" name="target_filesize" id="target_filesize" type="number" min="0" step="any" value="{{ values.target_filesize }}" />
+                    <div id="target_filesizeFeedback" class="invalid-feedback"></div>
+                    <div class="form-check form-switch mt-2">
                         <input class="form-check-input" type="checkbox" role="switch" id="approx" value="True" name="approx" {{ "checked" if values.approx else "" }}>
                         <label class="form-check-label" for="approx">Approximate file size</label>
                     </div>
                 </div>
                 <div class="col">
                     <label for="audio_br" class="form-label">Audio Bitrate (kbps)</label>
-                    <input class="form-control" name="audio_br" id="audio_br" type="text" value="{{ values.audio_br }}" />
+                    <input class="form-control" name="audio_br" id="audio_br" type="number" min="0" step="any" value="{{ values.audio_br }}" />
+                    <div id="audio_brFeedback" class="invalid-feedback"></div>
                 </div>
                 <div class="col">
                     <label for="crop" class="form-label">Crop</label>
                     <input class="form-control" name="crop" id="crop" type="text" value="{{ values.crop }}" />
+                    <div id="cropFeedback" class="invalid-feedback"></div>
                 </div>
                 <div class="col">
                     <label for="output" class="form-label">Output Folder/File</label>
@@ -113,7 +118,9 @@
                 </div>
                 <div class="col">
                     <label for="framerate" class="form-label">Frame Rate</label>
-                    <input class="form-control" name="framerate" id="framerate" type="text" value="{{ values.framerate }}" />
+                    <input class="form-control" name="framerate" id="framerate" type="number" min="1" step="1" value="{{ values.framerate }}" />
+                    <div id="framerateFeedback" class="invalid-feedback"></div>
+                    <div id="framerateHint" class="form-text" hidden>The video is {{ source.framerate }} fps, so ff4d keeps {{ source.framerate }} fps.</div>
                 </div>
                 <div class="col">
                     <label for="codec" class="form-label">Video Codec</label>
@@ -218,13 +225,14 @@
                         </div>
                         {% endfor %}
                     </div>
+                    <div id="astreamsFeedback" class="invalid-feedback"></div>
                 </div>
                 {% endif %}
             </div>
 
             <div class="row mb-3">
                 <div class="col">
-                    <button id="spinButton" onclick="return startSpin()" class="submission btn btn-primary btn-lg" type="submit">
+                    <button id="spinButton" class="submission btn btn-primary btn-lg" type="submit">
                         <span class="bi-film"></span> Encode
                     </button>
                     <span id="spinIcon" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" hidden></span>
@@ -281,8 +289,9 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
     <script>
-        const MAX_FILESIZE_MB = parseFloat("{{ twopass.probe['format']['size'] }}") * 0.00000095367432;
-        console.log("MAX_FILESIZE_MB:", MAX_FILESIZE_MB);
+        // Facts about the input video, from source_facts() in __main__.py
+        const SOURCE = {{ source | tojson }};
+        const form = document.getElementById('encodeForm');
         const video = document.getElementById('myVideo');
         const startTimeInput = document.getElementById('startTime');
         const endTimeInput = document.getElementById('endTime');
@@ -328,6 +337,8 @@
                 endTimeInput.value = currentTime;
                 endTimeLabel.textContent = formatSeconds(currentTime);
             }
+            // Setting a slider's value from code doesn't fire 'input', so re-check here
+            recheckForm();
         }
 
         function selectVideoPart() {
@@ -347,28 +358,141 @@
             }
         }
 
-        function startSpin() {
-            // Get the icon element
-            var icon = document.getElementById('spinIcon');
-            icon.hidden = false;
+        // The fields that can show an error, in page order, so the first bad one gets the focus
+        const CHECKED_FIELDS = ['endTime', 'resolution', 'target_filesize', 'audio_br', 'crop', 'framerate', 'astreams'];
 
-            // Disable the button temporarily to prevent multiple clicks
-            document.getElementById('spinButton').disabled = true;
+        // Reads a number field: null when it's blank, NaN when it isn't a number.
+        // Number inputs report letters as an empty value, so badInput is the only way to tell them from blank.
+        function readNumber(id) {
+            const input = document.getElementById(id);
+            if (input.validity.badInput) return NaN;
+            return input.value.trim() === '' ? null : Number(input.value);
+        }
 
-            // Validation for target_filesize
-            const targetField = document.getElementById('target_filesize');
-            const value = parseFloat(targetField.value);
-            if (!isNaN(value) && value > MAX_FILESIZE_MB && MAX_FILESIZE_MB > 0) {
-                alert('Target filesize (' + value + ' MB) exceeds the maximum allowed (' + MAX_FILESIZE_MB + ' MB). Please enter a smaller value.');
-                targetField.focus();
-                // Re-enable the button since submission is blocked
-                document.getElementById('spinButton').disabled = false;
-                icon.hidden = true;
-                return false;
+        // Returns an error message for each bad field, keyed by the field's id. These match the server's checks.
+        function checkForm() {
+            const errors = {};
+            const start = Number(startTimeInput.value);
+            const end = Number(endTimeInput.value);
+            if (!(start < end)) {
+                errors.endTime = 'The End time must be after the Start time.';
             }
 
-            document.getElementById('encodeForm').submit();
+            const codec = document.getElementById('codec').value;
+            const resolution = document.getElementById('resolution').value.trim();
+            const size = resolution.match(/^(\d+)x(\d+)$/);
+            if (resolution && !size) {
+                errors.resolution = 'Use width x height, e.g. 1280x720, or leave it blank.';
+            } else if (size && ['x264', 'x265'].includes(codec) && (size[1] % 2 || size[2] % 2)) {
+                errors.resolution = codec + ' needs an even width and height, e.g. 1280x720.';
+            }
+
+            const audioKbps = readNumber('audio_br');
+            if (Number.isNaN(audioKbps) || (audioKbps !== null && audioKbps <= 0)) {
+                errors.audio_br = 'The Audio Bitrate must be a number above 0, or blank to keep the original.';
+            }
+
+            const target = readNumber('target_filesize');
+            if (target === null || Number.isNaN(target) || target <= 0) {
+                errors.target_filesize = 'The File Size must be a number above 0.';
+            } else if (target > SOURCE.size_mib) {
+                errors.target_filesize = `The File Size can't be larger than the input file (${SOURCE.size_mib.toFixed(2)} MiB).`;
+            } else if (!errors.endTime && !errors.audio_br) {
+                // Same math as _bitrate_targets() in twopass.py. A blank audio bitrate means the source's.
+                const includeAudio = document.getElementById('include_audio').checked && SOURCE.audio_tracks > 0;
+                const usedAudioKbps = includeAudio ? (audioKbps ?? SOURCE.audio_kbps ?? 0) : 0;
+                const shownKbps = Math.round(usedAudioKbps);
+                const seconds = Number((end - start).toFixed(3));
+                if (Math.floor(target * 8192 / seconds - usedAudioKbps) <= 0) {
+                    errors.target_filesize = `${target} MiB is too small for a ${seconds}-second clip with ${shownKbps} kbps audio. `
+                        + 'Try a larger size, a shorter clip, or a lower audio bitrate.';
+                }
+            }
+
+            const crop = document.getElementById('crop').value.trim();
+            const box = crop.match(/^(\d+)x(\d+)x(\d+)x(\d+)$/);
+            if (crop && !box) {
+                errors.crop = 'Use four numbers joined by x (x offset, y offset, width, height), e.g. 255x0x1410x1080, or leave it blank.';
+            } else if (box) {
+                const [x, y, width, height] = box.slice(1).map(Number);
+                if (width === 0 || height === 0) {
+                    errors.crop = 'The crop width and height must be above 0.';
+                } else if (SOURCE.width && (x + width > SOURCE.width || y + height > SOURCE.height)) {
+                    // ffmpeg doesn't fail here. It quietly moves the crop inside the frame, which isn't what was asked for.
+                    errors.crop = `The crop goes past the edge of the ${SOURCE.width}x${SOURCE.height} video. `
+                        + `Keep x offset + width at most ${SOURCE.width} and y offset + height at most ${SOURCE.height}.`;
+                }
+            }
+
+            const framerate = readNumber('framerate');
+            if (Number.isNaN(framerate) || (framerate !== null && (!Number.isInteger(framerate) || framerate <= 0))) {
+                errors.framerate = 'The Frame Rate must be a whole number above 0, e.g. 30, or blank to keep the original.';
+            }
+
+            const anyTrackChecked = form.querySelector('input[name="astreams"]:checked');
+            if (document.getElementById('include_audio').checked && SOURCE.audio_tracks > 1 && !anyTrackChecked) {
+                errors.astreams = 'Check at least one audio stream, or turn off Include Audio.';
+            }
+            return errors;
         }
+
+        // Shows each field's error under it and clears the rest. With onlyShown, fields without an error showing are
+        // left alone, so typing fixes an error without new ones appearing before the next Encode click.
+        function showErrors(errors, onlyShown) {
+            for (const name of CHECKED_FIELDS) {
+                const feedback = document.getElementById(name + 'Feedback');
+                if (!feedback) continue; // the audio streams aren't on the page for a single-track video
+                if (onlyShown && !feedback.classList.contains('d-block')) continue;
+
+                const message = errors[name] || '';
+                feedback.textContent = message;
+                feedback.classList.toggle('d-block', Boolean(message));
+                const inputs = name === 'astreams' ? form.querySelectorAll('input[name="astreams"]') : [document.getElementById(name)];
+                inputs.forEach((input) => {
+                    input.classList.toggle('is-invalid', Boolean(message));
+                    // Bootstrap's red styling alone isn't read out by screen readers
+                    if (message) {
+                        input.setAttribute('aria-invalid', 'true');
+                        input.setAttribute('aria-describedby', feedback.id);
+                    } else {
+                        input.removeAttribute('aria-invalid');
+                        input.removeAttribute('aria-describedby');
+                    }
+                });
+            }
+        }
+
+        const framerateHint = document.getElementById('framerateHint');
+        function recheckForm() {
+            showErrors(checkForm(), true);
+            const framerate = readNumber('framerate');
+            framerateHint.hidden = !(framerate > SOURCE.framerate);
+        }
+        form.addEventListener('input', recheckForm);
+        form.addEventListener('change', recheckForm);
+        recheckForm();
+
+        const spinButton = document.getElementById('spinButton');
+        const spinIcon = document.getElementById('spinIcon');
+        form.addEventListener('submit', (event) => {
+            const errors = checkForm();
+            showErrors(errors, false);
+            const firstBad = CHECKED_FIELDS.find((name) => errors[name]);
+            if (firstBad) {
+                event.preventDefault();
+                const field = firstBad === 'astreams' ? form.querySelector('input[name="astreams"]') : document.getElementById(firstBad);
+                field.focus();
+                return;
+            }
+            // Block a second click while the encode runs
+            spinButton.disabled = true;
+            spinIcon.hidden = false;
+        });
+        // The Back button can bring the page back from the browser's cache with the button still disabled
+        window.addEventListener('pageshow', () => {
+            spinButton.disabled = false;
+            spinIcon.hidden = true;
+        });
 
         const checkbox = document.getElementById('approx');
         const span = document.getElementById('targetApprox');
@@ -384,8 +508,6 @@
                 span.textContent = 'Target';
             }
         });
-
-        // Validation is now handled in startSpin()
 
         function setColumnEnabled(col, enabled) {
             if (!col) return;
