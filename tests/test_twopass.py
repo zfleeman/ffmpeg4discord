@@ -12,6 +12,7 @@ from ffmpeg4discord.__main__ import twopass_loop
 from ffmpeg4discord.twopass import (
     CODEC_ENCODERS,
     CODEC_OVERRIDES,
+    EncodeSettings,
     TwoPass,
     available_codecs,
     command_for_display,
@@ -26,15 +27,21 @@ from ffmpeg4discord.twopass import (
 
 @pytest.fixture
 def make_twopass(probe):
-    """Build a TwoPass from the fake probe. Keyword arguments override the defaults."""
+    """Build a TwoPass from the fake probe."""
 
-    def _make(**kwargs):
-        tp = TwoPass(**{"filename": Path("test.mp4"), "target_filesize": 10, "output": "output.mp4", **kwargs})
-        # lets tests call _generate_params() without going through run()
-        tp.bitrate_dict = {"b:v": 1000000}
-        return tp
+    def _make(filename="test.mp4"):
+        return TwoPass(Path(filename))
 
     return _make
+
+
+def make_settings(**kwargs) -> EncodeSettings:
+    """Settings for a 10 MiB encode to output.mp4. Keyword arguments override the defaults."""
+    return EncodeSettings(**{"target_filesize": 10, "output": Path("output.mp4"), **kwargs})
+
+
+# lets tests call _generate_params() without going through run()
+BITRATE = {"b:v": 1000000}
 
 
 @pytest.fixture
@@ -116,19 +123,22 @@ def test_probe_values_are_read(make_twopass):
     assert tp.duration == 120
     assert tp.ratio == pytest.approx(1920 / 1080)
     assert tp.init_framerate == 30
-    assert tp.audio_br == 128000
+    assert tp.source_audio_br == 128000
+    assert tp.input_filesize == pytest.approx(50.54, abs=0.01)
 
 
 def test_fractional_duration_is_kept(probe, make_twopass):
     # rounding 5.9 s down to 5 would budget about 18% too much bitrate
     probe["format"]["duration"] = "5.9"
-    tp = make_twopass()
-    assert tp.length == 5.9
-    assert tp.times == {"ss": "00:00:00", "to": "00:00:05.900"}
+    assert make_twopass().clip_times(make_settings()) == (0, 5.9)
 
 
 def test_audio_br_is_converted_to_bps(make_twopass):
-    assert make_twopass(audio_br=128).audio_br == 128000
+    assert make_twopass()._audio_bitrate(make_settings(audio_br=96)) == 96000
+
+
+def test_audio_br_defaults_to_the_source_bitrate(make_twopass):
+    assert make_twopass()._audio_bitrate(make_settings()) == 128000
 
 
 def test_warns_when_no_audio_stream(probe, make_twopass, caplog):
@@ -138,62 +148,57 @@ def test_warns_when_no_audio_stream(probe, make_twopass, caplog):
 
 
 @pytest.mark.parametrize(
-    "times, ss, to, length",
+    "times, ss, to",
     [
-        ({"from": "00:00:10", "to": "00:01:00"}, "00:00:10", "00:01:00", 50),
-        ({"to": "00:01:00"}, "00:00:00", "00:01:00", 60),
-        ({"from": "00:00:10"}, "00:00:10", "00:02:00", 110),
-        ({}, "00:00:00", "00:02:00", 120),
-        ({"from": "50%", "to": "75%"}, "00:01:00", "00:01:30", 30),
-        ({"from": "00:00:30", "to": "50%"}, "00:00:30", "00:01:00", 30),
-        ({"from": "1:05.5", "to": "90.25"}, "00:01:05.500", "00:01:30.250", 24.75),
+        ({"start": "00:00:10", "end": "00:01:00"}, "00:00:10", "00:01:00"),
+        ({"end": "00:01:00"}, "00:00:00", "00:01:00"),
+        ({"start": "00:00:10"}, "00:00:10", "00:02:00"),
+        ({}, "00:00:00", "00:02:00"),
+        ({"start": "50%", "end": "75%"}, "00:01:00", "00:01:30"),
+        ({"start": "00:00:30", "end": "50%"}, "00:00:30", "00:01:00"),
+        ({"start": "1:05.5", "end": "90.25"}, "00:01:05.500", "00:01:30.250"),
     ],
 )
-def test_trim_times(make_twopass, times, ss, to, length):
-    tp = make_twopass(times=times)
-    assert tp.times == {"ss": ss, "to": to}
-    assert tp.length == length
+def test_trim_times(make_twopass, times, ss, to):
+    start, end = make_twopass().clip_times(make_settings(**times))
+    assert (seconds_to_timestamp(start), seconds_to_timestamp(end)) == (ss, to)
 
 
 @pytest.mark.parametrize(
-    "filename, ss, to, length",
+    "filename, start, end",
     [
-        ("000010-000030.mp4", "00:00:10", "00:00:30", 20),
-        ("000010.mp4", "00:00:10", "00:02:00", 110),
-        ("badname.mp4", "00:00:00", "00:02:00", 120),  # falls back to the whole video
+        ("000010-000030.mp4", 10, 30),
+        ("000010.mp4", 10, 120),
+        ("badname.mp4", 0, 120),  # falls back to the whole video
     ],
 )
-def test_trim_times_from_filename(make_twopass, filename, ss, to, length):
-    tp = make_twopass(filename=Path(filename), filename_times=True)
-    assert tp.times == {"ss": ss, "to": to}
-    assert tp.length == length
+def test_trim_times_from_filename(make_twopass, filename, start, end):
+    assert make_twopass(filename).clip_times(make_settings(filename_times=True)) == (start, end)
 
 
 def test_invalid_filename_times_warn(make_twopass, caplog):
-    make_twopass(filename=Path("badname.mp4"), filename_times=True)
+    make_twopass("badname.mp4").clip_times(make_settings(filename_times=True))
     assert "invalid time format" in caplog.text.lower()
 
 
-def test_end_before_start_raises(make_twopass):
-    with pytest.raises(ValueError):
-        make_twopass(times={"from": "00:02:00", "to": "00:01:00"})
+@pytest.mark.parametrize("start, end", [("00:02:00", "00:01:00"), ("00:01:00", "00:01:00")])
+def test_end_not_after_start_raises(make_twopass, start, end):
+    with pytest.raises(ValueError, match="Time Paradox"):
+        make_twopass().clip_times(make_settings(start=start, end=end))
 
 
 def test_target_larger_than_input_raises(make_twopass):
     # the fake input is 53,000,000 bytes, about 50.5 MiB
-    with pytest.raises(ValueError):
-        make_twopass(target_filesize=51)
+    with pytest.raises(ValueError, match="larger than the input file"):
+        make_twopass().run(make_settings(target_filesize=51), dry_run=True)
 
 
 # --- bitrate budget ---
 
 
-def test_create_bitrate_dict(make_twopass):
+def test_bitrate_targets(make_twopass):
     # 10 MiB over 100 seconds is 819.2 kbps total. Minus 128 kbps audio leaves 691 kbps for video.
-    tp = make_twopass()
-    tp.length = 100
-    tp._create_bitrate_dict()
-    assert tp.bitrate_dict == {
+    assert make_twopass()._bitrate_targets(make_settings(), 100) == {
         "b:v": 691000,
         "minrate": 691000 * 0.5,
         "maxrate": 691000 * 1.45,
@@ -201,36 +206,29 @@ def test_create_bitrate_dict(make_twopass):
     }
 
 
-def test_create_bitrate_dict_raises_on_zero_length(make_twopass):
-    tp = make_twopass()
-    tp.length = 0
-    with pytest.raises(ValueError):
-        tp._create_bitrate_dict()
-
-
-def test_create_bitrate_dict_raises_when_audio_uses_whole_budget(make_twopass):
+def test_bitrate_targets_raise_when_audio_uses_whole_budget(make_twopass):
     # 20 MiB over 30 minutes is ~91 kbps total, less than the 96 kbps audio track.
-    tp = make_twopass(audio_br=96)
-    tp.target_filesize = 20
-    tp.length = 1800
     with pytest.raises(ValueError, match="no bitrate left for video"):
-        tp._create_bitrate_dict()
+        make_twopass()._bitrate_targets(make_settings(target_filesize=20, audio_br=96), 1800)
 
 
-def test_create_bitrate_dict_ignores_audio_when_no_audio(make_twopass):
+def test_bitrate_targets_ignore_audio_when_no_audio(make_twopass):
     # Same budget as above, but without audio the whole ~91 kbps goes to video.
-    tp = make_twopass(audio_br=96, no_audio=True)
-    tp.target_filesize = 20
-    tp.length = 1800
-    tp._create_bitrate_dict()
-    assert tp.bitrate_dict["b:v"] == 91000
+    targets = make_twopass()._bitrate_targets(make_settings(target_filesize=20, audio_br=96, no_audio=True), 1800)
+    assert targets["b:v"] == 91000
+
+
+def test_bitrate_targets_ignore_audio_without_an_audio_stream(probe, make_twopass):
+    probe["streams"].pop()
+    targets = make_twopass()._bitrate_targets(make_settings(target_filesize=20, audio_br=96), 1800)
+    assert targets["b:v"] == 91000
 
 
 # --- ffmpeg parameters ---
 
 
 def test_generate_params_x264(make_twopass):
-    params = make_twopass()._generate_params(codec="x264")
+    params = make_twopass()._generate_params(make_settings(), BITRATE)
     assert params["pass1"]["c:v"] == "libx264"
     assert params["pass2"]["c:v"] == "libx264"
     assert params["pass2"]["c:a"] == "aac"
@@ -238,7 +236,7 @@ def test_generate_params_x264(make_twopass):
 
 
 def test_generate_params_vp9(make_twopass):
-    params = make_twopass(output="output.webm", codec="vp9")._generate_params(codec="vp9")
+    params = make_twopass()._generate_params(make_settings(codec="vp9"), BITRATE)
     assert params["pass2"]["c:a"] == "libopus"
     assert params["pass2"]["row-mt"] == 1
     assert params["pass2"]["cpu-used"] == 5
@@ -247,7 +245,7 @@ def test_generate_params_vp9(make_twopass):
 
 def test_generate_params_x265_uses_x265_params(make_twopass):
     # x265 takes its pass number through -x265-params instead of -pass
-    params = make_twopass(codec="x265")._generate_params(codec="x265")
+    params = make_twopass()._generate_params(make_settings(codec="x265"), BITRATE)
     assert "pass" not in params["pass1"]
     assert "pass" not in params["pass2"]
     assert params["pass1"]["x265-params"] == "pass=1"
@@ -256,7 +254,7 @@ def test_generate_params_x265_uses_x265_params(make_twopass):
 
 
 def test_generate_params_hardware_codec_has_no_pass_flags(make_twopass):
-    params = make_twopass(codec="h264_videotoolbox")._generate_params(codec="h264_videotoolbox")
+    params = make_twopass()._generate_params(make_settings(codec="h264_videotoolbox"), BITRATE)
     assert "pass" not in params["pass1"]
     assert "pass" not in params["pass2"]
     assert params["pass2"]["c:v"] == "h264_videotoolbox"
@@ -266,7 +264,7 @@ def test_generate_params_hardware_codec_has_no_pass_flags(make_twopass):
 def test_generate_params_applies_shared_overrides_to_both_passes(make_twopass, monkeypatch):
     # No built-in codec uses a "both" section yet, so add one for this test.
     monkeypatch.setitem(CODEC_OVERRIDES, "x264", {"both": {"preset": "slow"}})
-    params = make_twopass()._generate_params(codec="x264")
+    params = make_twopass()._generate_params(make_settings(), BITRATE)
     assert params["pass1"]["preset"] == "slow"
     assert params["pass2"]["preset"] == "slow"
 
@@ -274,19 +272,19 @@ def test_generate_params_applies_shared_overrides_to_both_passes(make_twopass, m
 @pytest.mark.parametrize("codec", CODEC_ENCODERS)
 def test_generate_params_forces_yuv420p(make_twopass, codec):
     """10-bit and 4:4:4 sources must be converted to 8-bit 4:2:0 so the output plays everywhere."""
-    params = make_twopass()._generate_params(codec=codec)
+    params = make_twopass()._generate_params(make_settings(codec=codec), BITRATE)
     assert params["pass1"]["pix_fmt"] == "yuv420p"
     assert params["pass2"]["pix_fmt"] == "yuv420p"
 
 
 def test_generate_params_lowers_framerate(make_twopass):
-    params = make_twopass(framerate=15)._generate_params(codec="x264")
+    params = make_twopass()._generate_params(make_settings(framerate=15), BITRATE)
     assert params["pass1"]["r"] == 15
     assert params["pass2"]["r"] == 15
 
 
 def test_generate_params_keeps_source_framerate_when_asked_for_more(make_twopass, caplog):
-    params = make_twopass(framerate=60)._generate_params(codec="x264")
+    params = make_twopass()._generate_params(make_settings(framerate=60), BITRATE)
     assert "r" not in params["pass1"]
     assert "r" not in params["pass2"]
     assert "desired framerate" in caplog.text.lower()
@@ -299,7 +297,7 @@ def test_apply_video_filters_crop_and_resolution(make_twopass):
     video = MagicMock()
     video.crop.return_value = video
     video.filter.return_value = video
-    make_twopass(crop="10x20x640x360", resolution="1280x720")._apply_video_filters(video)
+    make_twopass()._apply_video_filters(video, make_settings(crop="10x20x640x360", resolution="1280x720"))
     video.crop.assert_called_once_with(x="10", y="20", width="640", height="360")
     video.filter.assert_called_once_with("scale", "1280x720")
 
@@ -308,15 +306,27 @@ def test_apply_video_filters_warns_on_aspect_ratio_mismatch(make_twopass, caplog
     # the source is 16:9 and 1280x800 is 16:10
     video = MagicMock()
     video.filter.return_value = video
-    make_twopass(resolution="1280x800")._apply_video_filters(video)
+    make_twopass()._apply_video_filters(video, make_settings(resolution="1280x800"))
     assert "aspect ratio does not match" in caplog.text.lower()
+
+
+def test_crop_does_not_change_the_next_encodes_aspect_ratio(make_twopass, caplog):
+    # A 4:3 crop once overwrote the source's ratio, so a later 16:9 resize without a crop warned.
+    tp = make_twopass()
+    video = MagicMock()
+    video.crop.return_value = video
+    video.filter.return_value = video
+    tp._apply_video_filters(video, make_settings(crop="0x0x1440x1080"))
+    tp._apply_video_filters(video, make_settings(resolution="1280x720"))
+    assert "aspect ratio does not match" not in caplog.text.lower()
+    assert tp.ratio == pytest.approx(1920 / 1080)
 
 
 @pytest.mark.parametrize("astreams, expected", [(None, "a:0"), ([1, 0], "a:1"), ([5, 1], "a:1")])
 def test_apply_audio_filters_without_mixing_keeps_one_track(probe, make_twopass, astreams, expected):
     # two audio tracks, like ShadowPlay with a separate mic track; only one fits the bitrate budget
     probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": 2})
-    audio = make_twopass(amix=False, astreams=astreams)._apply_audio_filters(ffmpeg.input("test.mp4"))
+    audio = make_twopass()._apply_audio_filters(ffmpeg.input("test.mp4"), make_settings(astreams=astreams))
     assert audio.selector == expected
 
 
@@ -324,7 +334,8 @@ def test_apply_audio_filters_mixes_selected_tracks(probe, make_twopass):
     # three audio tracks; 5 is out of range and gets dropped
     for index in (2, 3):
         probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": index})
-    audio = make_twopass(amix=True, astreams=[0, 2, 5])._apply_audio_filters(ffmpeg.input("test.mp4"))
+    settings = make_settings(amix=True, astreams=[0, 2, 5])
+    audio = make_twopass()._apply_audio_filters(ffmpeg.input("test.mp4"), settings)
     assert audio.node.name == "amix"
     assert audio.node.kwargs == {"normalize": 0, "inputs": 2}
     assert [edge.upstream_selector for edge in audio.node.incoming_edges] == ["a:0", "a:2"]
@@ -332,49 +343,49 @@ def test_apply_audio_filters_mixes_selected_tracks(probe, make_twopass):
 
 def test_apply_audio_filters_mixes_all_tracks_when_none_selected(probe, make_twopass):
     probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": 2})
-    tp = make_twopass(amix=True, astreams=None, amix_normalize=True)
-    audio = tp._apply_audio_filters(ffmpeg.input("test.mp4"))
+    settings = make_settings(amix=True, astreams=None, amix_normalize=True)
+    audio = make_twopass()._apply_audio_filters(ffmpeg.input("test.mp4"), settings)
     assert audio.node.name == "amix"
     assert audio.node.kwargs == {"normalize": 1, "inputs": 2}
     assert [edge.upstream_selector for edge in audio.node.incoming_edges] == ["a:0", "a:1"]
 
 
 def test_apply_audio_filters_empty_selection_returns_none(make_twopass):
-    assert make_twopass(amix=True, astreams=[])._apply_audio_filters(ffmpeg.input("test.mp4")) is None
+    settings = make_settings(amix=True, astreams=[])
+    assert make_twopass()._apply_audio_filters(ffmpeg.input("test.mp4"), settings) is None
 
 
 # --- running the encode ---
 
 
 def test_run_returns_output_size(make_twopass, passes):
-    assert make_twopass(verbose=True).run() == pytest.approx(10, abs=0.01)
+    assert make_twopass().run(make_settings(verbose=True)).output_filesize == pytest.approx(10, abs=0.01)
 
 
 def test_run_two_passes_with_audio(make_twopass, passes):
-    tp = make_twopass()
-    tp.run()
+    result = make_twopass().run(make_settings())
     first, second = passes
     assert (first.name, second.name) == ("first", "second")
     assert "pipe:" in first.args
     assert first.run_kwargs == {"capture_stdout": True}
-    assert tp.output_filename in second.args
+    assert result.output_filename in second.args
     assert "0:a:0" in second.args
     assert second.run_kwargs == {"overwrite_output": True}
 
 
 def test_run_without_audio_stream_outputs_video_only(probe, make_twopass, passes):
     probe["streams"].pop()
-    make_twopass(audio_br=96).run()
+    make_twopass().run(make_settings(audio_br=96))
     assert "0:a:0" not in passes[-1].args
 
 
 def test_run_no_audio_flag_omits_audio(make_twopass, passes):
-    make_twopass(no_audio=True).run()
+    make_twopass().run(make_settings(no_audio=True))
     assert "0:a:0" not in passes[-1].args
 
 
 def test_run_hardware_codec_skips_first_pass(make_twopass, passes):
-    make_twopass(codec="hevc_videotoolbox").run()
+    make_twopass().run(make_settings(codec="hevc_videotoolbox"))
     assert [p.name for p in passes] == ["single"]
     assert "pipe:" not in passes[0].args
 
@@ -388,17 +399,14 @@ def test_run_hardware_codec_skips_first_pass(make_twopass, passes):
     ],
 )
 def test_run_fixes_output_suffix_for_codec(make_twopass, passes, caplog, output, codec, suffix):
-    tp = make_twopass(output=output, codec=codec)
-    tp.run()
-    assert tp.output.suffix == suffix
-    assert tp.output_filename.endswith(suffix)
+    result = make_twopass().run(make_settings(output=Path(output), codec=codec))
+    assert result.output_filename.endswith(suffix)
     assert "output file name ends with" in caplog.text.lower()
 
 
 def test_run_output_directory_gets_generated_filename(make_twopass, passes, tmp_path):
-    tp = make_twopass(output=str(tmp_path))
-    tp.run()
-    output = Path(tp.output_filename)
+    result = make_twopass().run(make_settings(output=tmp_path))
+    output = Path(result.output_filename)
     assert output.parent == tmp_path.resolve()
     assert output.name.startswith("small_")
 
@@ -408,25 +416,31 @@ def test_run_output_directory_gets_generated_filename(make_twopass, passes, tmp_
 
 def test_run_saves_the_commands_it_ran(make_twopass, passes, monkeypatch):
     monkeypatch.setattr("ffmpeg4discord.twopass.sys.platform", "linux")
-    tp = make_twopass()
-    tp.run()
-    first, second = (shlex.split(command) for command in tp.commands)
+    result = make_twopass().run(make_settings())
+    first, second = (shlex.split(command) for command in result.commands)
     # the same arguments ff4d ran, minus "-loglevel error -stats" at the end and with pass 1's pipe: swapped out
     assert first == [*passes[0].args[:-4], "/dev/null"]
     assert second == passes[1].args[:-3]
 
 
 def test_run_hardware_codec_saves_one_command(make_twopass, passes):
-    tp = make_twopass(codec="h264_nvenc")
-    tp.run()
-    assert len(tp.commands) == 1
+    assert len(make_twopass().run(make_settings(codec="h264_nvenc")).commands) == 1
 
 
 def test_dry_run_saves_commands_without_running_ffmpeg(make_twopass, passes):
-    tp = make_twopass()
-    assert tp.run(dry_run=True) == 0
+    result = make_twopass().run(make_settings(), dry_run=True)
+    assert result.output_filesize == 0
     assert passes == []
-    assert len(tp.commands) == 2
+    assert len(result.commands) == 2
+
+
+def test_one_twopass_runs_encodes_with_different_settings(make_twopass, passes):
+    # The web UI reuses one TwoPass for every encode, so a setting must not leak into the next one.
+    tp = make_twopass()
+    cropped = tp.run(make_settings(crop="0x0x640x360", codec="vp9"), dry_run=True)
+    plain = tp.run(make_settings(), dry_run=True)
+    assert "crop" in cropped.commands[0] and "libvpx-vp9" in cropped.commands[0]
+    assert "crop" not in plain.commands[0] and "libx264" in plain.commands[0]
 
 
 @pytest.mark.parametrize(
@@ -479,7 +493,7 @@ def test_fps_mode_flag_without_version_section():
 def test_generate_params_uses_the_detected_flag(probe, make_twopass):
     """The detected flag has to reach the actual first-pass parameters, which is what broke in #66."""
     probe["program_version"]["version"] = "4.4.2"
-    params = make_twopass()._generate_params(codec="x264")
+    params = make_twopass()._generate_params(make_settings(), BITRATE)
     assert params["pass1"]["vsync"] == "cfr"
     assert "fps_mode" not in params["pass1"]
 
@@ -488,7 +502,7 @@ def test_probe_requests_the_version_section(probe, monkeypatch):
     """Without this kwarg the probe output has no version to read."""
     mock_probe = MagicMock(return_value=probe)
     monkeypatch.setattr("ffmpeg4discord.twopass.ffmpeg.probe", mock_probe)
-    TwoPass(filename=Path("test.mp4"), target_filesize=10)
+    TwoPass(Path("test.mp4"))
     assert "show_program_version" in mock_probe.call_args.kwargs
 
 
@@ -568,13 +582,13 @@ def test_hdr_source_is_tone_mapped_and_tagged_bt709(probe, make_twopass, transfe
     tp = make_twopass()
     assert tp.tonemap is not None
 
-    params = tp._generate_params(codec="x264")
+    params = tp._generate_params(make_settings(), BITRATE)
     assert params["pass2"]["color_trc"] == "bt709"
     assert params["pass2"]["colorspace"] == "bt709"
 
     video = MagicMock()
     video.filter.return_value = video
-    tp._apply_video_filters(video)
+    tp._apply_video_filters(video, make_settings())
     assert "tonemap" in [c.args[0] for c in video.filter.call_args_list]
 
 
@@ -583,7 +597,7 @@ def test_sdr_source_is_left_alone(probe, make_twopass):
     probe["streams"][0]["color_transfer"] = "bt709"
     tp = make_twopass()
     assert tp.tonemap is None
-    assert "color_trc" not in tp._generate_params(codec="x264")["pass2"]
+    assert "color_trc" not in tp._generate_params(make_settings(), BITRATE)["pass2"]
 
 
 def test_hdr_on_old_ffmpeg_warns_and_skips(probe, make_twopass, caplog):
@@ -610,8 +624,7 @@ def test_real_encode_lands_under_target(tmp_path, monkeypatch):
     audio = ffmpeg.input("sine=duration=2", f="lavfi")
     ffmpeg.output(video, audio, str(clip), **{"b:v": "4M"}).run(quiet=True)
 
-    tp = TwoPass(filename=clip, target_filesize=0.5, output=str(tmp_path / "small.mp4"))
-    twopass_loop(tp, target_filesize=0.5)
+    result = twopass_loop(TwoPass(clip), EncodeSettings(target_filesize=0.5, output=tmp_path / "small.mp4"))
 
-    assert Path(tp.output_filename).exists()
-    assert tp.output_filesize < 0.5
+    assert Path(result.output_filename).exists()
+    assert result.output_filesize < 0.5
