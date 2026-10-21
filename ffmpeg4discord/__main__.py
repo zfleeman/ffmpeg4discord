@@ -131,6 +131,28 @@ def success_message(result: EncodeResult) -> str:
     return f"Your compressed video file ({round(result.output_filesize, 2)}MB) is located at {output_path}"
 
 
+def source_facts(twopass: TwoPass) -> dict:
+    """Facts about the input video that the web page's JavaScript checks the form against."""
+    stream = twopass.video_stream or {}
+    width, height = stream.get("width"), stream.get("height")
+    # Phones often store video sideways with a rotation tag, and ffmpeg's filters see the rotated size.
+    rotation = int(stream.get("tags", {}).get("rotate", 0))
+    for data in stream.get("side_data_list", []):
+        rotation = int(data.get("rotation", rotation))
+    if rotation % 180 == 90:
+        width, height = height, width
+
+    return {
+        "duration": twopass.duration,
+        "width": width,
+        "height": height,
+        "framerate": twopass.init_framerate,
+        "size_mib": twopass.input_filesize,
+        "audio_tracks": len(twopass.audio_streams),
+        "audio_kbps": twopass.source_audio_br / 1000 if twopass.source_audio_br else None,
+    }
+
+
 def form_values(twopass: TwoPass, settings: EncodeSettings, approx: bool, form=None) -> dict:
     """
     The values the web UI's form shows. They come from `settings`, or from `form` when the page is shown again
@@ -333,6 +355,7 @@ def main() -> None:
         # --from and --to fill in the form's starting trim, so check them before starting the server
         twopass.clip_times(settings)
         codecs = available_codecs()
+        source = source_facts(twopass)
         # No static folder: serving the video's folder would expose every file next to it.
         app = Flask(__name__, static_folder=None)
 
@@ -345,6 +368,7 @@ def main() -> None:
                 "web.html",
                 file_url=url_for("video"),
                 twopass=twopass,
+                source=source,
                 codecs=codecs,
                 version_info=version_info,
                 values=values,

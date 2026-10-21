@@ -1,3 +1,5 @@
+import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
@@ -6,7 +8,7 @@ import pytest
 from flask import Flask
 
 import ffmpeg4discord.__main__ as mainmod
-from ffmpeg4discord.twopass import EncodeResult, EncodeSettings
+from ffmpeg4discord.twopass import EncodeResult, EncodeSettings, TwoPass
 from ffmpeg4discord.versioning import VersionInfo
 
 
@@ -230,6 +232,39 @@ def test_index_page_renders(web):
     assert b"ffmpeg4discord v0.1.9" in response.data
     assert b'src="/video"' in response.data
     assert b"FFmpeg command" not in response.data  # nothing has been encoded yet
+
+
+def test_index_page_has_the_browser_checks(web):
+    page = web.client.get("/").get_data(as_text=True)
+    assert 'id="encodeForm" action="/encode" method="post" novalidate' in page
+    source = json.loads(re.search(r"const SOURCE = (\{.*\});", page).group(1))
+    assert source == {
+        "duration": 120.0,
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "size_mib": pytest.approx(50.54, abs=0.01),
+        "audio_tracks": 1,
+        "audio_kbps": 128.0,
+    }
+
+
+def test_source_facts_without_audio(probe):
+    probe["streams"].pop()
+    assert mainmod.source_facts(TwoPass(Path("file.mp4")))["audio_kbps"] is None
+
+
+@pytest.mark.parametrize(
+    "tags",
+    [
+        {"side_data_list": [{"side_data_type": "Display Matrix", "rotation": -90}]},
+        {"tags": {"rotate": "90"}},  # older ffmpeg builds
+    ],
+)
+def test_source_facts_swap_the_size_of_rotated_video(probe, tags):
+    probe["streams"][0].update(tags)
+    facts = mainmod.source_facts(TwoPass(Path("file.mp4")))
+    assert (facts["width"], facts["height"]) == (1080, 1920)
 
 
 def test_encode_banner_shows_the_commands(web):
