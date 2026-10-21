@@ -52,10 +52,13 @@
         </div>
         {% endif %}
         <div class="row mt-3">
-            <video id="myVideo" preload="auto" controls>
-                <source src="{{ file_url }}" type="video/mp4">
+            <video id="myVideo" src="{{ file_url }}" preload="auto" controls>
                 Your browser does not support the video tag.
             </video>
+            <div id="playbackNotice" class="alert alert-warning mt-2" hidden>
+                Your browser can't play this video. This often happens with HEVC clips.
+                You can still set the Start and End times with the sliders, and Encode works as usual.
+            </div>
             <p class="text-muted"><em>Drag the video playhead, and use the buttons below to set the Start and End times.</em></p> 
         </div>
         <form id="encodeForm" action="/encode" method="post" novalidate>
@@ -83,6 +86,7 @@
             <div class="row">
                 <div class="col">
                     <button type="button" class="btn btn-outline-primary" onclick="selectVideoPart()"><span class="bi-play"></span> Preview Selection</button>
+                    <span id="previewFeedback" class="text-danger ms-2" hidden>Set an End time after the Start time to preview.</span>
                 </div>
             </div>
             <hr />
@@ -97,6 +101,7 @@
                     <label for="target_filesize" class="form-label"><span id="targetApprox">{{ "Approximate" if values.approx else "Target" }}</span> File Size (MB)</label>
                     <input class="form-control" name="target_filesize" id="target_filesize" type="number" min="0" step="any" value="{{ values.target_filesize }}" />
                     <div id="target_filesizeFeedback" class="invalid-feedback"></div>
+                    <div id="bitrateEstimate" class="form-text"></div>
                     <div class="form-check form-switch mt-2">
                         <input class="form-check-input" type="checkbox" role="switch" id="approx" value="True" name="approx" {{ "checked" if values.approx else "" }}>
                         <label class="form-check-label" for="approx">Approximate file size</label>
@@ -341,22 +346,50 @@
             recheckForm();
         }
 
-        function selectVideoPart() {
-            const startTime = parseFloat(startTimeInput.value);
-            const endTime = parseFloat(endTimeInput.value);
-
-            if (!isNaN(startTime) && !isNaN(endTime) && startTime < endTime) {
-                video.currentTime = startTime;
-                video.play();
-
-                setTimeout(() => {
-                    video.pause();
-                    video.currentTime = endTime;
-                }, (endTime - startTime) * 1000);
-            } else {
-                alert('Please enter valid start and end times.');
+        // Browsers can't play some formats, like HEVC or ProRes. Some fail outright, and some load only the audio.
+        const playbackNotice = document.getElementById('playbackNotice');
+        function checkPlayable() {
+            if (video.error || (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth === 0)) {
+                playbackNotice.hidden = false;
             }
         }
+        video.addEventListener('error', checkPlayable);
+        video.addEventListener('loadedmetadata', checkPlayable);
+        checkPlayable(); // the video may have failed before this script ran
+
+        // The preview plays from the start time and stops at the end time, even after a pause or a speed change.
+        // previewEnd is null when no preview is running.
+        let previewStart = null;
+        let previewEnd = null;
+        const previewFeedback = document.getElementById('previewFeedback');
+
+        function selectVideoPart() {
+            const startTime = Number(startTimeInput.value);
+            const endTime = Number(endTimeInput.value);
+            if (!(startTime < endTime)) {
+                previewFeedback.hidden = false;
+                return;
+            }
+            previewFeedback.hidden = true;
+            previewStart = startTime;
+            previewEnd = endTime;
+            video.currentTime = startTime;
+            video.play().catch(checkPlayable);
+        }
+
+        video.addEventListener('timeupdate', () => {
+            if (previewEnd !== null && video.currentTime >= previewEnd) {
+                video.pause();
+                video.currentTime = previewEnd;
+                previewEnd = null;
+            }
+        });
+        // Seeking outside the selection ends the preview, so it doesn't jump back to the end time
+        video.addEventListener('seeking', () => {
+            if (previewEnd !== null && (video.currentTime < previewStart || video.currentTime > previewEnd)) {
+                previewEnd = null;
+            }
+        });
 
         // The fields that can show an error, in page order, so the first bad one gets the focus
         const CHECKED_FIELDS = ['endTime', 'resolution', 'target_filesize', 'audio_br', 'crop', 'framerate', 'astreams'];
@@ -367,6 +400,22 @@
             const input = document.getElementById(id);
             if (input.validity.badInput) return NaN;
             return input.value.trim() === '' ? null : Number(input.value);
+        }
+
+        // The clip length and the kbps for audio and video, with the same math as _bitrate_targets() in twopass.py.
+        // Returns null while the times, file size, or audio bitrate aren't usable.
+        function bitrateBudget() {
+            const start = Number(startTimeInput.value);
+            const end = Number(endTimeInput.value);
+            const target = readNumber('target_filesize');
+            const audioKbps = readNumber('audio_br');
+            if (!(start < end) || !(target > 0) || (audioKbps !== null && !(audioKbps > 0))) return null;
+
+            // A blank audio bitrate means the source's
+            const includeAudio = document.getElementById('include_audio').checked && SOURCE.audio_tracks > 0;
+            const audio = includeAudio ? (audioKbps ?? SOURCE.audio_kbps ?? 0) : 0;
+            const seconds = Number((end - start).toFixed(3));
+            return { seconds, audioKbps: audio, videoKbps: Math.floor(target * 8192 / seconds - audio) };
         }
 
         // Returns an error message for each bad field, keyed by the field's id. These match the server's checks.
@@ -397,15 +446,11 @@
                 errors.target_filesize = 'The File Size must be a number above 0.';
             } else if (target > SOURCE.size_mib) {
                 errors.target_filesize = `The File Size can't be larger than the input file (${SOURCE.size_mib.toFixed(2)} MiB).`;
-            } else if (!errors.endTime && !errors.audio_br) {
-                // Same math as _bitrate_targets() in twopass.py. A blank audio bitrate means the source's.
-                const includeAudio = document.getElementById('include_audio').checked && SOURCE.audio_tracks > 0;
-                const usedAudioKbps = includeAudio ? (audioKbps ?? SOURCE.audio_kbps ?? 0) : 0;
-                const shownKbps = Math.round(usedAudioKbps);
-                const seconds = Number((end - start).toFixed(3));
-                if (Math.floor(target * 8192 / seconds - usedAudioKbps) <= 0) {
-                    errors.target_filesize = `${target} MiB is too small for a ${seconds}-second clip with ${shownKbps} kbps audio. `
-                        + 'Try a larger size, a shorter clip, or a lower audio bitrate.';
+            } else {
+                const budget = bitrateBudget();
+                if (budget && budget.videoKbps <= 0) {
+                    errors.target_filesize = `${target} MiB is too small for a ${budget.seconds}-second clip `
+                        + `with ${Math.round(budget.audioKbps)} kbps audio. Try a larger size, a shorter clip, or a lower audio bitrate.`;
                 }
             }
 
@@ -462,11 +507,29 @@
             }
         }
 
+        // One line under the file size, e.g. "12.5 s clip, about 6,400 kbps for video and 96 kbps for audio"
+        const bitrateEstimate = document.getElementById('bitrateEstimate');
+        function updateEstimate() {
+            const budget = bitrateBudget();
+            if (!budget) {
+                bitrateEstimate.textContent = '';
+            } else if (budget.videoKbps <= 0) {
+                bitrateEstimate.textContent = `${budget.seconds} s clip, no bitrate left for video`;
+            } else {
+                const audio = budget.audioKbps > 0 ? ` and ${Math.round(budget.audioKbps)} kbps for audio` : '';
+                bitrateEstimate.textContent = `${budget.seconds} s clip, about ${budget.videoKbps.toLocaleString()} kbps for video${audio}`;
+            }
+        }
+
         const framerateHint = document.getElementById('framerateHint');
         function recheckForm() {
             showErrors(checkForm(), true);
+            updateEstimate();
             const framerate = readNumber('framerate');
             framerateHint.hidden = !(framerate > SOURCE.framerate);
+            if (Number(startTimeInput.value) < Number(endTimeInput.value)) {
+                previewFeedback.hidden = true;
+            }
         }
         form.addEventListener('input', recheckForm);
         form.addEventListener('change', recheckForm);
@@ -516,21 +579,6 @@
             });
         }
 
-        // Hide the "Audio Streams" column when audio is turned off
-        function toggleAudioStreamsVisibility() {
-            const audioStreamsCol = document.getElementById('audioStreamsCol');
-            if (!audioStreamsCol) return; // section not rendered when only 1 audio stream
-
-            const includeAudioSwitch = document.getElementById('include_audio');
-            if (includeAudioSwitch && !includeAudioSwitch.checked) {
-                audioStreamsCol.classList.add('d-none');
-                return;
-            }
-
-            // Stay visible without mixing too, because the checked tracks pick which one is kept.
-            audioStreamsCol.classList.remove('d-none');
-        }
-
         function toggleAudioOptionsVisibility() {
             const includeAudioSwitch = document.getElementById('include_audio');
             // If the switch isn't present for some reason, default to showing audio options.
@@ -552,17 +600,7 @@
             // Disable hidden audio option inputs so they don't submit values.
             setColumnEnabled(audioMixingCol, includeAudio);
             setColumnEnabled(audioStreamsCol, includeAudio);
-
-            // If we're including audio, apply any additional logic (like hiding streams when mixing is off).
-            if (includeAudio) {
-                toggleAudioStreamsVisibility();
-            }
         }
-
-        // Listen for changes to Audio Mixing radio buttons (if present)
-        document.querySelectorAll('input[type="radio"][name="amix_mode"]').forEach((radio) => {
-            radio.addEventListener('change', toggleAudioStreamsVisibility);
-        });
 
         // Listen for Include Audio toggle
         const includeAudioSwitch = document.getElementById('include_audio');
