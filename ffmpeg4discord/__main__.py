@@ -9,9 +9,9 @@ settings to meet the desired output file size.
 Functions:
 - twopass_loop: Executes the two-pass encoding process in a loop until the target file size is achieved.
 - open_browser: Opens the default web browser to the specified port.
-- cleanup_files: Removes temporary files matching a given pattern.
 - format_commands: Lists the ffmpeg commands for an encode with a short explanation.
 - success_message: The message shown when an encode finishes.
+- source_facts: Facts about the input video that the web page checks the form against.
 - form_values: The values the web UI's form shows.
 - parse_encode_form: Checks the web UI's form and turns it into EncodeSettings.
 - main: The main function that parses command-line arguments and starts the encoding process or web server.
@@ -24,7 +24,6 @@ import threading
 import time
 import webbrowser
 from dataclasses import replace
-from glob import glob
 from pathlib import Path
 from textwrap import dedent
 
@@ -55,13 +54,8 @@ def twopass_loop(twopass: TwoPass, settings: EncodeSettings, approx: bool = Fals
         The last encode's result.
     """
     target_filesize = settings.target_filesize
-    pass_logs = "x265_2pass*" if settings.codec == "x265" else "ffmpeg2pass*"
 
     while True:
-        # clean up before each run
-        cleanup_files(pass_logs)
-
-        # run the two-pass encoding
         result = twopass.run(settings)
 
         # check if the filesize is within the target
@@ -84,8 +78,6 @@ def twopass_loop(twopass: TwoPass, settings: EncodeSettings, approx: bool = Fals
         adjustment_ratio = min(target_filesize / result.output_filesize, 1 - MIN_RETRY_STEP)
         settings = replace(settings, target_filesize=max(settings.target_filesize * adjustment_ratio, 0.1))
 
-    # final cleanup
-    cleanup_files(pass_logs)
     return result
 
 
@@ -98,17 +90,6 @@ def open_browser(port: int) -> None:
     """
     time.sleep(0.5)
     webbrowser.open(f"http://127.0.0.1:{port}")
-
-
-def cleanup_files(pattern: str) -> None:
-    """
-    Removes temporary files matching a given pattern.
-
-    Args:
-        pattern (str): The glob pattern to match files for cleanup.
-    """
-    for file in glob(pattern):
-        Path(file).unlink()
 
 
 def format_commands(commands: list[str]) -> str:

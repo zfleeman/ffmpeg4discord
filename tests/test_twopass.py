@@ -411,6 +411,78 @@ def test_run_output_directory_gets_generated_filename(make_twopass, passes, tmp_
     assert output.name.startswith("small_")
 
 
+# --- two-pass stats files (issue #89) ---
+
+
+def without_pass_log(args: list[str]) -> list[str]:
+    """`args` without "-passlogfile <path>"."""
+    i = args.index("-passlogfile")
+    return args[:i] + args[i + 2 :]
+
+
+def test_run_keeps_pass_stats_in_a_temp_folder(make_twopass, passes, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    make_twopass().run(make_settings())
+    first_log = passes[0].args[passes[0].args.index("-passlogfile") + 1]
+    second_log = passes[1].args[passes[1].args.index("-passlogfile") + 1]
+    # the second pass reads the stats the first pass wrote
+    assert first_log == second_log
+    assert Path(first_log).name == "ffmpeg2pass"
+    assert Path(first_log).parent.name.startswith("ff4d-")
+    assert Path(first_log).parent != tmp_path
+    # the folder is deleted once the encode is done
+    assert not Path(first_log).parent.exists()
+
+
+def test_each_run_gets_its_own_stats_folder(make_twopass, passes):
+    tp = make_twopass()
+    tp.run(make_settings())
+    tp.run(make_settings())
+    folders = {Path(p.args[p.args.index("-passlogfile") + 1]).parent for p in passes}
+    assert len(folders) == 2
+
+
+def test_stats_folder_is_deleted_when_ffmpeg_fails(make_twopass, monkeypatch):
+    folders = []
+
+    def failing_pass(ffoutput, pass_name, hint="", **run_kwargs):
+        args = [str(arg) for arg in ffoutput.compile()]
+        folders.append(Path(args[args.index("-passlogfile") + 1]).parent)
+        raise RuntimeError("ffmpeg failed")
+
+    monkeypatch.setattr("ffmpeg4discord.twopass.run_pass", failing_pass)
+    with pytest.raises(RuntimeError):
+        make_twopass().run(make_settings())
+    assert not folders[0].exists()
+
+
+def test_x265_keeps_its_stats_in_x265_params(make_twopass, passes):
+    make_twopass().run(make_settings(codec="x265"))
+    first = passes[0].args[passes[0].args.index("-x265-params") + 1]
+    second = passes[1].args[passes[1].args.index("-x265-params") + 1]
+    assert first.startswith("pass=1:stats=") and second.startswith("pass=2:stats=")
+    assert first.split(":stats=")[1] == second.split(":stats=")[1]
+    assert first.endswith("x265_2pass.log")
+    assert "-passlogfile" not in passes[0].args  # x265 ignores it
+
+
+def test_x265_stats_path_escapes_ffmpeg_separators():
+    # A Windows drive letter's colon would otherwise split x265-params, and a quote in a user name would start a string.
+    params = TwoPass._with_pass_log({"x265-params": "pass=1"}, "x265", "C:/Users/O'Brien/Temp/ff4d-abc")
+    assert params["x265-params"] == r"pass=1:stats=C\:/Users/O\'Brien/Temp/ff4d-abc/x265_2pass.log"
+
+
+def test_hardware_codecs_have_no_stats_file(make_twopass, passes):
+    make_twopass().run(make_settings(codec="h264_nvenc"))
+    assert "-passlogfile" not in passes[0].args
+
+
+def test_shown_commands_leave_out_the_temp_stats_folder(make_twopass, passes):
+    for codec in ["x264", "x265"]:
+        commands = make_twopass().run(make_settings(codec=codec)).commands
+        assert all("ff4d-" not in command and "passlogfile" not in command for command in commands)
+
+
 # --- showing the ffmpeg commands (issue #92) ---
 
 
@@ -418,9 +490,10 @@ def test_run_saves_the_commands_it_ran(make_twopass, passes, monkeypatch):
     monkeypatch.setattr("ffmpeg4discord.twopass.sys.platform", "linux")
     result = make_twopass().run(make_settings())
     first, second = (shlex.split(command) for command in result.commands)
-    # the same arguments ff4d ran, minus "-loglevel error -stats" at the end and with pass 1's pipe: swapped out
-    assert first == [*passes[0].args[:-4], "/dev/null"]
-    assert second == passes[1].args[:-3]
+    # the same arguments ff4d ran, minus the temp stats file, "-loglevel error -stats" at the end,
+    # and with pass 1's pipe: swapped out
+    assert first == [*without_pass_log(passes[0].args)[:-4], "/dev/null"]
+    assert second == without_pass_log(passes[1].args)[:-3]
 
 
 def test_run_hardware_codec_saves_one_command(make_twopass, passes):

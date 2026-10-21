@@ -29,7 +29,6 @@ def twopass():
 def no_cleanup(monkeypatch):
     """Stop twopass_loop from deleting files. Returns the mock that replaces `Path.unlink`."""
     unlink = MagicMock()
-    monkeypatch.setattr(mainmod, "cleanup_files", MagicMock())
     monkeypatch.setattr(mainmod.Path, "unlink", unlink)
     return unlink
 
@@ -98,14 +97,6 @@ def test_open_browser(monkeypatch):
     monkeypatch.setattr(mainmod.webbrowser, "open", MagicMock())
     mainmod.open_browser(1234)
     mainmod.webbrowser.open.assert_called_once_with("http://127.0.0.1:1234")
-
-
-def test_cleanup_files(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    for name in ("ffmpeg2pass-0.log", "ffmpeg2pass-0.log.mbtree", "keep.mp4"):
-        (tmp_path / name).touch()
-    mainmod.cleanup_files("ffmpeg2pass*")
-    assert [p.name for p in tmp_path.iterdir()] == ["keep.mp4"]
 
 
 # --- main() ---

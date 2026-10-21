@@ -25,9 +25,11 @@ Functions:
 import logging
 import math
 import os
+import re
 import shlex
 import string
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -498,6 +500,18 @@ class TwoPass:
 
         return params
 
+    @staticmethod
+    def _with_pass_log(pass_params: dict, codec: str, log_dir: str) -> dict:
+        """A copy of one pass's params that writes the two-pass stats to `log_dir` instead of the working directory."""
+        if codec in HARDWARE_CODECS:
+            return pass_params  # single pass, so there are no stats
+        if codec == "x265":
+            # x265 ignores -passlogfile. ffmpeg splits x265-params on ":" and treats ' and \ as quoting,
+            # so those need a backslash in front, e.g. the colon in a Windows drive letter.
+            stats = re.sub(r"([\\':])", r"\\\1", Path(log_dir, "x265_2pass.log").as_posix())
+            return {**pass_params, "x265-params": f"{pass_params['x265-params']}:stats={stats}"}
+        return {**pass_params, "passlogfile": str(Path(log_dir, "ffmpeg2pass"))}
+
     def _bitrate_targets(self, settings: EncodeSettings, length: float) -> dict:
         """Compute the video bitrate flags that fit `settings.target_filesize` into a `length`-second clip."""
 
@@ -654,25 +668,32 @@ class TwoPass:
             else ""
         )
 
-        # First Pass (skipped for hardware encoders, which can't use its stats)
-        first_pass = None if hardware else ffmpeg.output(video, "pipe:", **params["pass1"])
-
-        # Second Pass
         output_streams = [video, audio] if audio and not settings.no_audio else [video]
-        second_pass = ffmpeg.output(*output_streams, output_filename, **params["pass2"])
 
-        # Save the commands for the user before adding ff4d's logging flags, which they don't need.
-        commands = [command_for_display(p) for p in (first_pass, second_pass) if p is not None]
+        def build_passes(pass1: dict, pass2: dict) -> tuple:
+            """The first and second pass. The first is None for hardware encoders, which can't use its stats."""
+            first = None if hardware else ffmpeg.output(video, "pipe:", **pass1)
+            return first, ffmpeg.output(*output_streams, output_filename, **pass2)
+
+        # The commands for the user leave out ff4d's logging flags and the temp stats folder, which is deleted after
+        # the encode. Without that folder, ffmpeg keeps its stats in the working directory, so a copied command works.
+        commands = [command_for_display(p) for p in build_passes(params["pass1"], params["pass2"]) if p is not None]
         if dry_run:
             return EncodeResult(output_filename, 0, commands)
 
-        if first_pass is not None:
-            print("Performing first pass")
-            run_pass(first_pass.global_args("-loglevel", loglevel, "-stats"), "first", capture_stdout=True)
+        # A new folder for each encode, so two encodes at once can't read or delete each other's stats
+        with tempfile.TemporaryDirectory(prefix="ff4d-", ignore_cleanup_errors=True) as log_dir:
+            first_pass, second_pass = build_passes(
+                self._with_pass_log(params["pass1"], settings.codec, log_dir),
+                self._with_pass_log(params["pass2"], settings.codec, log_dir),
+            )
+            if first_pass is not None:
+                print("Performing first pass")
+                run_pass(first_pass.global_args("-loglevel", loglevel, "-stats"), "first", capture_stdout=True)
 
-        print("Performing single pass (hardware encoder)" if hardware else "\nPerforming second pass")
-        second_pass = second_pass.global_args("-loglevel", loglevel, "-stats")
-        run_pass(second_pass, "single" if hardware else "second", hint=hint, overwrite_output=True)
+            print("Performing single pass (hardware encoder)" if hardware else "\nPerforming second pass")
+            second_pass = second_pass.global_args("-loglevel", loglevel, "-stats")
+            run_pass(second_pass, "single" if hardware else "second", hint=hint, overwrite_output=True)
 
         return EncodeResult(output_filename, os.path.getsize(output_filename) * FILE_SIZE_MULT, commands)
 
