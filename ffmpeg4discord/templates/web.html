@@ -38,7 +38,19 @@
                 {% endif %}
                 <span class="text-danger">The server is still running. Do not forget to terminate it.</span>
             </div>
-        </div>        
+        </div>
+        {% if errors %}
+        <div class="row mt-3">
+            <div class="alert alert-danger" role="alert">
+                <p class="mb-1">Nothing was encoded. Fix these and try again:</p>
+                <ul class="mb-0">
+                    {% for error in errors %}
+                    <li style="white-space: pre-wrap;">{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
         <div class="row mt-3">
             <video id="myVideo" preload="auto" controls>
                 <source src="{{ file_url }}" type="video/mp4">
@@ -58,13 +70,13 @@
             <div class="row mb-3">
                 <div class="col">
                     <label for="startTime" class="form-label padding-top">Start Time:</label>
-                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="0.001" max="{{ twopass.duration }}" value="{{ twopass.from_seconds if twopass.from_seconds else 0 }}">
-                    <span id="startTimeLabel">{{ twopass.from_seconds|string + " seconds" if twopass.from_seconds else "0 seconds" }}</span>
+                    <input class="form-range" type="range" name="startTime" id="startTime" min="0" step="0.001" max="{{ twopass.duration }}" value="{{ values.startTime }}">
+                    <span id="startTimeLabel">{{ values.startTime }} seconds</span>
                 </div>
                 <div class="col">
                     <label for="endTime" class="form-label">End Time:</label>
-                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="0.001" max="{{ twopass.duration }}" value="{{ twopass.to_seconds if twopass.to_seconds else twopass.duration }}">
-                    <span id="endTimeLabel">{{ twopass.to_seconds|string + " seconds" if twopass.to_seconds else twopass.duration|string + " seconds" }}</span>
+                    <input class="form-range" type="range" name="endTime" id="endTime" min="0" step="0.001" max="{{ twopass.duration }}" value="{{ values.endTime }}">
+                    <span id="endTimeLabel">{{ values.endTime }} seconds</span>
                 </div>
             </div>
             <div class="row">
@@ -77,31 +89,31 @@
             <div class="row mb-3 row-cols-5">
                 <div class="col">
                     <label for="resolution" class="form-label">Resolution</label>
-                    <input class="form-control" name="resolution" id="resolution" type="text" value="{{ twopass.resolution }}" />
+                    <input class="form-control" name="resolution" id="resolution" type="text" value="{{ values.resolution }}" />
                 </div>
                 <div class="col">
-                    <label for="target_filesize" class="form-label"><span id="targetApprox">{{ "Approximate" if approx else "Target" }}</span> File Size (MB)</label>
-                    <input class="form-control mb-2" name="target_filesize" id="target_filesize" type="text" value="{{ twopass.target_filesize }}" />
+                    <label for="target_filesize" class="form-label"><span id="targetApprox">{{ "Approximate" if values.approx else "Target" }}</span> File Size (MB)</label>
+                    <input class="form-control mb-2" name="target_filesize" id="target_filesize" type="text" value="{{ values.target_filesize }}" />
                     <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" id="approx" value="True" name="approx" id="approx" {{ "checked" if approx else "" }}>
+                        <input class="form-check-input" type="checkbox" role="switch" id="approx" value="True" name="approx" {{ "checked" if values.approx else "" }}>
                         <label class="form-check-label" for="approx">Approximate file size</label>
                     </div>
                 </div>
                 <div class="col">
                     <label for="audio_br" class="form-label">Audio Bitrate (kbps)</label>
-                    <input class="form-control" name="audio_br" id="audio_br" type="text" value="{{ twopass.audio_br/1000 }}" />
+                    <input class="form-control" name="audio_br" id="audio_br" type="text" value="{{ values.audio_br }}" />
                 </div>
                 <div class="col">
                     <label for="crop" class="form-label">Crop</label>
-                    <input class="form-control" name="crop" id="crop" type="text" value="{{ twopass.crop }}" />
+                    <input class="form-control" name="crop" id="crop" type="text" value="{{ values.crop }}" />
                 </div>
                 <div class="col">
                     <label for="output" class="form-label">Output Folder/File</label>
-                    <input class="form-control" name="output" id="output" type="text" value="{{ twopass.output }}" />
+                    <input class="form-control" name="output" id="output" type="text" value="{{ values.output }}" />
                 </div>
                 <div class="col">
                     <label for="framerate" class="form-label">Frame Rate</label>
-                    <input class="form-control" name="framerate" id="framerate" type="text" value="{{ twopass.framerate if twopass.framerate else '' }}" />
+                    <input class="form-control" name="framerate" id="framerate" type="text" value="{{ values.framerate }}" />
                 </div>
                 <div class="col">
                     <label for="codec" class="form-label">Video Codec</label>
@@ -117,7 +129,7 @@
                             "av1": "AV1 (.mp4)",
                         } %}
                         {% for codec in codecs %}
-                        <option {{ "selected" if twopass.codec == codec else "" }} value="{{ codec }}">{{ codec_labels[codec] }}</option>
+                        <option {{ "selected" if values.codec == codec else "" }} value="{{ codec }}">{{ codec_labels[codec] }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -131,7 +143,7 @@
                             id="include_audio"
                             name="include_audio"
                             value="True"
-                            {{ "checked" if not twopass.no_audio else "" }}
+                            {{ "checked" if values.include_audio else "" }}
                         >
                         <label class="form-check-label" for="include_audio">Enabled</label>
                     </div>
@@ -146,7 +158,7 @@
                             name="amix_mode"
                             id="amix_off"
                             value="off"
-                            {% if not twopass.amix %}checked{% endif %}
+                            {% if values.amix_mode not in ["mix", "mix_normalize"] %}checked{% endif %}
                         >
                         <label class="form-check-label" for="amix_off">
                             No mixing (keeps the first checked track)
@@ -159,7 +171,7 @@
                             name="amix_mode"
                             id="amix_mix"
                             value="mix"
-                            {% if twopass.amix and not twopass.amix_normalize %}checked{% endif %}
+                            {% if values.amix_mode == "mix" %}checked{% endif %}
                         >
                         <label class="form-check-label" for="amix_mix">
                             Mix tracks
@@ -172,7 +184,7 @@
                             name="amix_mode"
                             id="amix_mix_normalize"
                             value="mix_normalize"
-                            {% if twopass.amix and twopass.amix_normalize %}checked{% endif %}
+                            {% if values.amix_mode == "mix_normalize" %}checked{% endif %}
                         >
                         <label class="form-check-label" for="amix_mix_normalize">
                             Mix tracks + normalize audio
@@ -193,8 +205,8 @@
                                     name="astreams"
                                     id="astream_{{ idx }}"
                                     value="{{ idx }}"
-                                    {% if twopass.astreams is not none %}
-                                        {% if idx in twopass.astreams %}checked{% endif %}
+                                    {% if values.astreams is not none %}
+                                        {% if idx in values.astreams %}checked{% endif %}
                                     {% else %}
                                         checked
                                     {% endif %}
@@ -221,7 +233,7 @@
             <div class="row mb-3 row-cols-5">
                 <div class="col">
                     <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" id="verbose" value="True" name="verbose" id="verbose" {{ "checked" if twopass.verbose else "" }}>
+                        <input class="form-check-input" type="checkbox" role="switch" id="verbose" value="True" name="verbose" {{ "checked" if values.verbose else "" }}>
                         <label class="form-check-label" for="verbose">Verbose FFmpeg Logs</label>
                     </div>
                 </div>
