@@ -261,3 +261,95 @@ def test_encode_amix_mode(web, amix_mode, amix, normalize):
 def test_encode_audio_stream_selection(web, astreams, expected):
     web.client.post("/encode", data=encode_form(astreams=astreams))
     assert web.twopass_loop.call_args.kwargs["twopass"].astreams == expected
+
+
+# --- web UI form errors ---
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        ({"startTime": ""}, b"must be numbers of seconds"),
+        ({"endTime": "abc"}, b"must be numbers of seconds"),
+        ({"startTime": "40", "endTime": "10"}, b"Start time must come before the End time"),
+        ({"endTime": "500"}, b"between 0 and 120 seconds"),
+        ({"target_filesize": "abc"}, b"File Size must be a number above 0"),
+        ({"target_filesize": "0"}, b"File Size must be a number above 0"),
+        ({"target_filesize": "nan"}, b"File Size must be a number above 0"),
+        ({"target_filesize": "60"}, b"larger than the input file (50.54 MiB)"),
+        ({"codec": "not_a_codec"}, b"Pick a Video Codec from the list"),
+        ({"resolution": "1280"}, b"Resolution must be width x height"),
+        ({"crop": "0x0x100"}, b"Crop must be four numbers joined by x"),
+        ({"output": "missing/out.mp4"}, b"The output folder missing"),
+        ({"framerate": "29.97"}, b"Frame Rate must be a whole number above 0"),
+        ({"framerate": "0"}, b"Frame Rate must be a whole number above 0"),
+        ({"audio_br": "loud"}, b"Audio Bitrate must be a number above 0"),
+    ],
+)
+def test_encode_bad_input_shows_an_error(web, overrides, message):
+    response = web.client.post("/encode", data=encode_form(**overrides))
+    assert response.status_code == 400
+    assert b"Nothing was encoded" in response.data
+    assert message in response.data
+    web.twopass_loop.assert_not_called()
+
+
+def test_encode_error_keeps_what_the_user_typed(web):
+    response = web.client.post("/encode", data=encode_form(startTime="12.5", crop="0x0x100", resolution="640x360"))
+    assert b'value="12.5"' in response.data
+    assert b'value="0x0x100"' in response.data
+    assert b'value="640x360"' in response.data
+
+
+def test_encode_blank_optional_fields_are_fine(web):
+    response = web.client.post("/encode", data=encode_form(framerate="", audio_br="", resolution="", crop=""))
+    assert response.status_code == 200
+    tp = web.twopass_loop.call_args.kwargs["twopass"]
+    assert tp.framerate is None
+    assert tp.audio_br == 128000  # the input's audio bitrate
+
+
+@pytest.fixture
+def two_tracks(probe):
+    """Add a second audio track to the probe. List it before `web` in a test so the TwoPass sees both tracks."""
+    probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": 2})
+
+
+def test_encode_two_tracks_needs_one_checked(two_tracks, web):
+    response = web.client.post("/encode", data=encode_form())
+    assert response.status_code == 400
+    assert b"Check at least one of the Audio Streams" in response.data
+    web.twopass_loop.assert_not_called()
+
+
+def test_encode_two_tracks_without_audio_needs_none_checked(two_tracks, web):
+    form = encode_form()
+    del form["include_audio"]
+    assert web.client.post("/encode", data=form).status_code == 200
+
+
+def test_encode_twopass_value_error_is_shown(web):
+    web.twopass_loop.side_effect = ValueError("Target file size of 8.00 MiB is too small")
+    response = web.client.post("/encode", data=encode_form())
+    assert response.status_code == 400
+    assert b"Target file size of 8.00 MiB is too small" in response.data
+
+
+def test_encode_ffmpeg_failure_points_to_the_terminal(web, caplog):
+    web.twopass_loop.side_effect = RuntimeError("FFmpeg failed during the first pass.")
+    response = web.client.post("/encode", data=encode_form())
+    assert response.status_code == 400
+    assert b"Its error message is in the terminal running ff4d" in response.data
+    assert "FFmpeg failed during the first pass." in caplog.text
+
+
+def test_encode_strips_quotes_from_a_pasted_output_path(web, tmp_path):
+    response = web.client.post("/encode", data=encode_form(output=f'"{tmp_path}"'))
+    assert response.status_code == 200
+    assert web.twopass_loop.call_args.kwargs["twopass"].output == tmp_path
+
+
+def test_encode_ignores_audio_streams_that_are_not_numbers(web):
+    # "²" passes str.isdigit() but int() can't read it. The bad frame rate makes the error page render too.
+    response = web.client.post("/encode", data=encode_form(astreams=["²"], framerate="bad"))
+    assert response.status_code == 400
