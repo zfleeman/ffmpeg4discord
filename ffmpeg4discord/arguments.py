@@ -250,15 +250,10 @@ def _assign_port(args: dict) -> dict:
 
 def _extract_times(args: dict) -> dict:
     """
-    Move 'from' and 'to' arguments into a 'times' dictionary.
+    Rename the 'from' and 'to' arguments to 'start' and 'end', the `EncodeSettings` names. `from` is a Python keyword.
     """
-    args["times"] = {}
-    if args.get("from"):
-        args["times"]["from"] = args["from"]
-    if args.get("to"):
-        args["times"]["to"] = args["to"]
-    args.pop("from", None)
-    args.pop("to", None)
+    args["start"] = args.pop("from", None) or None
+    args["end"] = args.pop("to", None) or None
     return args
 
 
