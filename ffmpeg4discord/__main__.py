@@ -123,18 +123,18 @@ def success_message(result: EncodeResult) -> str:
 PASS_LABELS = {"first": "First pass", "second": "Second pass", "single": "Encoding"}
 
 
-def progress_seconds(progress_file: Optional[Path]) -> float:
-    """How many seconds of video ffmpeg's -progress file says it has encoded. 0 before the pass writes anything."""
+def progress_seconds(progress_file: Optional[Path]) -> Optional[float]:
+    """How many seconds of video ffmpeg's -progress file says it has encoded, or None if it hasn't reported a time."""
     if progress_file is None:
-        return 0.0
+        return None
     try:
         text = progress_file.read_text()
     except OSError:
-        return 0.0
+        return None
     # ffmpeg adds a block of key=value lines about twice a second, so the last time is the newest.
-    # Older builds call it out_time_ms, but it's in microseconds there too.
+    # Older builds call it out_time_ms, but it's in microseconds there too. It's N/A until video comes out.
     times = re.findall(r"^out_time_(?:us|ms)=(\d+)", text, re.MULTILINE)
-    return int(times[-1]) / 1_000_000 if times else 0.0
+    return int(times[-1]) / 1_000_000 if times else None
 
 
 @dataclass
@@ -145,20 +145,24 @@ class EncodeJob:
     Attributes:
         values (dict): The submitted form, to show again while and after the encode runs.
         clip_seconds (float): The trimmed clip's length, for working out the progress.
+        codec (str): The encode's codec, e.g. "vp9".
         state (str): "running", then "done" or "failed".
         attempt (int): Which attempt is running. ff4d tries again when an output is over the target.
         pass_name (str): The running pass: "first", "second", or "single" for hardware encoders.
         progress_file (Path): The file ffmpeg writes the running pass's progress to.
+        pass_started (float): When the running pass started, from time.monotonic().
         result (EncodeResult): The finished encode, once the state is "done".
         errors (list[str]): What went wrong, once the state is "failed".
     """
 
     values: dict
     clip_seconds: float
+    codec: str = ""
     state: str = "running"
     attempt: int = 0
     pass_name: str = ""
     progress_file: Optional[Path] = None
+    pass_started: float = 0.0
     result: Optional[EncodeResult] = None
     errors: list[str] = field(default_factory=list)
 
@@ -187,6 +191,7 @@ class EncodeJob:
         if pass_name in ("first", "single"):
             self.attempt += 1
         self.progress_file = progress_file
+        self.pass_started = time.monotonic()
         self.pass_name = pass_name
 
     def status(self) -> dict:
@@ -196,10 +201,18 @@ class EncodeJob:
         if not self.pass_name:
             return {"state": "running", "percent": 0, "label": "Starting…"}
 
-        done = min(progress_seconds(self.progress_file) / self.clip_seconds, 1)
         # Each pass of a two-pass encode gets half of the bar
         start, share = {"first": (0, 50), "second": (50, 50), "single": (0, 100)}[self.pass_name]
-        label = f"{PASS_LABELS[self.pass_name]}: {done:.0%}"
+        seconds = progress_seconds(self.progress_file)
+        if seconds is None:
+            # No time yet. Most passes report one within a second, but VP9's first pass writes no video, so it never does.
+            done = 0
+            label = f"{PASS_LABELS[self.pass_name]}: running for {time.monotonic() - self.pass_started:.0f} s"
+            if self.codec == "vp9" and self.pass_name == "first":
+                label += ". VP9 doesn't report progress until this pass ends."
+        else:
+            done = min(seconds / self.clip_seconds, 1)
+            label = f"{PASS_LABELS[self.pass_name]}: {done:.0%}"
         if self.attempt > 1:
             label = f"Attempt {self.attempt}, since the last one was over the target. {label}"
         return {"state": "running", "percent": round(start + share * done, 1), "label": label}
@@ -498,7 +511,8 @@ def main() -> None:
                     return render_page(values, alert_hidden=True, errors=errors), 400
 
                 start, end = twopass.clip_times(form_settings)
-                job = EncodeJob(form_values(twopass, form_settings, form_approx), clip_seconds=end - start)
+                values = form_values(twopass, form_settings, form_approx)
+                job = EncodeJob(values, clip_seconds=end - start, codec=form_settings.codec)
                 worker = threading.Thread(
                     target=job.run, args=[twopass, form_settings, form_approx], name="Encode", daemon=True
                 )

@@ -501,7 +501,7 @@ def test_status_reports_each_pass(web, tmp_path):
     web.twopass_loop.side_effect = fake_loop
     web.client.post("/encode", data=encode_form())
     assert seen == [
-        {"state": "running", "percent": 0, "label": "First pass: 0%"},
+        {"state": "running", "percent": 0, "label": "First pass: running for 0 s"},
         {"state": "running", "percent": 75, "label": "Second pass: 50%"},
     ]
 
@@ -530,9 +530,9 @@ def test_job_status(tmp_path, passes, seconds, percent, label):
     [
         ("out_time_us=1000000\nprogress=continue\nout_time_us=2500000\nprogress=continue\n", 2.5),  # newest wins
         ("out_time_ms=1500000\n", 1.5),  # older ffmpeg, which also counts in microseconds
-        ("out_time_us=N/A\nprogress=continue\n", 0),  # before the first frame
+        ("out_time_us=N/A\nprogress=continue\n", None),  # before the first frame
         ("out_time_us=3000000\r\n", 3),  # Windows line endings
-        ("", 0),
+        ("", None),
     ],
 )
 def test_progress_seconds(tmp_path, text, seconds):
@@ -542,8 +542,30 @@ def test_progress_seconds(tmp_path, text, seconds):
 
 
 def test_progress_seconds_without_a_file(tmp_path):
-    assert mainmod.progress_seconds(None) == 0
-    assert mainmod.progress_seconds(tmp_path / "missing.txt") == 0
+    assert mainmod.progress_seconds(None) is None
+    assert mainmod.progress_seconds(tmp_path / "missing.txt") is None
+
+
+@pytest.mark.parametrize(
+    "codec, pass_name, label",
+    [
+        ("x264", "first", "First pass: running for 12 s"),
+        ("vp9", "first", "First pass: running for 12 s. VP9 doesn't report progress until this pass ends."),
+        ("vp9", "second", "Second pass: running for 12 s"),
+    ],
+)
+def test_job_status_before_ffmpeg_reports_a_time(tmp_path, monkeypatch, codec, pass_name, label):
+    # VP9's first pass writes stats but no video, so its progress file only ever says out_time_us=N/A
+    progress = tmp_path / "progress.txt"
+    progress.write_text("frame=0\nout_time_us=N/A\nprogress=continue\n")
+    job = mainmod.EncodeJob(values={}, clip_seconds=30, codec=codec)
+    monkeypatch.setattr(mainmod.time, "monotonic", lambda: 100.0)
+    job.start_pass("first", progress)
+    if pass_name == "second":
+        job.start_pass("second", progress)
+    monkeypatch.setattr(mainmod.time, "monotonic", lambda: 112.4)
+    start = 0 if pass_name == "first" else 50
+    assert job.status() == {"state": "running", "percent": start, "label": label}
 
 
 def test_twopass_loop_passes_on_pass_to_each_run(twopass, no_cleanup):
