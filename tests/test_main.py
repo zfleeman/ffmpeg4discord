@@ -341,3 +341,15 @@ def test_encode_ffmpeg_failure_points_to_the_terminal(web, caplog):
     assert response.status_code == 400
     assert b"Its error message is in the terminal running ff4d" in response.data
     assert "FFmpeg failed during the first pass." in caplog.text
+
+
+def test_encode_strips_quotes_from_a_pasted_output_path(web, tmp_path):
+    response = web.client.post("/encode", data=encode_form(output=f'"{tmp_path}"'))
+    assert response.status_code == 200
+    assert web.twopass_loop.call_args.kwargs["twopass"].output == tmp_path
+
+
+def test_encode_ignores_audio_streams_that_are_not_numbers(web):
+    # "²" passes str.isdigit() but int() can't read it. The bad frame rate makes the error page render too.
+    response = web.client.post("/encode", data=encode_form(astreams=["²"], framerate="bad"))
+    assert response.status_code == 400

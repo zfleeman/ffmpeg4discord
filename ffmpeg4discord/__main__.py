@@ -179,7 +179,7 @@ def form_values(twopass: TwoPass, approx: bool, form=None) -> dict:
     # The page disables the audio options when audio is off, so they're only in the form when it's on.
     if values["include_audio"]:
         values["amix_mode"] = form.get("amix_mode", "off")
-        values["astreams"] = [int(i) for i in form.getlist("astreams") if i.isdigit()]
+        values["astreams"] = [int(i) for i in form.getlist("astreams") if i.isdecimal()]
     return values
 
 
@@ -238,7 +238,8 @@ def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[dict, 
             "The Crop must be four numbers joined by x (x offset, y offset, width, height), e.g. 255x0x1410x1080."
         )
 
-    output = Path(form.get("output", "").strip())
+    # Windows Explorer's "Copy as path" wraps the path in quotes
+    output = Path(form.get("output", "").strip().strip('"'))
     if not output.is_dir() and not output.parent.is_dir():
         errors.append(f"The output folder {output.parent} doesn't exist.")
 
@@ -252,7 +253,7 @@ def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[dict, 
         errors.append("The Audio Bitrate must be a number above 0.")
 
     include_audio = "include_audio" in form
-    astreams = [int(i) for i in form.getlist("astreams") if i.isdigit()]
+    astreams = [int(i) for i in form.getlist("astreams") if i.isdecimal()]
     # With more than one track the page shows a checkbox per track. Sending none would otherwise mean "all tracks".
     if include_audio and len(twopass.audio_streams) > 1 and not astreams:
         errors.append("Check at least one of the Audio Streams, or turn off Include Audio.")
