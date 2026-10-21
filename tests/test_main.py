@@ -187,11 +187,38 @@ def web(monkeypatch, probe, tmp_path):
     }
     monkeypatch.setattr(mainmod, "check_for_update", lambda **_: VersionInfo("0.1.9", "0.1.9"))
     monkeypatch.setattr(mainmod.arguments, "get_args", lambda: cli_args)
+    held = []
+    holding = SimpleNamespace(on=False)
+
+    class FakeThread:
+        """Stands in for threading.Thread. It runs the encode right away, unless the test called `web.hold()`."""
+
+        def __init__(self, target, args=(), **kwargs):
+            self.target, self.args = target, args
+
+        def start(self):
+            if holding.on:
+                held.append(self)
+            else:
+                self.target(*self.args)
+
+    def finish():
+        """Runs the encodes that `hold()` held back."""
+        holding.on = False
+        while held:
+            held.pop(0).start()
+
     monkeypatch.setattr(mainmod, "Flask", CapturedFlask)
-    monkeypatch.setattr(mainmod.threading, "Thread", MagicMock())
+    monkeypatch.setattr(mainmod.threading, "Thread", FakeThread)
+    monkeypatch.setattr(mainmod, "open_browser", MagicMock())
     monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(return_value=result(5)))
     mainmod.main()
-    return SimpleNamespace(client=apps[0].test_client(), twopass_loop=mainmod.twopass_loop)
+    return SimpleNamespace(
+        client=apps[0].test_client(),
+        twopass_loop=mainmod.twopass_loop,
+        hold=lambda: setattr(holding, "on", True),
+        finish=finish,
+    )
 
 
 def posted_settings(web) -> EncodeSettings:
@@ -260,7 +287,7 @@ def test_source_facts_swap_the_size_of_rotated_video(probe, tags):
 
 def test_encode_banner_shows_the_commands(web):
     web.twopass_loop.return_value = result(5, commands=['ffmpeg -i "a b.mp4"'])
-    response = web.client.post("/encode", data=encode_form())
+    response = web.client.post("/encode", data=encode_form(), follow_redirects=True)
     assert b"Your compressed video file (5MB)" in response.data
     assert b"as a plain FFmpeg command:" in response.data
     assert b"ffmpeg -i &#34;a b.mp4&#34;" in response.data  # escaped for HTML
@@ -273,7 +300,9 @@ def test_video_route_serves_only_the_input_file(web):
 
 def test_encode_builds_settings_from_the_form(web):
     response = web.client.post("/encode", data=encode_form(framerate="30", approx="True"))
-    assert response.status_code == 200
+    # the encode runs in the background, so the browser goes to the page that shows its progress
+    assert response.status_code == 303
+    assert response.location == "/"
 
     twopass, settings, approx = web.twopass_loop.call_args.args
     assert twopass.clip_times(settings) == (10, 40)
@@ -291,13 +320,19 @@ def test_encode_keeps_milliseconds(web):
     assert twopass.clip_times(settings) == (10.25, 40.5)
 
 
-def test_encode_does_not_change_the_starting_form(web):
-    # Each request gets its own settings, so an encode doesn't change what the page starts with.
+def test_the_page_shows_the_last_encodes_settings(web):
+    web.client.post("/encode", data=encode_form(crop="0x0x640x360", resolution="640x360"))
+    page = web.client.get("/").data
+    assert b'value="0x0x640x360"' in page
+    assert b'value="640x360"' in page
+
+
+def test_the_next_encode_does_not_inherit_settings(web):
+    # Each request gets its own settings, so one encode's crop doesn't carry into the next.
     web.client.post("/encode", data=encode_form(crop="0x0x640x360", resolution="640x360"))
     assert posted_settings(web).crop == "0x0x640x360"
-    page = web.client.get("/").data
-    assert b'value="0x0x640x360"' not in page
-    assert b'value="640x360"' not in page
+    web.client.post("/encode", data=encode_form())
+    assert (posted_settings(web).crop, posted_settings(web).resolution) == ("", "")
 
 
 def test_encode_unchecked_audio_means_no_audio(web):
@@ -363,7 +398,7 @@ def test_encode_error_keeps_what_the_user_typed(web):
 
 def test_encode_blank_optional_fields_are_fine(web):
     response = web.client.post("/encode", data=encode_form(framerate="", audio_br="", resolution="", crop=""))
-    assert response.status_code == 200
+    assert response.status_code == 303
     settings = posted_settings(web)
     assert settings.framerate is None
     assert settings.audio_br is None  # TwoPass uses the input's audio bitrate
@@ -385,27 +420,142 @@ def test_encode_two_tracks_needs_one_checked(two_tracks, web):
 def test_encode_two_tracks_without_audio_needs_none_checked(two_tracks, web):
     form = encode_form()
     del form["include_audio"]
-    assert web.client.post("/encode", data=form).status_code == 200
+    assert web.client.post("/encode", data=form).status_code == 303
 
 
-def test_encode_twopass_value_error_is_shown(web):
-    web.twopass_loop.side_effect = ValueError("Target file size of 8.00 MiB is too small")
-    response = web.client.post("/encode", data=encode_form())
+def test_encode_settings_that_cannot_work_fail_before_starting(web):
+    # 0.01 MiB over 30 seconds is about 3 kbps, which the 96 kbps of audio uses up. A dry run catches it.
+    response = web.client.post("/encode", data=encode_form(target_filesize="0.01"))
     assert response.status_code == 400
-    assert b"Target file size of 8.00 MiB is too small" in response.data
+    assert b"there is no bitrate left for video" in response.data
+    web.twopass_loop.assert_not_called()
+
+
+def test_encode_value_error_during_the_encode_is_shown(web):
+    web.twopass_loop.side_effect = ValueError("Target file size of 8.00 MiB is too small")
+    page = web.client.post("/encode", data=encode_form(), follow_redirects=True).data
+    assert b"Target file size of 8.00 MiB is too small" in page
+    assert web.client.get("/status").json == {"state": "failed"}
 
 
 def test_encode_ffmpeg_failure_points_to_the_terminal(web, caplog):
     web.twopass_loop.side_effect = RuntimeError("FFmpeg failed during the first pass.")
-    response = web.client.post("/encode", data=encode_form())
-    assert response.status_code == 400
-    assert b"Its error message is in the terminal running ff4d" in response.data
+    page = web.client.post("/encode", data=encode_form(), follow_redirects=True).data
+    assert b"Its error message is in the terminal running ff4d" in page
     assert "FFmpeg failed during the first pass." in caplog.text
+
+
+def test_encode_unexpected_error_does_not_block_the_next_encode(web, caplog):
+    web.twopass_loop.side_effect = [KeyError("surprise"), result(5)]
+    page = web.client.post("/encode", data=encode_form(), follow_redirects=True).data
+    assert b"Something went wrong while encoding" in page
+    assert "surprise" in caplog.text
+    assert web.client.post("/encode", data=encode_form()).status_code == 303
+    assert web.client.get("/status").json == {"state": "done"}
+
+
+# --- web UI background encodes ---
+
+
+def test_status_is_idle_before_any_encode(web):
+    assert web.client.get("/status").json == {"state": "idle"}
+    assert b"const ENCODING = false;" in web.client.get("/").data
+
+
+def test_page_shows_progress_while_encoding(web):
+    web.hold()
+    web.client.post("/encode", data=encode_form())
+    page = web.client.get("/").data
+    assert b"const ENCODING = true;" in page
+    assert b'id="progressPanel" >' in page  # not hidden
+    assert web.client.get("/status").json == {"state": "running", "percent": 0, "label": "Starting…"}
+    web.finish()
+    assert web.client.get("/status").json == {"state": "done"}
+    assert b"Your compressed video file (5MB)" in web.client.get("/").data
+
+
+def test_a_second_encode_waits_for_the_first(web):
+    web.hold()
+    web.client.post("/encode", data=encode_form())
+    response = web.client.post("/encode", data=encode_form(crop="0x0x640x360"))
+    assert response.status_code == 409
+    assert b"An encode is already running" in response.data
+    assert b'value="0x0x640x360"' in response.data  # the second form isn't lost
+    web.finish()
+    assert web.twopass_loop.call_count == 1
+    assert web.client.post("/encode", data=encode_form()).status_code == 303
+
+
+def test_status_reports_each_pass(web, tmp_path):
+    second = tmp_path / "second-progress.txt"
+    second.write_text("out_time_us=15000000\nprogress=continue\n")  # 15 seconds of the 30-second clip
+    seen = []
+
+    def fake_loop(twopass, settings, approx, on_pass):
+        on_pass("first", tmp_path / "not-written-yet.txt")
+        seen.append(web.client.get("/status").json)
+        on_pass("second", second)
+        seen.append(web.client.get("/status").json)
+        return result(5)
+
+    web.twopass_loop.side_effect = fake_loop
+    web.client.post("/encode", data=encode_form())
+    assert seen == [
+        {"state": "running", "percent": 0, "label": "First pass: 0%"},
+        {"state": "running", "percent": 75, "label": "Second pass: 50%"},
+    ]
+
+
+@pytest.mark.parametrize(
+    "passes, seconds, percent, label",
+    [
+        (["first"], 6, 10, "First pass: 20%"),
+        (["first", "second"], 30, 100, "Second pass: 100%"),
+        (["single"], 15, 50, "Encoding: 50%"),
+        (["first", "second", "first"], 3, 5, "Attempt 2, since the last one was over the target. First pass: 10%"),
+        (["first"], 45, 50, "First pass: 100%"),  # out_time can run a little past the clip's end
+    ],
+)
+def test_job_status(tmp_path, passes, seconds, percent, label):
+    job = mainmod.EncodeJob(values={}, clip_seconds=30)
+    progress = tmp_path / "progress.txt"
+    progress.write_text(f"out_time_us={seconds * 1_000_000}\n")
+    for name in passes:
+        job.start_pass(name, progress)
+    assert job.status() == {"state": "running", "percent": percent, "label": label}
+
+
+@pytest.mark.parametrize(
+    "text, seconds",
+    [
+        ("out_time_us=1000000\nprogress=continue\nout_time_us=2500000\nprogress=continue\n", 2.5),  # newest wins
+        ("out_time_ms=1500000\n", 1.5),  # older ffmpeg, which also counts in microseconds
+        ("out_time_us=N/A\nprogress=continue\n", 0),  # before the first frame
+        ("out_time_us=3000000\r\n", 3),  # Windows line endings
+        ("", 0),
+    ],
+)
+def test_progress_seconds(tmp_path, text, seconds):
+    progress = tmp_path / "progress.txt"
+    progress.write_text(text)
+    assert mainmod.progress_seconds(progress) == seconds
+
+
+def test_progress_seconds_without_a_file(tmp_path):
+    assert mainmod.progress_seconds(None) == 0
+    assert mainmod.progress_seconds(tmp_path / "missing.txt") == 0
+
+
+def test_twopass_loop_passes_on_pass_to_each_run(twopass, no_cleanup):
+    on_pass = MagicMock()
+    twopass.run.side_effect = [result(15), result(9)]
+    mainmod.twopass_loop(twopass, EncodeSettings(target_filesize=10), on_pass=on_pass)
+    assert [c.kwargs["on_pass"] for c in twopass.run.call_args_list] == [on_pass, on_pass]
 
 
 def test_encode_strips_quotes_from_a_pasted_output_path(web, tmp_path):
     response = web.client.post("/encode", data=encode_form(output=f'"{tmp_path}"'))
-    assert response.status_code == 200
+    assert response.status_code == 303
     assert posted_settings(web).output == tmp_path
 
 

@@ -165,6 +165,8 @@ That command will spin up a Flask server on your local machine and launch a rend
 
 You can drag the video playhead to different portions of the video and click the "Set Start/End Time" buttons to specify the section of the video you want to be clipped out. You can also use the range sliders underneath the buttons if you prefer. A "Preview Selection" button is provided for your convenience, and it does what it sounds like.
 
+When you click Encode, a progress bar shows each pass as it runs. The encode keeps going if you close the tab, and opening the page again shows its progress or its result. One encode runs at a time.
+
 https://github.com/zfleeman/ffmpeg4discord/assets/1808564/ff323bcb-4747-437b-808f-ce48b8c269ce
 
 Note that the Flask server doesn't automatically shut down, so you'll need to manually terminate it by closing the terminal window where it's running.

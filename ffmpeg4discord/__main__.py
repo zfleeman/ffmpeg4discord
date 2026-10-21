@@ -23,11 +23,12 @@ import re
 import threading
 import time
 import webbrowser
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from textwrap import dedent
+from typing import Callable, Optional
 
-from flask import Flask, render_template, request, send_file, url_for
+from flask import Flask, redirect, render_template, request, send_file, url_for
 
 from ffmpeg4discord import arguments
 from ffmpeg4discord.twopass import EncodeResult, EncodeSettings, TwoPass, available_codecs
@@ -41,7 +42,12 @@ RESOLUTION_PATTERN = re.compile(r"\d+x\d+")
 CROP_PATTERN = re.compile(r"\d+x\d+x\d+x\d+")
 
 
-def twopass_loop(twopass: TwoPass, settings: EncodeSettings, approx: bool = False) -> EncodeResult:
+def twopass_loop(
+    twopass: TwoPass,
+    settings: EncodeSettings,
+    approx: bool = False,
+    on_pass: Optional[Callable[[str, Path], None]] = None,
+) -> EncodeResult:
     """
     Encodes with `settings`, then re-encodes at a lower bitrate until the output is under the target size.
 
@@ -49,6 +55,7 @@ def twopass_loop(twopass: TwoPass, settings: EncodeSettings, approx: bool = Fals
         twopass (TwoPass): The TwoPass for the input video.
         settings (EncodeSettings): What to encode. Its `target_filesize` is the size to get under.
         approx (bool): Keep the first encode, even if it's over the target.
+        on_pass: Passed to `TwoPass.run()`, which calls it before each pass with a file ffmpeg writes progress to.
 
     Returns:
         The last encode's result.
@@ -56,7 +63,7 @@ def twopass_loop(twopass: TwoPass, settings: EncodeSettings, approx: bool = Fals
     target_filesize = settings.target_filesize
 
     while True:
-        result = twopass.run(settings)
+        result = twopass.run(settings, on_pass=on_pass)
 
         # check if the filesize is within the target
         if result.output_filesize < target_filesize or approx:
@@ -110,6 +117,92 @@ def success_message(result: EncodeResult) -> str:
     """The message shown when an encode finishes."""
     output_path = Path(result.output_filename).resolve()
     return f"Your compressed video file ({round(result.output_filesize, 2)}MB) is located at {output_path}"
+
+
+# What the web UI's progress line calls each pass
+PASS_LABELS = {"first": "First pass", "second": "Second pass", "single": "Encoding"}
+
+
+def progress_seconds(progress_file: Optional[Path]) -> float:
+    """How many seconds of video ffmpeg's -progress file says it has encoded. 0 before the pass writes anything."""
+    if progress_file is None:
+        return 0.0
+    try:
+        text = progress_file.read_text()
+    except OSError:
+        return 0.0
+    # ffmpeg adds a block of key=value lines about twice a second, so the last time is the newest.
+    # Older builds call it out_time_ms, but it's in microseconds there too.
+    times = re.findall(r"^out_time_(?:us|ms)=(\d+)", text, re.MULTILINE)
+    return int(times[-1]) / 1_000_000 if times else 0.0
+
+
+@dataclass
+class EncodeJob:
+    """
+    A web UI encode. It runs in a background thread while the page polls /status for its progress.
+
+    Attributes:
+        values (dict): The submitted form, to show again while and after the encode runs.
+        clip_seconds (float): The trimmed clip's length, for working out the progress.
+        state (str): "running", then "done" or "failed".
+        attempt (int): Which attempt is running. ff4d tries again when an output is over the target.
+        pass_name (str): The running pass: "first", "second", or "single" for hardware encoders.
+        progress_file (Path): The file ffmpeg writes the running pass's progress to.
+        result (EncodeResult): The finished encode, once the state is "done".
+        errors (list[str]): What went wrong, once the state is "failed".
+    """
+
+    values: dict
+    clip_seconds: float
+    state: str = "running"
+    attempt: int = 0
+    pass_name: str = ""
+    progress_file: Optional[Path] = None
+    result: Optional[EncodeResult] = None
+    errors: list[str] = field(default_factory=list)
+
+    def run(self, twopass: TwoPass, settings: EncodeSettings, approx: bool) -> None:
+        """Runs the encode and its retries. It records errors instead of raising, since nobody would catch them."""
+        try:
+            self.result = twopass_loop(twopass, settings, approx, on_pass=self.start_pass)
+            self.state = "done"
+        except ValueError as exc:
+            # TwoPass raises ValueError for settings that can't work, e.g. no bitrate left for video on a retry
+            self.errors = [str(exc)]
+            self.state = "failed"
+        except RuntimeError as exc:
+            # FFmpeg failed. Its own message and the full command are only useful in the terminal.
+            logging.error(exc)
+            self.errors = ["FFmpeg failed while encoding. Its error message is in the terminal running ff4d."]
+            self.state = "failed"
+        except Exception:
+            # Anything else would leave the job "running" forever and block every later encode
+            logging.exception("The encode failed")
+            self.errors = ["Something went wrong while encoding. The details are in the terminal running ff4d."]
+            self.state = "failed"
+
+    def start_pass(self, pass_name: str, progress_file: Path) -> None:
+        """TwoPass.run() calls this before each pass. A first or single pass means a new attempt has started."""
+        if pass_name in ("first", "single"):
+            self.attempt += 1
+        self.progress_file = progress_file
+        self.pass_name = pass_name
+
+    def status(self) -> dict:
+        """What /status sends the page. While running, `percent` covers the whole encode and `label` describes it."""
+        if self.state != "running":
+            return {"state": self.state}
+        if not self.pass_name:
+            return {"state": "running", "percent": 0, "label": "Starting…"}
+
+        done = min(progress_seconds(self.progress_file) / self.clip_seconds, 1)
+        # Each pass of a two-pass encode gets half of the bar
+        start, share = {"first": (0, 50), "second": (50, 50), "single": (0, 100)}[self.pass_name]
+        label = f"{PASS_LABELS[self.pass_name]}: {done:.0%}"
+        if self.attempt > 1:
+            label = f"Attempt {self.attempt}, since the last one was over the target. {label}"
+        return {"state": "running", "percent": round(start + share * done, 1), "label": label}
 
 
 def source_facts(twopass: TwoPass) -> dict:
@@ -344,7 +437,11 @@ def main() -> None:
         def video():
             return send_file(path)
 
-        def render_page(values: dict, **kwargs):
+        # The current or last encode. Only one runs at a time, and job_lock keeps two requests from both starting one.
+        job = None
+        job_lock = threading.Lock()
+
+        def render_page(values: dict, encoding: bool = False, **kwargs):
             return render_template(
                 "web.html",
                 file_url=url_for("video"),
@@ -353,40 +450,61 @@ def main() -> None:
                 codecs=codecs,
                 version_info=version_info,
                 values=values,
+                encoding=encoding,
                 **kwargs,
             )
 
         @app.route("/")
         def index():
-            return render_page(form_values(twopass, settings, approx), alert_hidden=True)
+            # The page shows the current or last encode, so closing the tab and coming back loses nothing
+            if job is None:
+                return render_page(form_values(twopass, settings, approx), alert_hidden=True)
+            if job.state == "running":
+                return render_page(job.values, encoding=True, alert_hidden=True)
+            if job.state == "failed":
+                return render_page(job.values, alert_hidden=True, errors=job.errors)
+            return render_page(
+                job.values,
+                message=success_message(job.result),
+                commands_text=format_commands(job.result.commands),
+            )
+
+        @app.route("/status")
+        def status():
+            return job.status() if job else {"state": "idle"}
 
         @app.route("/encode", methods=["POST"])
         def form_twopass():
-            # Each request builds its own settings, so nothing carries over from the last encode.
-            form_settings, errors = parse_encode_form(request.form, twopass, codecs)
-            # to loop or not to loop
-            approx = "approx" in request.form
+            nonlocal job
+            with job_lock:
+                if job is not None and job.state == "running":
+                    values = form_values(twopass, settings, approx, request.form)
+                    errors = ["An encode is already running. Wait for it to finish, then try again."]
+                    return render_page(values, encoding=True, alert_hidden=True, errors=errors), 409
 
-            if not errors:
-                try:
-                    result = twopass_loop(twopass, form_settings, approx)
-                except ValueError as exc:
-                    # TwoPass raises ValueError for settings that can't work, e.g. no bitrate left for video
-                    errors = [str(exc)]
-                except RuntimeError as exc:
-                    # FFmpeg failed. Its own message and the full command are only useful in the terminal.
-                    logging.error(exc)
-                    errors = ["FFmpeg failed while encoding. Its error message is in the terminal running ff4d."]
+                # Each request builds its own settings, so nothing carries over from the last encode.
+                form_settings, errors = parse_encode_form(request.form, twopass, codecs)
+                # to loop or not to loop
+                form_approx = "approx" in request.form
+                if not errors:
+                    try:
+                        # A dry run raises for settings that can't work, like no bitrate left for video,
+                        # so the user hears about it now instead of after the page starts showing progress.
+                        twopass.run(form_settings, dry_run=True)
+                    except ValueError as exc:
+                        errors = [str(exc)]
+                if errors:
+                    values = form_values(twopass, settings, form_approx, request.form)
+                    return render_page(values, alert_hidden=True, errors=errors), 400
 
-            if errors:
-                values = form_values(twopass, settings, approx, request.form)
-                return render_page(values, alert_hidden=True, errors=errors), 400
-
-            return render_page(
-                form_values(twopass, form_settings, approx),
-                message=success_message(result),
-                commands_text=format_commands(result.commands),
-            )
+                start, end = twopass.clip_times(form_settings)
+                job = EncodeJob(form_values(twopass, form_settings, form_approx), clip_seconds=end - start)
+                worker = threading.Thread(
+                    target=job.run, args=[twopass, form_settings, form_approx], name="Encode", daemon=True
+                )
+            worker.start()
+            # Send the browser to the page that shows the progress. A refresh there doesn't submit the form again.
+            return redirect(url_for("index"), code=303)
 
         threading.Thread(target=open_browser, args=[port], name="Open Browser").start()
         # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.

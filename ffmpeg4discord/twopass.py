@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
-from typing import Optional
+from typing import Callable, Optional
 
 import ffmpeg
 
@@ -629,11 +629,15 @@ class TwoPass:
             inputs=len(selected_positions),
         )
 
-    def run(self, settings: EncodeSettings, dry_run: bool = False) -> EncodeResult:
+    def run(
+        self, settings: EncodeSettings, dry_run: bool = False, on_pass: Optional[Callable[[str, Path], None]] = None
+    ) -> EncodeResult:
         """
         Perform the CPU-intensive encoding job
         :param settings: what to encode and how
         :param dry_run: build the ffmpeg commands without running them
+        :param on_pass: called with the pass name ("first", "second", or "single") and a file that ffmpeg writes
+            its progress to, just before each pass starts. The web UI uses it for its progress bar.
         :return: the output file, its size, and the ffmpeg commands
         """
 
@@ -687,13 +691,23 @@ class TwoPass:
                 self._with_pass_log(params["pass1"], settings.codec, log_dir),
                 self._with_pass_log(params["pass2"], settings.codec, log_dir),
             )
+
+            def with_logging(ffoutput, pass_name: str):
+                """Adds ff4d's logging flags, plus a -progress file when `on_pass` is watching."""
+                args = ["-loglevel", loglevel, "-stats"]
+                if on_pass:
+                    progress_file = Path(log_dir, f"{pass_name}-progress.txt")
+                    args += ["-progress", str(progress_file)]
+                    on_pass(pass_name, progress_file)
+                return ffoutput.global_args(*args)
+
             if first_pass is not None:
                 print("Performing first pass")
-                run_pass(first_pass.global_args("-loglevel", loglevel, "-stats"), "first", capture_stdout=True)
+                run_pass(with_logging(first_pass, "first"), "first", capture_stdout=True)
 
             print("Performing single pass (hardware encoder)" if hardware else "\nPerforming second pass")
-            second_pass = second_pass.global_args("-loglevel", loglevel, "-stats")
-            run_pass(second_pass, "single" if hardware else "second", hint=hint, overwrite_output=True)
+            pass_name = "single" if hardware else "second"
+            run_pass(with_logging(second_pass, pass_name), pass_name, hint=hint, overwrite_output=True)
 
         return EncodeResult(output_filename, os.path.getsize(output_filename) * FILE_SIZE_MULT, commands)
 
