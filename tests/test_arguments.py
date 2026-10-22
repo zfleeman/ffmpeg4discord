@@ -17,7 +17,6 @@ from ffmpeg4discord.arguments import (
     get_args,
     is_port_in_use,
     load_config,
-    update_args_from_config,
 )
 
 
@@ -168,7 +167,7 @@ def test_load_config_missing_file_raises(tmp_path):
         load_config(tmp_path / "missing.json")
 
 
-def test_update_args_from_config_overwrites_defaults(parser, default_args):
+def test_merge_config_args_applies_config_values(parser, write_config):
     config = {
         "output": "mydir",
         "audio_br": 128,
@@ -178,32 +177,51 @@ def test_update_args_from_config_overwrites_defaults(parser, default_args):
         "framerate": 60,
         "port": 5050,
     }
-    update_args_from_config(default_args, config, parser)
-    assert config.items() <= default_args.items()
-
-
-def test_update_args_from_config_keeps_values_set_on_the_command_line(parser):
-    args = vars(parser.parse_args(["file.mp4", "-a", "64"]))
-    update_args_from_config(args, {"audio_br": 128}, parser)
-    assert args["audio_br"] == 64
-
-
-def test_update_args_from_config_adds_missing_keys(parser):
-    args = {"output": "", "filename": "file.mp4"}
-    update_args_from_config(args, {"output": "mydir", "target_filesize": 20}, parser)
-    assert args == {"output": "mydir", "filename": "file.mp4", "target_filesize": 20}
-
-
-def test_merge_config_args_merges_and_removes_config(parser, default_args, write_config):
-    default_args["config"] = str(write_config({"output": "from_config", "filename_times": True}))
-    result = _merge_config_args(default_args, parser)
-    assert result["output"] == "from_config"
-    assert result["filename_times"] is True
+    argv = ["file.mp4", "--config", str(write_config(config))]
+    result = _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
+    assert config.items() <= result.items()
     assert "config" not in result
 
 
+def test_merge_config_args_flags_not_in_config_keep_defaults(parser, write_config):
+    argv = ["file.mp4", "--config", str(write_config({"codec": "x265"}))]
+    result = _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
+    assert result["target_filesize"] == 20
+    assert result["approx"] is False
+
+
+@pytest.mark.parametrize(
+    ("config", "flags", "key", "expected"),
+    [
+        ({"audio_br": 128}, ["-a", "64"], "audio_br", 64),
+        ({"codec": "x265"}, ["-c", "x264"], "codec", "x264"),
+        ({"approx": True}, ["--no-approx"], "approx", False),
+        ({"target_filesize": 10}, ["-s", "20"], "target_filesize", 20),
+    ],
+)
+def test_merge_config_args_command_line_beats_config(parser, write_config, config, flags, key, expected):
+    # Flags set to their built-in default must still override the config file.
+    argv = ["file.mp4", "--config", str(write_config(config)), *flags]
+    result = _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
+    assert result[key] == expected
+
+
+def test_merge_config_args_keeps_keys_that_are_not_flags(parser, write_config):
+    argv = ["file.mp4", "--config", str(write_config({"something_else": 1}))]
+    result = _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
+    assert result["something_else"] == 1
+
+
+def test_merge_config_args_follows_config_key(parser, write_config):
+    inner = write_config({"codec": "vp9", "audio_br": 64}, name="inner.json")
+    argv = ["file.mp4", "--config", str(write_config({"codec": "x265", "config": str(inner)}))]
+    result = _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
+    assert result["codec"] == "x265"
+    assert result["audio_br"] == 64
+
+
 def test_merge_config_args_without_config(parser, default_args):
-    result = _merge_config_args(default_args, parser)
+    result = _merge_config_args(default_args, parser, ["file.mp4"])
     assert "config" not in result
     assert result["output"] == ""
 

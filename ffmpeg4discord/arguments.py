@@ -5,7 +5,6 @@ loading configuration settings for the ffmpeg4discord application.
 Functions:
 - is_port_in_use: Checks if a given port is currently in use.
 - load_config: Loads configuration settings from a JSON file.
-- update_args_from_config: Updates command-line arguments with values from a configuration file.
 - get_args: Parses command-line arguments and returns them as a dictionary.
 """
 
@@ -49,20 +48,6 @@ def load_config(file_path: Path) -> dict:
     """
     with open(file_path, encoding="UTF-8") as f:
         return json.load(f)
-
-
-def update_args_from_config(args: dict, config: dict, parser: ArgumentParser) -> None:
-    """
-    Updates command-line arguments with values from a configuration file.
-
-    Args:
-        args (dict): The command-line arguments.
-        config (dict): The configuration settings from the JSON file.
-        parser (ArgumentParser): The argument parser instance.
-    """
-    for k, v in config.items():
-        if args.get(k) is None or args[k] == parser.get_default(k):
-            args[k] = v
 
 
 def build_parser() -> ArgumentParser:
@@ -216,18 +201,24 @@ def _search_for_default_config(args: dict) -> dict:
     return args
 
 
-def _merge_config_args(args: dict, parser: ArgumentParser) -> dict:
+def _merge_config_args(args: dict, parser: ArgumentParser, argv: list[str] | None = None) -> dict:
     """
-    Merge config file values into args if present and not already set.
+    Make the config file's values the parser's defaults, then parse the command line again.
+    Flags typed on the command line beat the config file, even when they match a built-in default.
     Always remove 'config' key from args.
     """
     configs = set()
+    defaults = {}
     while args.get("config") is not None:
         file_path = Path(args.pop("config")).resolve()
         if file_path not in configs:
             configs.add(file_path)
             config = load_config(file_path)
-            update_args_from_config(args, config, parser)
+            args["config"] = config.get("config")
+            defaults = {**config, **defaults}  # a config file beats the one it points to
+    if defaults:
+        parser.set_defaults(**defaults)
+        args = vars(parser.parse_args(argv))
     args.pop("config", None)
     args.pop("no_config", None)
     return args
