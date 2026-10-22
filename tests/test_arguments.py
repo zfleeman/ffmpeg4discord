@@ -10,7 +10,6 @@ from ffmpeg4discord.arguments import (
     _assign_port,
     _extract_times,
     _merge_config_args,
-    _normalize_amix_args,
     _parse_astreams,
     _search_for_default_config,
     build_parser,
@@ -281,29 +280,19 @@ def test_extract_times(args, start, end):
     [
         ("0, 2,2", [0, 2]),
         ("", None),
+        (None, None),
         (["0", 2, "2"], [0, 2]),  # a config file can give a list; duplicates are still removed
+        ([], []),
     ],
 )
 def test_parse_astreams(raw, parsed):
     assert _parse_astreams({"astreams": raw})["astreams"] == parsed
 
 
-@pytest.mark.parametrize(
-    "raw, message",
-    [("0, no", "invalid --astreams format"), (["nope"], "invalid astreams list")],
-)
-def test_parse_astreams_invalid_logs_error(caplog, raw, message):
-    assert _parse_astreams({"astreams": raw})["astreams"] is None
-    assert message in caplog.text.lower()
-
-
-def test_parse_astreams_ignores_negative_index(caplog):
-    assert _parse_astreams({"astreams": "0,-1,2"})["astreams"] == [0, 2]
-    assert "ignoring negative audio stream index" in caplog.text.lower()
-
-
-def test_amix_normalize_implies_amix():
-    assert _normalize_amix_args({"amix": False, "amix_normalize": True})["amix"] is True
+@pytest.mark.parametrize("raw", ["0, no", "0,-1", "0,,1", "1.5", ["nope"], [-1]])
+def test_parse_astreams_rejects_bad_values(raw):
+    with pytest.raises(ValueError, match="Invalid --astreams value"):
+        _parse_astreams({"astreams": raw})
 
 
 # --- get_args end to end ---

@@ -1,26 +1,4 @@
-"""
-This module provides the TwoPass class and utility functions for performing two-pass video encoding using FFmpeg.
-
-The TwoPass class allows users to compress video files to a specified target file size while maintaining
-optimal video quality. It supports various encoding parameters such as codec, resolution, and audio bitrate.
-The module also includes helper functions for timestamp conversion.
-
-Classes:
-- EncodeSettings: What the user asked for, like the target size, trim times, and codec.
-- EncodeResult: The output file, its size, and the ffmpeg commands from one encode.
-- TwoPass: Encodes and resizes video files using FFmpeg's two-pass encoding to meet a specified target file size.
-
-Functions:
-- available_codecs: Returns the codec choices for this operating system.
-- command_for_display: Turns one encoding pass into a command the user can paste into a terminal.
-- ffmpeg_major_version: Returns the installed ffmpeg's major version from the probe data.
-- fps_mode_flag: Returns the frame rate flag name supported by the installed ffmpeg.
-- run_pass: Runs one encoding pass and reports ffmpeg failures with a readable message.
-- seconds_from_ts_string: Converts a timestamp string into seconds.
-- seconds_to_timestamp: Converts seconds into a timestamp string.
-- timestamp_from_percentage: Converts a percentage of the video's duration into a timestamp string.
-- tonemap_filters: Returns the HDR-to-SDR filter chain this system's ffmpeg can run.
-"""
+"""Compresses a video to a target file size with FFmpeg two-pass encoding."""
 
 import logging
 import math
@@ -38,14 +16,8 @@ from typing import Callable, Optional
 
 import ffmpeg
 
-logging.getLogger().setLevel(logging.INFO)
-
-
-# Note: FILE_SIZE_MULT converts bytes to mebibytes (MiB, 1 MiB = 1,048,576 bytes).
-# macOS Finder reports file sizes in megabytes (MB, 1 MB = 1,000,000 bytes),
-# while Windows File Explorer reports in mebibytes (but labels as MB).
-# This can cause discrepancies in reported file sizes between the two systems.
-FILE_SIZE_MULT = 0.00000095367432
+# Converts bytes to mebibytes (MiB). macOS Finder shows megabytes (MB), so its sizes look a little larger.
+FILE_SIZE_MULT = 1 / 1024**2
 
 
 # ff4d codec names mapped to ffmpeg encoder names, ordered from most to least compatible.
@@ -71,6 +43,11 @@ FALLBACK_AUDIO_BR = 96_000
 
 # ffprobe `color_transfer` values that mean the video is HDR: PQ (HDR10, Dolby Vision) and HLG.
 HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
+
+
+def red(text: str) -> str:
+    """Remove the source-code indentation from a multi-line message and color it red for the terminal."""
+    return "\033[31m" + dedent(text).strip() + "\033[0m"
 
 
 def available_codecs() -> list[str]:
@@ -192,11 +169,9 @@ def run_pass(ffoutput, pass_name: str, hint: str = "", **run_kwargs):
     try:
         return ffoutput.run(**run_kwargs)
     except ffmpeg.Error as exc:
-        # compile() can contain Path objects, so stringify each argument before joining.
-        command = " ".join(str(arg) for arg in ffoutput.compile())
+        # The hint is one line, so it can sit in the template without breaking dedent. strip() drops it when empty.
         raise RuntimeError(
-            "\033[31m"
-            + dedent(
+            red(
                 f"""
                 FFmpeg failed during the {pass_name} pass.
 
@@ -204,30 +179,24 @@ def run_pass(ffoutput, pass_name: str, hint: str = "", **run_kwargs):
                 problem (an unsupported option, a bad filter, a missing encoder, etc.).
 
                 The command that failed was:
-                {command}
+                {command_for_display(ffoutput)}
+
+                {hint}
                 """
-            ).strip()
-            + (f"\n\n{hint}" if hint else "")
-            + "\033[0m"
+            )
         ) from exc
 
 
-# Per-codec tweaks for `_generate_params()`.
-# Kept module-level (instead of inside the method) so tests can patch it and
-# exercise the `overrides.get("both", {})` branch.
+# Second-pass options for each codec, added by `_generate_params()`.
 CODEC_OVERRIDES = {
-    "x264": {"pass2": {"c:a": "aac"}},
-    "x265": {"pass2": {"tag:v": "hvc1", "c:a": "aac"}},
-    "h264_nvenc": {"pass2": {"c:a": "aac"}},
-    "hevc_nvenc": {"pass2": {"tag:v": "hvc1", "c:a": "aac"}},
-    "h264_videotoolbox": {"pass2": {"c:a": "aac"}},
-    "hevc_videotoolbox": {"pass2": {"tag:v": "hvc1", "c:a": "aac"}},
-    "vp9": {
-        "pass2": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
-    },
-    "av1": {
-        "pass2": {"tag:v": "av01", "c:a": "libopus", "row-mt": 1, "cpu-used": 8},
-    },
+    "x264": {"c:a": "aac"},
+    "x265": {"tag:v": "hvc1", "c:a": "aac"},
+    "h264_nvenc": {"c:a": "aac"},
+    "hevc_nvenc": {"tag:v": "hvc1", "c:a": "aac"},
+    "h264_videotoolbox": {"c:a": "aac"},
+    "hevc_videotoolbox": {"tag:v": "hvc1", "c:a": "aac"},
+    "vp9": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
+    "av1": {"tag:v": "av01", "c:a": "libopus", "row-mt": 1, "cpu-used": 8},
 }
 
 
@@ -366,14 +335,12 @@ class TwoPass:
         self.tonemap = tonemap_filters(self.probe)
         if not self.tonemap:
             logging.warning(
-                "\033[31m"
-                + dedent(
+                red(
                     """
                     This video is HDR, but your ffmpeg can't convert it to SDR. It needs ffmpeg 8.0
                     or newer, or a build with zscale (libzimg). The output may look washed out.
                     """
-                ).strip()
-                + "\033[0m"
+                )
             )
 
     def clip_times(self, settings: EncodeSettings) -> tuple[float, float]:
@@ -386,16 +353,12 @@ class TwoPass:
         if settings.filename_times:
             start, end = self._times_from_file_name()
         else:
-            # Accept any supported format (timestamp, seconds, or percentage).
-            start = seconds_from_ts_string(timestamp_from_percentage(settings.start or "0", self.duration))
-            end = self.duration
-            if settings.end:
-                end = seconds_from_ts_string(timestamp_from_percentage(settings.end, self.duration))
+            start = parse_time(settings.start or "0", self.duration)
+            end = parse_time(settings.end, self.duration) if settings.end else self.duration
 
         if end <= start:
             raise ValueError(
-                "\033[31m"
-                + dedent(
+                red(
                     f"""
                     Time Paradox?
 
@@ -405,8 +368,7 @@ class TwoPass:
                     - Your video is {seconds_to_timestamp(self.duration)} long
                     - Your clipping times are {seconds_to_timestamp(start)} to {seconds_to_timestamp(end)}
                     """
-                ).strip()
-                + "\033[0m"
+                )
             )
 
         return start, end
@@ -474,14 +436,12 @@ class TwoPass:
                 params["pass2"]["r"] = settings.framerate
             else:
                 logging.warning(
-                    "\033[31m"
-                    + dedent(
+                    red(
                         f"""
                         Desired framerate ({settings.framerate}) is more than original framerate ({self.init_framerate}).
                         Keeping the original framerate...
                         """
-                    ).strip()
-                    + "\033[0m"
+                    )
                 )
 
         # add in configurations specific to the codec
@@ -496,16 +456,7 @@ class TwoPass:
             _ = params["pass1"].pop("pass")
             _ = params["pass2"].pop("pass")
 
-        overrides = CODEC_OVERRIDES.get(codec)
-        if overrides:
-            # Apply shared params to both passes
-            for key, value in overrides.get("both", {}).items():
-                params["pass1"][key] = value
-                params["pass2"][key] = value
-
-            # Apply pass-specific params
-            params["pass1"].update(overrides.get("pass1", {}))
-            params["pass2"].update(overrides.get("pass2", {}))
+        params["pass2"].update(CODEC_OVERRIDES.get(codec, {}))
 
         # Apply bitrate targets to both passes
         for pass_params in params.values():
@@ -607,14 +558,12 @@ class TwoPass:
 
         if output.suffix != ext:
             logging.warning(
-                "\033[31m"
-                + dedent(
+                red(
                     f"""
                     You specified {settings.codec}, but your output file name ends with {output.suffix}.
                     I've corrected this.
                     """
-                ).strip()
-                + "\033[0m"
+                )
             )
             output = output.with_suffix(ext)
 
@@ -642,14 +591,12 @@ class TwoPass:
 
             if ratio != outputratio:
                 logging.warning(
-                    "\033[31m"
-                    + dedent(
+                    red(
                         """
                         Your output resolution's aspect ratio does not match the
                         input resolution's or your cropped resolution's aspect ratio.
                         """
-                    ).strip()
-                    + "\033[0m"
+                    )
                 )
 
         # Tone map last, so a smaller --resolution means fewer pixels to process.
@@ -796,13 +743,13 @@ def seconds_from_ts_string(ts_string: str) -> float:
     return seconds
 
 
-def timestamp_from_percentage(value: str, duration: float) -> str:
+def parse_time(value: str, duration: float) -> float:
     """
-    Convert a percentage like "75%" into a timestamp string for a video of `duration` seconds.
-    Values without a "%" are returned unchanged.
+    Convert a timestamp, seconds, or a percentage of a `duration`-second video into seconds,
+    e.g. "00:01:30", "90", or "75%".
     """
     if not value.endswith("%"):
-        return value
+        return seconds_from_ts_string(value)
 
     try:
         percent = float(value[:-1])
@@ -812,7 +759,8 @@ def timestamp_from_percentage(value: str, duration: float) -> str:
     if not 0 <= percent <= 100:
         raise ValueError(f"Invalid percentage '{value}'. It must be between 0% and 100%.")
 
-    return seconds_to_timestamp(duration * percent / 100)
+    # Round to whole milliseconds, like the timestamps ffmpeg is given.
+    return round(duration * percent / 100, 3)
 
 
 def seconds_to_timestamp(seconds: float) -> str:

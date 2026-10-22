@@ -11,16 +11,15 @@ import pytest
 from ffmpeg4discord.__main__ import twopass_loop
 from ffmpeg4discord.twopass import (
     CODEC_ENCODERS,
-    CODEC_OVERRIDES,
     EncodeSettings,
     TwoPass,
     available_codecs,
     command_for_display,
     fps_mode_flag,
+    parse_time,
     run_pass,
     seconds_from_ts_string,
     seconds_to_timestamp,
-    timestamp_from_percentage,
     tonemap_filters,
 )
 
@@ -98,21 +97,23 @@ def test_seconds_to_timestamp(timestamp, seconds):
 @pytest.mark.parametrize(
     "value, duration, expected",
     [
-        ("75%", 60, "00:00:45"),
-        ("0%", 60, "00:00:00"),
-        ("100%", 60, "00:01:00"),
-        ("33.3%", 100, "00:00:33.300"),
-        ("00:00:10", 60, "00:00:10"),  # timestamps pass through unchanged
+        ("75%", 60, 45),
+        ("0%", 60, 0),
+        ("100%", 60, 60),
+        ("33.3%", 100, 33.3),
+        ("12.34567%", 100, 12.346),  # rounded to milliseconds
+        ("00:00:10", 60, 10),
+        ("90", 60, 90),
     ],
 )
-def test_timestamp_from_percentage(value, duration, expected):
-    assert timestamp_from_percentage(value, duration) == expected
+def test_parse_time(value, duration, expected):
+    assert parse_time(value, duration) == expected
 
 
-@pytest.mark.parametrize("value", ["abc%", "150%", "-5%"])
-def test_timestamp_from_percentage_invalid(value):
+@pytest.mark.parametrize("value", ["abc%", "150%", "-5%", "abc"])
+def test_parse_time_invalid(value):
     with pytest.raises(ValueError):
-        timestamp_from_percentage(value, 60)
+        parse_time(value, 60)
 
 
 # --- reading the probe and trim times ---
@@ -279,14 +280,6 @@ def test_generate_params_hardware_codec_has_no_pass_flags(make_twopass):
     assert "pass" not in params["pass2"]
     assert params["pass2"]["c:v"] == "h264_videotoolbox"
     assert params["pass2"]["c:a"] == "aac"
-
-
-def test_generate_params_applies_shared_overrides_to_both_passes(make_twopass, monkeypatch):
-    # No built-in codec uses a "both" section yet, so add one for this test.
-    monkeypatch.setitem(CODEC_OVERRIDES, "x264", {"both": {"preset": "slow"}})
-    params = make_twopass()._generate_params(make_settings(), BITRATE)
-    assert params["pass1"]["preset"] == "slow"
-    assert params["pass2"]["preset"] == "slow"
 
 
 @pytest.mark.parametrize("codec", CODEC_ENCODERS)

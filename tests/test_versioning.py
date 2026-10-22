@@ -1,4 +1,3 @@
-from importlib import metadata
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,7 +5,6 @@ import pytest
 from ffmpeg4discord import versioning
 from ffmpeg4discord.versioning import (
     VersionInfo,
-    _get_version_from_pyproject,
     _is_newer_version,
     _version_key,
     check_for_update,
@@ -44,12 +42,6 @@ def test_update_available(current, latest, available):
     assert VersionInfo(current_version=current, latest_version=latest).update_available is available
 
 
-def test_get_current_version_falls_back_to_pyproject(monkeypatch):
-    monkeypatch.setattr(versioning.metadata, "version", raise_(metadata.PackageNotFoundError))
-    monkeypatch.setattr(versioning, "_get_version_from_pyproject", lambda: "1.2.3")
-    assert get_current_version() == "1.2.3"
-
-
 def test_get_current_version_unexpected_error_returns_none(monkeypatch):
     monkeypatch.setattr(versioning.metadata, "version", raise_(Exception("boom")))
     assert get_current_version() is None
@@ -66,28 +58,6 @@ def test_get_latest_pypi_version(monkeypatch):
 def test_get_latest_pypi_version_network_error_returns_none(monkeypatch):
     monkeypatch.setattr(versioning.urllib.request, "urlopen", raise_(Exception("no net")))
     assert get_latest_pypi_version(timeout_s=0.01) is None
-
-
-def test_get_version_from_pyproject_missing_file(monkeypatch):
-    monkeypatch.setattr(versioning.Path, "exists", lambda self: False)
-    assert _get_version_from_pyproject() is None
-
-
-def test_get_version_from_pyproject(monkeypatch):
-    monkeypatch.setattr(versioning.Path, "exists", lambda self: True)
-    monkeypatch.setattr(versioning.Path, "read_text", lambda self, **kwargs: '[project]\nversion = "1.2.3"\n')
-    assert _get_version_from_pyproject() == "1.2.3"
-
-
-def test_get_version_from_pyproject_without_version(monkeypatch):
-    monkeypatch.setattr(versioning.Path, "exists", lambda self: True)
-    monkeypatch.setattr(versioning.Path, "read_text", lambda self, **kwargs: "[project]\nname='ffmpeg4discord'\n")
-    assert _get_version_from_pyproject() is None
-
-
-def test_get_version_from_pyproject_unexpected_error_returns_none(monkeypatch):
-    monkeypatch.setattr(versioning.Path, "resolve", raise_(Exception("boom")))
-    assert _get_version_from_pyproject() is None
 
 
 def test_check_for_update_survives_network_failure(monkeypatch):
