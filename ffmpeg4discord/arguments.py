@@ -311,17 +311,54 @@ def _parse_astreams(args: dict) -> dict:
     return args
 
 
-def get_args() -> dict:
+def get_args(args_list: list[str] | None = None) -> dict:
     """
     Parses command-line arguments and returns them as a dictionary.
+
+    Precedence: command line flags beat config file values, which beat built-in defaults.
+
+    Args:
+        args_list (list[str] | None): Optional argument list to parse (defaults to sys.argv[1:]).
 
     Returns:
         dict: The parsed command-line arguments.
     """
+    # 1. Parse only --config and --no-config first to determine configuration file
+    config_parser = ArgumentParser(add_help=False)
+    group = config_parser.add_mutually_exclusive_group()
+    group.add_argument("--config", help="JSON file containing the run's configuration")
+    group.add_argument(
+        "--no-config",
+        action="store_true",
+        default=False,
+        help="Do not attempt to read any default configuration files (default: off)",
+    )
+    config_args, _ = config_parser.parse_known_args(args_list)
+
+    config_dict = _search_for_default_config(vars(config_args))
+
+    # 2. Load the config, and call parser.set_defaults(**config)
     parser = build_parser()
-    args = vars(parser.parse_args())
-    args = _search_for_default_config(args)
-    args = _merge_config_args(args, parser)
+    configs = set()
+    loaded_configs = []
+    config_path = config_dict.get("config")
+    while config_path is not None:
+        file_path = Path(config_path).resolve()
+        if file_path in configs:
+            break
+        configs.add(file_path)
+        cfg = load_config(file_path)
+        config_path = cfg.pop("config", None)
+        loaded_configs.append(cfg)
+
+    for cfg in reversed(loaded_configs):
+        parser.set_defaults(**cfg)
+
+    # 3. Parse the full command line. Anything the user typed beats the config.
+    args = vars(parser.parse_args(args_list))
+    args.pop("config", None)
+    args.pop("no_config", None)
+
     args = _assign_port(args)
     args = _extract_times(args)
     args = _parse_astreams(args)

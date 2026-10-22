@@ -305,3 +305,51 @@ def test_get_args_parses_astreams_and_amix_normalize(monkeypatch):
     assert args["astreams"] == [0, 1]
     assert args["amix_normalize"] is True
     assert args["amix"] is True
+
+
+def test_get_args_cli_flag_matching_default_overrides_config(monkeypatch, write_config):
+    # A config with "codec": "x265" plus -c x264 gives x264.
+    # A config with "approx": true plus --no-approx gives False.
+    config_path = write_config({"codec": "x265", "approx": True})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["ff4d", "file.mp4", "--config", str(config_path), "-c", "x264", "--no-approx"],
+    )
+    args = get_args()
+    assert args["codec"] == "x264"
+    assert args["approx"] is False
+
+
+def test_get_args_config_value_applies_when_flag_not_passed(monkeypatch, write_config):
+    # A config value still applies when the flag isn't passed.
+    config_path = write_config({"codec": "x265", "approx": True, "target_filesize": 15})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["ff4d", "file.mp4", "--config", str(config_path)],
+    )
+    args = get_args()
+    assert args["codec"] == "x265"
+    assert args["approx"] is True
+    assert args["target_filesize"] == 15
+
+
+def test_get_args_flag_not_in_config_keeps_builtin_default(monkeypatch, write_config):
+    # A flag that isn't in the config keeps its built-in default.
+    config_path = write_config({"codec": "x265"})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["ff4d", "file.mp4", "--config", str(config_path)],
+    )
+    args = get_args()
+    assert args["audio_br"] == 96
+    assert args["verbose"] is False
+
+
+def test_get_args_accepts_args_list_directly(write_config):
+    config_path = write_config({"codec": "x265", "approx": True})
+    args = get_args(["file.mp4", "--config", str(config_path), "-c", "x264", "--no-approx"])
+    assert args["codec"] == "x264"
+    assert args["approx"] is False
