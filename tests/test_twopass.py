@@ -322,7 +322,7 @@ def test_crop_does_not_change_the_next_encodes_aspect_ratio(make_twopass, caplog
     assert tp.ratio == pytest.approx(1920 / 1080)
 
 
-@pytest.mark.parametrize("astreams, expected", [(None, "a:0"), ([1, 0], "a:1"), ([5, 1], "a:1")])
+@pytest.mark.parametrize("astreams, expected", [(None, "a:0"), ([1, 0], "a:1")])
 def test_apply_audio_filters_without_mixing_keeps_one_track(probe, make_twopass, astreams, expected):
     # two audio tracks, like ShadowPlay with a separate mic track; only one fits the bitrate budget
     probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": 2})
@@ -331,10 +331,10 @@ def test_apply_audio_filters_without_mixing_keeps_one_track(probe, make_twopass,
 
 
 def test_apply_audio_filters_mixes_selected_tracks(probe, make_twopass):
-    # three audio tracks; 5 is out of range and gets dropped
+    # three audio tracks, mixing the first and last
     for index in (2, 3):
         probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": index})
-    settings = make_settings(amix=True, astreams=[0, 2, 5])
+    settings = make_settings(amix=True, astreams=[0, 2])
     audio = make_twopass()._apply_audio_filters(ffmpeg.input("test.mp4"), settings)
     assert audio.node.name == "amix"
     assert audio.node.kwargs == {"normalize": 0, "inputs": 2}
@@ -381,6 +381,27 @@ def test_run_without_audio_stream_outputs_video_only(probe, make_twopass, passes
 
 def test_run_no_audio_flag_omits_audio(make_twopass, passes):
     make_twopass().run(make_settings(no_audio=True))
+    assert "0:a:0" not in passes[-1].args
+
+
+@pytest.mark.parametrize("astreams", [[3], [0, 3]])
+def test_run_rejects_audio_tracks_past_the_end(probe, make_twopass, passes, astreams):
+    for index in (2, 3):
+        probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": index})
+    message = "Audio track 3 doesn't exist. This file has 3 audio tracks, numbered 0 to 2."
+    with pytest.raises(ValueError, match=message):
+        make_twopass().run(make_settings(amix=True, astreams=astreams))
+    assert passes == []
+
+
+def test_run_rejects_audio_track_when_the_file_has_none(probe, make_twopass, passes):
+    probe["streams"].pop()
+    with pytest.raises(ValueError, match="Audio track 0 doesn't exist. This file has no audio tracks."):
+        make_twopass().run(make_settings(astreams=[0]))
+
+
+def test_run_ignores_audio_track_numbers_with_no_audio(make_twopass, passes):
+    make_twopass().run(make_settings(no_audio=True, astreams=[7]))
     assert "0:a:0" not in passes[-1].args
 
 

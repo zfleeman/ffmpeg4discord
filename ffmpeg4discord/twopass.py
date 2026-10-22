@@ -573,6 +573,23 @@ class TwoPass:
                 "Use an even crop width and height, or set an even Resolution (-r)."
             )
 
+    def _check_audio_tracks(self, settings: EncodeSettings) -> None:
+        """Raise a ValueError for an --astreams number that doesn't match an audio track in the file."""
+
+        # --no-audio drops every track, so the numbers don't matter.
+        if settings.no_audio or not settings.astreams:
+            return
+        count = len(self.audio_streams)
+        for i in settings.astreams:
+            if i >= count:
+                if count == 0:
+                    tracks = "This file has no audio tracks."
+                elif count == 1:
+                    tracks = "This file has 1 audio track, numbered 0."
+                else:
+                    tracks = f"This file has {count} audio tracks, numbered 0 to {count - 1}."
+                raise ValueError(f"Audio track {i} doesn't exist. {tracks}")
+
     def _output_filename(self, settings: EncodeSettings) -> str:
         """
         Returns the file to write. A folder gets a generated name, and a file name's extension is fixed to match the codec.
@@ -649,7 +666,7 @@ class TwoPass:
         if settings.astreams is None:
             selected_positions = list(range(len(self.audio_streams)))
         else:
-            selected_positions = [i for i in settings.astreams if 0 <= i < len(self.audio_streams)]
+            selected_positions = settings.astreams  # run() already checked that each one is a real track
 
         if not selected_positions:
             return None
@@ -691,6 +708,7 @@ class TwoPass:
 
         start, end = self.clip_times(settings)
         self._check_video_size(settings)
+        self._check_audio_tracks(settings)
         output_filename = self._output_filename(settings)
         params = self._generate_params(settings, self._bitrate_targets(settings, end - start))
 

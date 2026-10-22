@@ -36,6 +36,8 @@ def no_cleanup(monkeypatch):
 @pytest.fixture
 def run_main(monkeypatch, twopass):
     """Run main() with the given command line args, without checking PyPI or encoding anything."""
+    # Set here, not in _run, so a test can replace twopass_loop before calling run_main.
+    monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(return_value=result(5)))
 
     def _run(**args):
         cli_args = {
@@ -50,7 +52,6 @@ def run_main(monkeypatch, twopass):
         monkeypatch.setattr(mainmod, "check_for_update", lambda **_: VersionInfo("0.1.9", "0.1.9"))
         monkeypatch.setattr(mainmod.arguments, "get_args", lambda: cli_args)
         monkeypatch.setattr(mainmod, "TwoPass", MagicMock(return_value=twopass))
-        monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(return_value=result(5)))
         mainmod.main()
         return mainmod.twopass_loop
 
@@ -129,6 +130,17 @@ def test_main_dry_run_prints_commands_without_encoding(run_main, twopass, capsys
     assert ("re-encodes it at a lower bitrate" in out) is not approx
 
 
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_main_cli_shows_setting_errors_without_a_traceback(run_main, monkeypatch, twopass, caplog, dry_run):
+    error = ValueError("Audio track 7 doesn't exist.")
+    twopass.run.side_effect = error
+    monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(side_effect=error))
+    with pytest.raises(SystemExit) as exc_info:
+        run_main(dry_run=dry_run)
+    assert exc_info.value.code == 1
+    assert caplog.messages == ["Audio track 7 doesn't exist."]
+
+
 def test_main_web_ignores_dry_run(run_main, monkeypatch, caplog):
     app = MagicMock()
     monkeypatch.setattr(mainmod, "Flask", MagicMock(return_value=app))
@@ -150,6 +162,16 @@ def test_format_commands_for_one_pass():
     assert (
         mainmod.format_commands(["ffmpeg"]) == "Here's what this encode looks like as a plain FFmpeg command:\n\nffmpeg"
     )
+
+
+def test_main_web_shows_bad_times_without_a_traceback(run_main, monkeypatch, twopass, caplog):
+    twopass.clip_times.side_effect = ValueError("Time Paradox?")
+    monkeypatch.setattr(mainmod, "Flask", MagicMock())
+    with pytest.raises(SystemExit) as exc_info:
+        run_main(web=True, port=5000)
+    assert exc_info.value.code == 1
+    assert caplog.messages == ["Time Paradox?"]
+    mainmod.Flask.assert_not_called()
 
 
 def test_main_web_starts_flask_on_port(run_main, monkeypatch):
@@ -355,7 +377,7 @@ def test_encode_amix_mode(web, amix_mode, amix, normalize):
     assert (settings.amix, settings.amix_normalize) == (amix, normalize)
 
 
-@pytest.mark.parametrize("astreams, expected", [(["0", "2"], [0, 2]), ([], None)])
+@pytest.mark.parametrize("astreams, expected", [(["0"], [0]), ([], None)])
 def test_encode_audio_stream_selection(web, astreams, expected):
     web.client.post("/encode", data=encode_form(astreams=astreams))
     assert posted_settings(web).astreams == expected
