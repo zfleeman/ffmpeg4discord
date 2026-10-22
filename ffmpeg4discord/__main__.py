@@ -538,15 +538,21 @@ def main() -> None:
         threading.Thread(target=open_browser, args=[port], name="Open Browser").start()
         # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
         app.run("127.0.0.1", port=port)
-    elif dry_run:
-        result = twopass.run(settings, dry_run=True)
-        print(format_commands(result.commands))
-        if not approx:
-            print("\nIf the output lands over the target size, ff4d re-encodes it at a lower bitrate.")
     else:
-        result = twopass_loop(twopass, settings, approx)
-        print(f"\n{format_commands(result.commands)}\n")
-        print(success_message(result))
+        try:
+            result = twopass.run(settings, dry_run=True) if dry_run else twopass_loop(twopass, settings, approx)
+        except ValueError as exc:
+            # TwoPass raises ValueError for settings that can't work. The message says what to change.
+            logging.error(exc)
+            raise SystemExit(1) from None
+
+        if dry_run:
+            print(format_commands(result.commands))
+            if not approx:
+                print("\nIf the output lands over the target size, ff4d re-encodes it at a lower bitrate.")
+        else:
+            print(f"\n{format_commands(result.commands)}\n")
+            print(success_message(result))
 
 
 if __name__ == "__main__":

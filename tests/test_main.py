@@ -36,6 +36,8 @@ def no_cleanup(monkeypatch):
 @pytest.fixture
 def run_main(monkeypatch, twopass):
     """Run main() with the given command line args, without checking PyPI or encoding anything."""
+    # Set here, not in _run, so a test can replace twopass_loop before calling run_main.
+    monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(return_value=result(5)))
 
     def _run(**args):
         cli_args = {
@@ -50,7 +52,6 @@ def run_main(monkeypatch, twopass):
         monkeypatch.setattr(mainmod, "check_for_update", lambda **_: VersionInfo("0.1.9", "0.1.9"))
         monkeypatch.setattr(mainmod.arguments, "get_args", lambda: cli_args)
         monkeypatch.setattr(mainmod, "TwoPass", MagicMock(return_value=twopass))
-        monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(return_value=result(5)))
         mainmod.main()
         return mainmod.twopass_loop
 
@@ -127,6 +128,17 @@ def test_main_dry_run_prints_commands_without_encoding(run_main, twopass, capsys
     assert "ffmpeg -i file.mp4 out.mp4" in out.splitlines()
     # --approx never retries, so the retry note only shows without it
     assert ("re-encodes it at a lower bitrate" in out) is not approx
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_main_cli_shows_setting_errors_without_a_traceback(run_main, monkeypatch, twopass, caplog, dry_run):
+    error = ValueError("Audio track 7 doesn't exist.")
+    twopass.run.side_effect = error
+    monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(side_effect=error))
+    with pytest.raises(SystemExit) as exc_info:
+        run_main(dry_run=dry_run)
+    assert exc_info.value.code == 1
+    assert caplog.messages == ["Audio track 7 doesn't exist."]
 
 
 def test_main_web_ignores_dry_run(run_main, monkeypatch, caplog):
