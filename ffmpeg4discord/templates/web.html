@@ -358,14 +358,18 @@
         }
 
         // Browsers can't play some formats, like HEVC or ProRes. Some fail outright, and some load only the audio.
+        // Others, like Firefox with an HEVC MKV, report the video's size and play its audio but never draw a frame.
         const playbackNotice = document.getElementById('playbackNotice');
         function checkPlayable() {
-            if (video.error || (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth === 0)) {
+            const noFrames = !video.paused && video.getVideoPlaybackQuality().totalVideoFrames === 0;
+            if (video.error || (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth === 0) || noFrames) {
                 playbackNotice.hidden = false;
             }
         }
         video.addEventListener('error', checkPlayable);
         video.addEventListener('loadedmetadata', checkPlayable);
+        // A video that can be decoded has drawn frames within a second of playing
+        video.addEventListener('playing', () => setTimeout(checkPlayable, 1000));
         checkPlayable(); // the video may have failed before this script ran
 
         // The preview plays from the start time and stops at the end time, even after a pause or a speed change.
