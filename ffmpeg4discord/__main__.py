@@ -1,21 +1,4 @@
-"""
-This module provides the main entry point for the ffmpeg4discord application.
-
-It supports both command-line and web-based interfaces for performing two-pass
-video encoding using FFmpeg. The script allows users to specify various encoding
-parameters and target file sizes, and it will iteratively adjust the encoding
-settings to meet the desired output file size.
-
-Functions:
-- twopass_loop: Executes the two-pass encoding process in a loop until the target file size is achieved.
-- open_browser: Opens the default web browser to the specified port.
-- format_commands: Lists the ffmpeg commands for an encode with a short explanation.
-- success_message: The message shown when an encode finishes.
-- source_facts: Facts about the input video that the web page checks the form against.
-- form_values: The values the web UI's form shows.
-- parse_encode_form: Checks the web UI's form and turns it into EncodeSettings.
-- main: The main function that parses command-line arguments and starts the encoding process or web server.
-"""
+"""The ff4d command: runs an encode from the command line, or starts the web UI."""
 
 import atexit
 import logging
@@ -34,7 +17,7 @@ from typing import Callable, Optional
 from flask import Flask, redirect, render_template, request, send_file, url_for
 
 from ffmpeg4discord import arguments
-from ffmpeg4discord.twopass import EncodeResult, EncodeSettings, TwoPass, available_codecs
+from ffmpeg4discord.twopass import EncodeResult, EncodeSettings, TwoPass, available_codecs, red
 from ffmpeg4discord.versioning import check_for_update
 
 # smallest fraction the target size is cut by on each retry
@@ -73,14 +56,12 @@ def twopass_loop(
             break
 
         print(
-            "\033[31m"
-            + dedent(
+            red(
                 f"""
                 The output file size ({round(result.output_filesize, 2)}MB) is still above the target of {target_filesize}MB.
                 Restarting...
                 """
-            ).strip()
-            + "\033[0m"
+            )
         )
         Path(result.output_filename).unlink()
 
@@ -412,7 +393,7 @@ def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[Encode
 
 @contextmanager
 def exit_on_setting_error():
-    """TwoPass raises ValueError for settings that can't work. Log its message, which says what to change, and exit."""
+    """TwoPass and get_args raise ValueError for bad settings. Log the message, which says what to change, and exit."""
     try:
         yield
     except ValueError as exc:
@@ -424,8 +405,10 @@ def main() -> None:
     """
     The main function that parses command-line arguments and starts the encoding process or web server.
     """
-    # Best-effort version check (never blocks startup)
-    version_info = check_for_update(timeout_s=1.5)
+    logging.getLogger().setLevel(logging.INFO)
+
+    # If PyPI is slow or unreachable, this gives up after a short timeout and skips the update notice
+    version_info = check_for_update()
 
     # CLI: show version + update notice early (for both CLI mode and web-launch mode)
     if version_info.current_version:
@@ -446,7 +429,8 @@ def main() -> None:
         )
 
     # get args from the command line
-    args = arguments.get_args()
+    with exit_on_setting_error():
+        args = arguments.get_args()
     web = args.pop("web")
     approx = args.pop("approx")
     dry_run = args.pop("dry_run")

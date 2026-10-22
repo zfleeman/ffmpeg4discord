@@ -1,5 +1,6 @@
 import json
 import re
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
@@ -139,6 +140,15 @@ def test_main_cli_shows_setting_errors_without_a_traceback(run_main, monkeypatch
         run_main(dry_run=dry_run)
     assert exc_info.value.code == 1
     assert caplog.messages == ["Audio track 7 doesn't exist."]
+
+
+def test_main_shows_bad_flags_without_a_traceback(monkeypatch, caplog):
+    monkeypatch.setattr(mainmod, "check_for_update", lambda **_: VersionInfo("0.1.9", "0.1.9"))
+    monkeypatch.setattr(sys, "argv", ["ff4d", "file.mp4", "--astreams", "0,x", "--no-config"])
+    with pytest.raises(SystemExit) as exc_info:
+        mainmod.main()
+    assert exc_info.value.code == 1
+    assert "Invalid --astreams value '0,x'" in caplog.text
 
 
 def test_main_web_ignores_dry_run(run_main, monkeypatch, caplog):

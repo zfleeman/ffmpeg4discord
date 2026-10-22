@@ -1,12 +1,4 @@
-"""
-This module provides functions for parsing command-line arguments and
-loading configuration settings for the ffmpeg4discord application.
-
-Functions:
-- is_port_in_use: Checks if a given port is currently in use.
-- load_config: Loads configuration settings from a JSON file.
-- get_args: Parses command-line arguments and returns them as a dictionary.
-"""
+"""Reads ff4d's command-line flags and config files."""
 
 import json
 import logging
@@ -15,11 +7,10 @@ import sys
 from argparse import ArgumentParser, BooleanOptionalAction
 from pathlib import Path
 from random import randint
-from textwrap import dedent
 
 import platformdirs
 
-from ffmpeg4discord.twopass import available_codecs
+from ffmpeg4discord.twopass import FALLBACK_AUDIO_BR, available_codecs
 
 
 def is_port_in_use(port: int) -> bool:
@@ -99,7 +90,9 @@ def build_parser() -> ArgumentParser:
         type=float,
         help="The output file size in MB.",
     )
-    parser.add_argument("-a", "--audio-br", type=float, default=96, help="Audio bitrate in kbps.")
+    parser.add_argument(
+        "-a", "--audio-br", type=float, default=FALLBACK_AUDIO_BR // 1000, help="Audio bitrate in kbps."
+    )
     parser.add_argument(
         "-c",
         "--codec",
@@ -165,15 +158,6 @@ def build_parser() -> ArgumentParser:
     )
     parser.add_argument("-p", "--port", type=int, help="Local port for the Flask application.")
     return parser
-
-
-def _normalize_amix_args(args: dict) -> dict:
-    """Make --amix-normalize imply --amix, unless amix was explicitly set false."""
-    # If user/config turned on normalize but never explicitly disabled amix,
-    # treat that as "we are mixing, with normalization".
-    if args.get("amix_normalize") and not args.get("amix"):
-        args["amix"] = True
-    return args
 
 
 def _search_for_default_config(args: dict) -> dict:
@@ -249,58 +233,20 @@ def _extract_times(args: dict) -> dict:
 
 
 def _parse_astreams(args: dict) -> dict:
-    """Parse --astreams from comma-separated string (or list) into a list[int] or None."""
-
+    """Turn --astreams, e.g. "0,2", into a list of track numbers. A config file can also give a list, e.g. [0, 2]."""
     raw = args.get("astreams")
-    if raw is None:
+    if raw is None or raw == "":
+        args["astreams"] = None  # use every audio track
         return args
 
-    # Allow config/json to provide a list already.
-    if isinstance(raw, list):
-        try:
-            parsed = [int(x) for x in raw]
-        except (TypeError, ValueError):
-            logging.error("Invalid astreams list. Expected list of ints.")
-            args["astreams"] = None
-            return args
-    else:
-        raw_str = str(raw).strip()
-        if raw_str == "":
-            args["astreams"] = None
-            return args
+    parts = [str(part).strip() for part in (raw if isinstance(raw, list) else str(raw).split(","))]
+    # isdecimal() is False for negative numbers, decimals, and blanks
+    if not all(part.isdecimal() for part in parts):
+        raise ValueError(
+            f"Invalid --astreams value {raw!r}. Use audio track numbers starting at 0, separated by commas, e.g. 0,2."
+        )
 
-        parts = [p.strip() for p in raw_str.split(",") if p.strip() != ""]
-        try:
-            parsed = [int(p) for p in parts]
-        except ValueError:
-            logging.error(
-                "\033[31m"
-                + dedent(
-                    """
-                    Invalid --astreams format.
-
-                    Provide a comma-separated list of integers, e.g. --astreams "0,1,2".
-                    Ignoring --astreams.
-                    """
-                ).strip()
-                + "\033[0m"
-            )
-            args["astreams"] = None
-            return args
-
-    # Normalize: remove duplicates, preserve order.
-    seen: set[int] = set()
-    normalized: list[int] = []
-    for idx in parsed:
-        if idx < 0:
-            logging.warning(f"Ignoring negative audio stream index in --astreams: {idx}")
-            continue
-        if idx in seen:
-            continue
-        seen.add(idx)
-        normalized.append(idx)
-
-    args["astreams"] = normalized
+    args["astreams"] = list(dict.fromkeys(int(part) for part in parts))  # removes duplicates, keeps the order
     return args
 
 
@@ -318,5 +264,7 @@ def get_args() -> dict:
     args = _assign_port(args)
     args = _extract_times(args)
     args = _parse_astreams(args)
-    args = _normalize_amix_args(args)
+    # Normalizing only applies to mixed audio, so --amix-normalize turns on --amix
+    if args.get("amix_normalize"):
+        args["amix"] = True
     return args
