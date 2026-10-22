@@ -283,14 +283,16 @@ def _parse_astreams(args: dict) -> dict:
             parsed = [int(p) for p in parts]
         except ValueError:
             logging.error(
-                dedent(
-                    """\033[31m
+                "\033[31m"
+                + dedent(
+                    """
                     Invalid --astreams format.
 
                     Provide a comma-separated list of integers, e.g. --astreams "0,1,2".
                     Ignoring --astreams.
-                    \033[0m"""
-                )
+                    """
+                ).strip()
+                + "\033[0m"
             )
             args["astreams"] = None
             return args

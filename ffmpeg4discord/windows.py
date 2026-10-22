@@ -23,8 +23,9 @@ from urllib.request import urlretrieve
 
 if platform.system() != "Windows":
     logging.warning(
-        dedent(
-            """\033[31m
+        "\033[31m"
+        + dedent(
+            """
             THIS SCRIPT IS INTENDED FOR WINDOWS USERS
 
             If you are running this script on macOS, consider installing ffmpeg with
@@ -32,8 +33,9 @@ if platform.system() != "Windows":
 
             If you are running this script on some Linux, learn more about your options
             to install ffmpeg on its website: https://ffmpeg.org/download.html#build-linux
-            \033[0m"""
-        )
+            """
+        ).strip()
+        + "\033[0m"
     )
 
     sys.exit()
