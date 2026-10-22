@@ -407,8 +407,8 @@ def main() -> None:
     """
     logging.getLogger().setLevel(logging.INFO)
 
-    # Best-effort version check (never blocks startup)
-    version_info = check_for_update(timeout_s=1.5)
+    # If PyPI is slow or unreachable, this gives up after a short timeout and skips the update notice
+    version_info = check_for_update()
 
     # CLI: show version + update notice early (for both CLI mode and web-launch mode)
     if version_info.current_version:

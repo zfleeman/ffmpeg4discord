@@ -1,7 +1,5 @@
 """Checks PyPI for a newer ffmpeg4discord. Network failures never stop the app from starting."""
 
-from __future__ import annotations
-
 import json
 import re
 import urllib.request
@@ -11,9 +9,20 @@ from typing import Optional
 
 PACKAGE_NAME = "ffmpeg4discord"
 
+# Seconds to wait for PyPI before giving up on the update notice
+PYPI_TIMEOUT = 1.5
+
+
+def _version_numbers(version: str) -> tuple[int, ...]:
+    """The leading numbers of a version, e.g. (0, 4, 1) for "0.4.1" or "0.4.1rc1", so versions compare correctly."""
+    match = re.match(r"\d+(\.\d+)*", version)
+    return tuple(int(n) for n in match.group().split(".")) if match else ()
+
 
 @dataclass(frozen=True)
 class VersionInfo:
+    """The installed version and the newest one on PyPI. Either is None when it couldn't be read."""
+
     current_version: Optional[str]
     latest_version: Optional[str]
 
@@ -21,61 +30,23 @@ class VersionInfo:
     def update_available(self) -> bool:
         if not self.current_version or not self.latest_version:
             return False
-        return _is_newer_version(self.latest_version, self.current_version)
+        return _version_numbers(self.latest_version) > _version_numbers(self.current_version)
 
 
-def get_current_version() -> Optional[str]:
-    """Return the installed ffmpeg4discord version, or None if it can't be read."""
-
+def get_latest_pypi_version() -> Optional[str]:
+    """Return the newest version on PyPI, or None if PyPI can't be reached."""
     try:
-        return metadata.version(PACKAGE_NAME)
+        with urllib.request.urlopen(f"https://pypi.org/pypi/{PACKAGE_NAME}/json", timeout=PYPI_TIMEOUT) as resp:
+            return json.load(resp)["info"]["version"]
     except Exception:
+        # Offline, slow, or an unexpected response. The update notice is optional, so skip it.
         return None
 
 
-def get_latest_pypi_version(timeout_s: float = 1.5) -> Optional[str]:
-    """Return the latest published version on PyPI (best-effort)."""
-
-    url = f"https://pypi.org/pypi/{PACKAGE_NAME}/json"
+def check_for_update() -> VersionInfo:
+    """Compare the installed version with the newest one on PyPI."""
     try:
-        with urllib.request.urlopen(url, timeout=timeout_s) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return data.get("info", {}).get("version")
-    except Exception:
-        return None
-
-
-def check_for_update(timeout_s: float = 1.5) -> VersionInfo:
-    """Compute current vs latest version info."""
-
-    current = get_current_version()
-    latest = get_latest_pypi_version(timeout_s=timeout_s)
-    return VersionInfo(current_version=current, latest_version=latest)
-
-
-def _is_newer_version(candidate: str, current: str) -> bool:
-    """Return True if `candidate` represents a newer version than `current`.
-
-    This is intentionally minimal (no external deps). It correctly handles the
-    project's current numeric versions like 0.1.9.
-    """
-
-    return _version_key(candidate) > _version_key(current)
-
-
-def _version_key(v: str) -> tuple:
-    """Turn a version string into a comparable tuple.
-
-    For versions we don't understand, falls back to the raw string.
-    """
-
-    # Accept things like "1", "1.2", "1.2.3" and ignore trailing metadata.
-    match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", v)
-    if not match:
-        return (0, 0, 0, v)
-
-    major = int(match.group(1) or 0)
-    minor = int(match.group(2) or 0)
-    patch = int(match.group(3) or 0)
-    # Keep original for tie-breaker stability
-    return (major, minor, patch, v)
+        current = metadata.version(PACKAGE_NAME)
+    except metadata.PackageNotFoundError:  # running from source without installing
+        current = None
+    return VersionInfo(current_version=current, latest_version=get_latest_pypi_version())
