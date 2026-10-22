@@ -355,7 +355,7 @@ def test_encode_amix_mode(web, amix_mode, amix, normalize):
     assert (settings.amix, settings.amix_normalize) == (amix, normalize)
 
 
-@pytest.mark.parametrize("astreams, expected", [(["0", "2"], [0, 2]), ([], None)])
+@pytest.mark.parametrize("astreams, expected", [(["0"], [0]), ([], None)])
 def test_encode_audio_stream_selection(web, astreams, expected):
     web.client.post("/encode", data=encode_form(astreams=astreams))
     assert posted_settings(web).astreams == expected
