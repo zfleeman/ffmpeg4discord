@@ -51,6 +51,15 @@
             </div>
         </div>
         {% endif %}
+        <div class="row mt-3" id="progressPanel" {{ "" if encoding else "hidden" }}>
+            <div class="col">
+                <div class="progress" role="progressbar" aria-label="Encode progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+                </div>
+                <p class="mt-1 mb-0"><span id="progressLabel">Starting…</span></p>
+                <p class="text-muted small">You can close this tab. ff4d keeps encoding, and opening the page again shows the progress.</p>
+            </div>
+        </div>
         <div class="row mt-3">
             <video id="myVideo" src="{{ file_url }}" preload="auto" controls>
                 Your browser does not support the video tag.
@@ -296,6 +305,8 @@
     <script>
         // Facts about the input video, from source_facts() in __main__.py
         const SOURCE = {{ source | tojson }};
+        // True while an encode runs in the background
+        const ENCODING = {{ encoding | tojson }};
         const form = document.getElementById('encodeForm');
         const video = document.getElementById('myVideo');
         const startTimeInput = document.getElementById('startTime');
@@ -553,9 +564,29 @@
         });
         // The Back button can bring the page back from the browser's cache with the button still disabled
         window.addEventListener('pageshow', () => {
-            spinButton.disabled = false;
-            spinIcon.hidden = true;
+            spinButton.disabled = ENCODING;
+            spinIcon.hidden = !ENCODING;
         });
+
+        // While an encode runs, show its progress. When it ends, reload so the page shows the result.
+        const progressBar = document.getElementById('progressBar');
+        const progressLabel = document.getElementById('progressLabel');
+        async function pollStatus() {
+            try {
+                const status = await (await fetch('/status')).json();
+                if (status.state !== 'running') {
+                    location.reload();
+                    return;
+                }
+                progressBar.style.width = status.percent + '%';
+                progressBar.parentElement.setAttribute('aria-valuenow', status.percent);
+                progressLabel.textContent = status.label;
+            } catch {
+                progressLabel.textContent = "Can't reach ff4d. Is it still running in the terminal?";
+            }
+            setTimeout(pollStatus, 500);
+        }
+        if (ENCODING) pollStatus();
 
         const checkbox = document.getElementById('approx');
         const span = document.getElementById('targetApprox');

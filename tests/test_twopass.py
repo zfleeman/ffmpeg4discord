@@ -483,6 +483,30 @@ def test_shown_commands_leave_out_the_temp_stats_folder(make_twopass, passes):
         assert all("ff4d-" not in command and "passlogfile" not in command for command in commands)
 
 
+# --- progress for the web UI (issue #104) ---
+
+
+def test_run_tells_on_pass_about_each_pass_before_it_starts(make_twopass, passes):
+    calls = []
+    make_twopass().run(make_settings(), on_pass=lambda name, path: calls.append((name, path, len(passes))))
+    assert [(name, started) for name, _, started in calls] == [("first", 0), ("second", 1)]
+    for (_, path, _), ran in zip(calls, passes, strict=True):
+        # each pass writes its progress to the file on_pass was given, inside the encode's temp folder
+        assert ran.args[ran.args.index("-progress") + 1] == str(path)
+        assert path.parent.name.startswith("ff4d-")
+
+
+def test_run_hardware_codec_reports_a_single_pass(make_twopass, passes):
+    calls = []
+    make_twopass().run(make_settings(codec="h264_nvenc"), on_pass=lambda name, path: calls.append(name))
+    assert calls == ["single"]
+
+
+def test_run_without_on_pass_writes_no_progress(make_twopass, passes):
+    make_twopass().run(make_settings())
+    assert all("-progress" not in p.args for p in passes)
+
+
 # --- showing the ffmpeg commands (issue #92) ---
 
 
