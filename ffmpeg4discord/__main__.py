@@ -73,12 +73,14 @@ def twopass_loop(
             break
 
         print(
-            dedent(
-                f"""\033[31m
+            "\033[31m"
+            + dedent(
+                f"""
                 The output file size ({round(result.output_filesize, 2)}MB) is still above the target of {target_filesize}MB.
                 Restarting...
-                \033[0m"""
-            )
+                """
+            ).strip()
+            + "\033[0m"
         )
         Path(result.output_filename).unlink()
 
@@ -433,12 +435,14 @@ def main() -> None:
 
     if version_info.update_available:
         print(
-            dedent(
-                f"""\033[33m
+            "\033[33m"
+            + dedent(
+                f"""
                 Update available: {version_info.latest_version} (you are running {version_info.current_version}).
                 Upgrade with: pip install -U ffmpeg4discord
-                \033[0m"""
+                """
             ).strip()
+            + "\033[0m"
         )
 
     # get args from the command line

@@ -187,6 +187,14 @@ def test_end_not_after_start_raises(make_twopass, start, end):
         make_twopass().clip_times(make_settings(start=start, end=end))
 
 
+def test_end_not_after_start_message_has_no_indentation(make_twopass):
+    with pytest.raises(ValueError) as excinfo:
+        make_twopass().clip_times(make_settings(start="00:00:20", end="00:00:10"))
+    message = str(excinfo.value)
+    assert not any(line.startswith(" ") for line in message.splitlines())
+    assert "Your video is 00:02:00 long" in message  # the test video is 120 seconds
+
+
 def test_target_larger_than_input_raises(make_twopass):
     # the fake input is 53,000,000 bytes, about 50.5 MiB
     with pytest.raises(ValueError, match="larger than the input file"):
@@ -704,8 +712,10 @@ def test_run_pass_adds_hint_to_error():
     ffoutput = MagicMock()
     ffoutput.run.side_effect = ffmpeg.Error("ffmpeg", b"", b"")
     ffoutput.compile.return_value = ["ffmpeg"]
-    with pytest.raises(RuntimeError, match="try x264"):
+    with pytest.raises(RuntimeError) as excinfo:
         run_pass(ffoutput, "single", hint="try x264")
+    # the hint gets its own paragraph, inside the red text
+    assert str(excinfo.value).endswith("\n\ntry x264\033[0m")
 
 
 # --- HDR tone mapping (issue #77) ---

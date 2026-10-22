@@ -192,8 +192,9 @@ def run_pass(ffoutput, pass_name: str, hint: str = "", **run_kwargs):
         # compile() can contain Path objects, so stringify each argument before joining.
         command = " ".join(str(arg) for arg in ffoutput.compile())
         raise RuntimeError(
-            dedent(
-                f"""\033[31m
+            "\033[31m"
+            + dedent(
+                f"""
                 FFmpeg failed during the {pass_name} pass.
 
                 Look for FFmpeg's error message printed above this traceback -- it names the actual
@@ -201,9 +202,10 @@ def run_pass(ffoutput, pass_name: str, hint: str = "", **run_kwargs):
 
                 The command that failed was:
                 {command}
-                \033[0m"""
-            )
-            + (f"\033[31m{hint}\033[0m\n" if hint else "")
+                """
+            ).strip()
+            + (f"\n\n{hint}" if hint else "")
+            + "\033[0m"
         ) from exc
 
 
@@ -368,12 +370,14 @@ class TwoPass:
         self.tonemap = tonemap_filters(self.probe)
         if not self.tonemap:
             logging.warning(
-                dedent(
-                    """\033[31m
+                "\033[31m"
+                + dedent(
+                    """
                     This video is HDR, but your ffmpeg can't convert it to SDR. It needs ffmpeg 8.0
                     or newer, or a build with zscale (libzimg). The output may look washed out.
-                    \033[0m"""
-                )
+                    """
+                ).strip()
+                + "\033[0m"
             )
 
     def clip_times(self, settings: EncodeSettings) -> tuple[float, float]:
@@ -394,17 +398,19 @@ class TwoPass:
 
         if end <= start:
             raise ValueError(
-                dedent(
-                    f"""\033[31m
+                "\033[31m"
+                + dedent(
+                    f"""
                     Time Paradox?
 
                     Something is wrong with your clipping times. Use this
                     information to further diagnose the problem:
 
-                    - Your video is {self.duration / 60} minutes long
+                    - Your video is {seconds_to_timestamp(self.duration)} long
                     - Your clipping times are {seconds_to_timestamp(start)} to {seconds_to_timestamp(end)}
-                    \033[0m"""
-                )
+                    """
+                ).strip()
+                + "\033[0m"
             )
 
         return start, end
@@ -472,12 +478,14 @@ class TwoPass:
                 params["pass2"]["r"] = settings.framerate
             else:
                 logging.warning(
-                    dedent(
-                        f"""\033[31m
+                    "\033[31m"
+                    + dedent(
+                        f"""
                         Desired framerate ({settings.framerate}) is more than original framerate ({self.init_framerate}).
                         Keeping the original framerate...
-                        \033[0m"""
-                    )
+                        """
+                    ).strip()
+                    + "\033[0m"
                 )
 
         # add in configurations specific to the codec
@@ -603,12 +611,14 @@ class TwoPass:
 
         if output.suffix != ext:
             logging.warning(
-                dedent(
-                    f"""\033[31m
+                "\033[31m"
+                + dedent(
+                    f"""
                     You specified {settings.codec}, but your output file name ends with {output.suffix}.
                     I've corrected this.
-                    \033[0m"""
-                )
+                    """
+                ).strip()
+                + "\033[0m"
             )
             output = output.with_suffix(ext)
 
@@ -636,12 +646,14 @@ class TwoPass:
 
             if ratio != outputratio:
                 logging.warning(
-                    dedent(
-                        """\033[31m
+                    "\033[31m"
+                    + dedent(
+                        """
                         Your output resolution's aspect ratio does not match the
-                        input resolution's or your croped resolution's aspect ratio.
-                        \033[0m"""
-                    )
+                        input resolution's or your cropped resolution's aspect ratio.
+                        """
+                    ).strip()
+                    + "\033[0m"
                 )
 
         # Tone map last, so a smaller --resolution means fewer pixels to process.
