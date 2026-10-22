@@ -164,6 +164,16 @@ def test_format_commands_for_one_pass():
     )
 
 
+def test_main_web_shows_bad_times_without_a_traceback(run_main, monkeypatch, twopass, caplog):
+    twopass.clip_times.side_effect = ValueError("Time Paradox?")
+    monkeypatch.setattr(mainmod, "Flask", MagicMock())
+    with pytest.raises(SystemExit) as exc_info:
+        run_main(web=True, port=5000)
+    assert exc_info.value.code == 1
+    assert caplog.messages == ["Time Paradox?"]
+    mainmod.Flask.assert_not_called()
+
+
 def test_main_web_starts_flask_on_port(run_main, monkeypatch):
     app = MagicMock()
     monkeypatch.setattr(mainmod, "Flask", MagicMock(return_value=app))

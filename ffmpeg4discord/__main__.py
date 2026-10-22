@@ -25,6 +25,7 @@ import shutil
 import threading
 import time
 import webbrowser
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from textwrap import dedent
@@ -407,6 +408,16 @@ def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[Encode
     return settings, []
 
 
+@contextmanager
+def exit_on_setting_error():
+    """TwoPass raises ValueError for settings that can't work. Log its message, which says what to change, and exit."""
+    try:
+        yield
+    except ValueError as exc:
+        logging.error(exc)
+        raise SystemExit(1) from None  # from None leaves the ValueError's traceback out
+
+
 def main() -> None:
     """
     The main function that parses command-line arguments and starts the encoding process or web server.
@@ -450,7 +461,8 @@ def main() -> None:
 
     if web:
         # --from and --to fill in the form's starting trim, so check them before starting the server
-        twopass.clip_times(settings)
+        with exit_on_setting_error():
+            twopass.clip_times(settings)
         codecs = available_codecs()
         source = source_facts(twopass)
         # No static folder: serving the video's folder would expose every file next to it.
@@ -539,12 +551,8 @@ def main() -> None:
         # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
         app.run("127.0.0.1", port=port)
     else:
-        try:
+        with exit_on_setting_error():
             result = twopass.run(settings, dry_run=True) if dry_run else twopass_loop(twopass, settings, approx)
-        except ValueError as exc:
-            # TwoPass raises ValueError for settings that can't work. The message says what to change.
-            logging.error(exc)
-            raise SystemExit(1) from None
 
         if dry_run:
             print(format_commands(result.commands))
