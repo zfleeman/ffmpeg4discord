@@ -90,7 +90,9 @@ def build_parser() -> ArgumentParser:
         type=float,
         help="The output file size in MB.",
     )
-    parser.add_argument("-a", "--audio-br", type=float, default=FALLBACK_AUDIO_BR / 1000, help="Audio bitrate in kbps.")
+    parser.add_argument(
+        "-a", "--audio-br", type=float, default=FALLBACK_AUDIO_BR // 1000, help="Audio bitrate in kbps."
+    )
     parser.add_argument(
         "-c",
         "--codec",
