@@ -17,6 +17,7 @@ Functions:
 - main: The main function that parses command-line arguments and starts the encoding process or web server.
 """
 
+import atexit
 import logging
 import math
 import re
@@ -194,6 +195,22 @@ class EncodeJob:
         self.progress_file = progress_file
         self.pass_started = time.monotonic()
         self.pass_name = pass_name
+
+    def remove_temp_folder(self) -> None:
+        """
+        Deletes a running encode's temp folder. The encode thread is a daemon, so when Ctrl+C stops the server,
+        the TemporaryDirectory in TwoPass.run() never gets to clean up after itself.
+        """
+        if self.state != "running" or self.progress_file is None:
+            return
+        folder = self.progress_file.parent
+        # ffmpeg stops on Ctrl+C too, but Windows won't delete a file it still has open, so give it a moment to exit
+        for _ in range(10):
+            shutil.rmtree(folder, ignore_errors=True)
+            if not folder.exists():
+                return
+            time.sleep(0.2)
+        logging.warning(f"Couldn't delete the encode's temp folder: {folder}")
 
     def status(self) -> dict:
         """What /status sends the page. While running, `percent` covers the whole encode and `label` describes it."""
@@ -447,6 +464,11 @@ def main() -> None:
         job = None
         job_lock = threading.Lock()
 
+        @atexit.register
+        def remove_temp_folder():
+            if job is not None:
+                job.remove_temp_folder()
+
         def render_page(values: dict, encoding: bool = False, **kwargs):
             return render_template(
                 "web.html",
@@ -514,14 +536,8 @@ def main() -> None:
             return redirect(url_for("index"), code=303)
 
         threading.Thread(target=open_browser, args=[port], name="Open Browser").start()
-        try:
-            # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
-            app.run("127.0.0.1", port=port)
-        finally:
-            # The encode thread is a daemon, so stopping the server mid-encode skips its temp folder's cleanup.
-            # Windows may hold ffmpeg's files open for a moment, so ignore what can't be deleted.
-            if job is not None and job.progress_file is not None:
-                shutil.rmtree(job.progress_file.parent, ignore_errors=True)
+        # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
+        app.run("127.0.0.1", port=port)
     elif dry_run:
         result = twopass.run(settings, dry_run=True)
         print(format_commands(result.commands))

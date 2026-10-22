@@ -212,9 +212,12 @@ def web(monkeypatch, probe, tmp_path):
     monkeypatch.setattr(mainmod.threading, "Thread", FakeThread)
     monkeypatch.setattr(mainmod, "open_browser", MagicMock())
     monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(return_value=result(5)))
+    exit_handlers = []
+    monkeypatch.setattr(mainmod.atexit, "register", exit_handlers.append)
     mainmod.main()
     return SimpleNamespace(
         client=apps[0].test_client(),
+        exit_handlers=exit_handlers,
         twopass_loop=mainmod.twopass_loop,
         hold=lambda: setattr(holding, "on", True),
         finish=finish,
@@ -582,6 +585,67 @@ def test_job_status_before_ffmpeg_reports_a_time(tmp_path, monkeypatch, codec, p
     monkeypatch.setattr(mainmod.time, "monotonic", lambda: 112.4)
     start = 0 if pass_name == "first" else 50
     assert job.status() == {"state": "running", "percent": start, "label": label}
+
+
+def test_exit_removes_the_running_encodes_temp_folder(web, tmp_path):
+    folder = tmp_path / "ff4d-test"
+    folder.mkdir()
+    (folder / "ffmpeg2pass-0.log").write_text("stats")
+
+    def encode_until_stopped(twopass, settings, approx, on_pass):
+        on_pass("first", folder / "first-progress.txt")
+        raise KeyboardInterrupt  # stands in for the encode still running when Ctrl+C stops the server
+
+    web.twopass_loop.side_effect = encode_until_stopped
+    with pytest.raises(KeyboardInterrupt):
+        web.client.post("/encode", data=encode_form())
+    [handler] = web.exit_handlers
+    handler()
+    assert not folder.exists()
+
+
+def test_exit_without_an_encode_does_nothing(web):
+    [handler] = web.exit_handlers
+    handler()
+
+
+def test_remove_temp_folder_leaves_a_finished_encode_alone(tmp_path):
+    job = mainmod.EncodeJob(values={}, clip_seconds=30, state="done")
+    job.start_pass("first", tmp_path / "first-progress.txt")
+    job.remove_temp_folder()
+    assert tmp_path.exists()
+
+
+def test_remove_temp_folder_waits_for_ffmpeg_to_let_go(tmp_path, monkeypatch, caplog):
+    # On Windows, ffmpeg can hold its files open for a moment after Ctrl+C, so the first tries fail
+    folder = tmp_path / "ff4d-test"
+    folder.mkdir()
+    job = mainmod.EncodeJob(values={}, clip_seconds=30)
+    job.start_pass("first", folder / "first-progress.txt")
+    tries = []
+
+    def rmtree(path, ignore_errors):
+        tries.append(path)
+        if len(tries) == 3:
+            path.rmdir()
+
+    monkeypatch.setattr(mainmod.shutil, "rmtree", rmtree)
+    monkeypatch.setattr(mainmod.time, "sleep", lambda _: None)
+    job.remove_temp_folder()
+    assert tries == [folder] * 3
+    assert not folder.exists()
+    assert "Couldn't delete" not in caplog.text
+
+
+def test_remove_temp_folder_gives_up_and_says_so(tmp_path, monkeypatch, caplog):
+    folder = tmp_path / "ff4d-test"
+    folder.mkdir()
+    job = mainmod.EncodeJob(values={}, clip_seconds=30)
+    job.start_pass("first", folder / "first-progress.txt")
+    monkeypatch.setattr(mainmod.shutil, "rmtree", lambda path, ignore_errors: None)
+    monkeypatch.setattr(mainmod.time, "sleep", lambda _: None)
+    job.remove_temp_folder()
+    assert f"Couldn't delete the encode's temp folder: {folder}" in caplog.text
 
 
 def test_twopass_loop_passes_on_pass_to_each_run(twopass, no_cleanup):
