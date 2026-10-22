@@ -20,6 +20,7 @@ Functions:
 import logging
 import math
 import re
+import shutil
 import threading
 import time
 import webbrowser
@@ -205,11 +206,12 @@ class EncodeJob:
         start, share = {"first": (0, 50), "second": (50, 50), "single": (0, 100)}[self.pass_name]
         seconds = progress_seconds(self.progress_file)
         if seconds is None:
-            # No time yet. Most passes report one within a second, but VP9's first pass writes no video, so it never does.
+            # No time yet. Most passes report one within a second, but VP9's and AV1's first passes write no video,
+            # so they never do.
             done = 0
             label = f"{PASS_LABELS[self.pass_name]}: running for {time.monotonic() - self.pass_started:.0f} s"
-            if self.codec == "vp9" and self.pass_name == "first":
-                label += ". VP9 doesn't report progress until this pass ends."
+            if self.codec in ("vp9", "av1") and self.pass_name == "first":
+                label += f". {self.codec.upper()} doesn't report progress until this pass ends."
         else:
             done = min(seconds / self.clip_seconds, 1)
             label = f"{PASS_LABELS[self.pass_name]}: {done:.0%}"
@@ -220,19 +222,10 @@ class EncodeJob:
 
 def source_facts(twopass: TwoPass) -> dict:
     """Facts about the input video that the web page's JavaScript checks the form against."""
-    stream = twopass.video_stream or {}
-    width, height = stream.get("width"), stream.get("height")
-    # Phones often store video sideways with a rotation tag, and ffmpeg's filters see the rotated size.
-    rotation = int(stream.get("tags", {}).get("rotate", 0))
-    for data in stream.get("side_data_list", []):
-        rotation = int(data.get("rotation", rotation))
-    if rotation % 180 == 90:
-        width, height = height, width
-
     return {
         "duration": twopass.duration,
-        "width": width,
-        "height": height,
+        "width": twopass.width,
+        "height": twopass.height,
         "framerate": twopass.init_framerate,
         "size_mib": twopass.input_filesize,
         "audio_tracks": len(twopass.audio_streams),
@@ -521,8 +514,14 @@ def main() -> None:
             return redirect(url_for("index"), code=303)
 
         threading.Thread(target=open_browser, args=[port], name="Open Browser").start()
-        # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
-        app.run("127.0.0.1", port=port)
+        try:
+            # Only this computer can reach the server. The form can write files anywhere, so keep it off the network.
+            app.run("127.0.0.1", port=port)
+        finally:
+            # The encode thread is a daemon, so stopping the server mid-encode skips its temp folder's cleanup.
+            # Windows may hold ffmpeg's files open for a moment, so ignore what can't be deleted.
+            if job is not None and job.progress_file is not None:
+                shutil.rmtree(job.progress_file.parent, ignore_errors=True)
     elif dry_run:
         result = twopass.run(settings, dry_run=True)
         print(format_commands(result.commands))

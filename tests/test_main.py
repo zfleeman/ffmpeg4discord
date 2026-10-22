@@ -428,6 +428,21 @@ def test_encode_settings_that_cannot_work_fail_before_starting(web):
     response = web.client.post("/encode", data=encode_form(target_filesize="0.01"))
     assert response.status_code == 400
     assert b"there is no bitrate left for video" in response.data
+    assert b"a larger target size (File Size, or -s)" in response.data
+    web.twopass_loop.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "form, message",
+    [
+        ({"resolution": "1281x720"}, b"x264 needs an even width and height"),
+        ({"crop": "1000x0x1280x720"}, b"goes past the edge of the 1920x1080 video"),
+    ],
+)
+def test_encode_sizes_ffmpeg_cannot_use_fail_before_starting(web, form, message):
+    response = web.client.post("/encode", data=encode_form(**form))
+    assert response.status_code == 400
+    assert message in response.data
     web.twopass_loop.assert_not_called()
 
 
@@ -552,10 +567,11 @@ def test_progress_seconds_without_a_file(tmp_path):
         ("x264", "first", "First pass: running for 12 s"),
         ("vp9", "first", "First pass: running for 12 s. VP9 doesn't report progress until this pass ends."),
         ("vp9", "second", "Second pass: running for 12 s"),
+        ("av1", "first", "First pass: running for 12 s. AV1 doesn't report progress until this pass ends."),
     ],
 )
 def test_job_status_before_ffmpeg_reports_a_time(tmp_path, monkeypatch, codec, pass_name, label):
-    # VP9's first pass writes stats but no video, so its progress file only ever says out_time_us=N/A
+    # VP9's and AV1's first passes write stats but no video, so their progress files only ever say out_time_us=N/A
     progress = tmp_path / "progress.txt"
     progress.write_text("frame=0\nout_time_us=N/A\nprogress=continue\n")
     job = mainmod.EncodeJob(values={}, clip_seconds=30, codec=codec)
