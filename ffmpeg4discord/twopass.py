@@ -611,7 +611,8 @@ class TwoPass:
         if settings.astreams is None:
             selected_positions = list(range(len(self.audio_streams)))
         else:
-            selected_positions = [i for i in settings.astreams if 0 <= i < len(self.audio_streams)]
+            # Out-of-range numbers are rejected in run() before this runs.
+            selected_positions = list(settings.astreams)
 
         if not selected_positions:
             return None
@@ -650,6 +651,17 @@ class TwoPass:
                 "Note: File size is calculated in MiB (1 MiB = 1,048,576 bytes). "
                 "macOS Finder uses MB (1 MB = 1,000,000 bytes), which may differ."
             )
+
+        if settings.astreams is not None:
+            track_count = len(self.audio_streams)
+            for track in settings.astreams:
+                if track < 0 or track >= track_count:
+                    if track_count == 0:
+                        raise ValueError(f"Audio track {track} doesn't exist. This file has 0 audio tracks.")
+                    raise ValueError(
+                        f"Audio track {track} doesn't exist. This file has {track_count} audio tracks, "
+                        f"numbered 0 to {track_count - 1}."
+                    )
 
         start, end = self.clip_times(settings)
         output_filename = self._output_filename(settings)

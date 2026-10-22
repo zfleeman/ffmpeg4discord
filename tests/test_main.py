@@ -352,10 +352,18 @@ def test_encode_amix_mode(web, amix_mode, amix, normalize):
     assert (settings.amix, settings.amix_normalize) == (amix, normalize)
 
 
-@pytest.mark.parametrize("astreams, expected", [(["0", "2"], [0, 2]), ([], None)])
+@pytest.mark.parametrize("astreams, expected", [(["0"], [0]), ([], None)])
 def test_encode_audio_stream_selection(web, astreams, expected):
+    # the web fixture's probe has one audio track, so only index 0 is valid
     web.client.post("/encode", data=encode_form(astreams=astreams))
     assert posted_settings(web).astreams == expected
+
+
+def test_encode_rejects_astream_that_does_not_exist(web):
+    response = web.client.post("/encode", data=encode_form(astreams=["7"]))
+    assert response.status_code == 400
+    # Jinja escapes the apostrophe in doesn't
+    assert b"Audio track 7 doesn&#39;t exist" in response.data
 
 
 # --- web UI form errors ---

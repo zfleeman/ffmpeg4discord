@@ -193,6 +193,38 @@ def test_target_larger_than_input_raises(make_twopass):
         make_twopass().run(make_settings(target_filesize=51), dry_run=True)
 
 
+def test_run_rejects_astream_past_the_end(probe, make_twopass):
+    for index in (2, 3):
+        probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": index})
+    with pytest.raises(
+        ValueError, match=r"Audio track 7 doesn't exist\. This file has 3 audio tracks, numbered 0 to 2\."
+    ):
+        make_twopass().run(make_settings(astreams=[7]), dry_run=True)
+
+
+def test_run_rejects_mix_of_valid_and_invalid_astreams(probe, make_twopass):
+    for index in (2, 3):
+        probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": index})
+    with pytest.raises(
+        ValueError, match=r"Audio track 7 doesn't exist\. This file has 3 audio tracks, numbered 0 to 2\."
+    ):
+        make_twopass().run(make_settings(astreams=[0, 7], amix=True), dry_run=True)
+
+
+def test_run_rejects_astream_when_file_has_no_audio(probe, make_twopass):
+    probe["streams"].pop()
+    with pytest.raises(ValueError, match=r"Audio track 0 doesn't exist\. This file has 0 audio tracks\."):
+        make_twopass().run(make_settings(astreams=[0]), dry_run=True)
+
+
+def test_run_valid_astreams_keep_map_and_amix_args(probe, make_twopass, passes):
+    for index in (2, 3):
+        probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": index})
+    make_twopass().run(make_settings(astreams=[0, 2], amix=True))
+    joined = " ".join(passes[-1].args)
+    assert "[0:a:0][0:a:2]amix=inputs=2" in joined
+
+
 # --- bitrate budget ---
 
 
@@ -322,7 +354,7 @@ def test_crop_does_not_change_the_next_encodes_aspect_ratio(make_twopass, caplog
     assert tp.ratio == pytest.approx(1920 / 1080)
 
 
-@pytest.mark.parametrize("astreams, expected", [(None, "a:0"), ([1, 0], "a:1"), ([5, 1], "a:1")])
+@pytest.mark.parametrize("astreams, expected", [(None, "a:0"), ([1, 0], "a:1"), ([0], "a:0")])
 def test_apply_audio_filters_without_mixing_keeps_one_track(probe, make_twopass, astreams, expected):
     # two audio tracks, like ShadowPlay with a separate mic track; only one fits the bitrate budget
     probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": 2})
@@ -331,10 +363,10 @@ def test_apply_audio_filters_without_mixing_keeps_one_track(probe, make_twopass,
 
 
 def test_apply_audio_filters_mixes_selected_tracks(probe, make_twopass):
-    # three audio tracks; 5 is out of range and gets dropped
+    # three audio tracks; invalid numbers are rejected in run(), so only valid ones reach here
     for index in (2, 3):
         probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": index})
-    settings = make_settings(amix=True, astreams=[0, 2, 5])
+    settings = make_settings(amix=True, astreams=[0, 2])
     audio = make_twopass()._apply_audio_filters(ffmpeg.input("test.mp4"), settings)
     assert audio.node.name == "amix"
     assert audio.node.kwargs == {"normalize": 0, "inputs": 2}
