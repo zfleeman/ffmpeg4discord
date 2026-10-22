@@ -66,6 +66,9 @@ HARDWARE_CODECS = {"h264_nvenc", "hevc_nvenc", "h264_videotoolbox", "hevc_videot
 # Characters that cmd and PowerShell both leave alone, so an argument made only of these needs no quotes.
 WINDOWS_SAFE_CHARS = set(string.ascii_letters + string.digits + "-_./\\:=+")
 
+# The audio bitrate in bits per second to use when the input doesn't report one. It matches the -a default.
+FALLBACK_AUDIO_BR = 96_000
+
 # ffprobe `color_transfer` values that mean the video is HDR: PQ (HDR10, Dolby Vision) and HLG.
 HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
 
@@ -316,13 +319,8 @@ class TwoPass:
         self._process_probe()
 
     def _parse_streams(self):
-        """Helper to parse video and audio streams from the probe output.
+        """Helper to parse video and audio streams from the probe output."""
 
-        Returns:
-            The ffprobe "index" of the *first audio stream* (if any). This is only used for audio bitrate lookup.
-        """
-
-        audio_stream = None
         for stream in self.probe["streams"]:
             codec_type = stream["codec_type"]
             if codec_type == "video":
@@ -338,10 +336,7 @@ class TwoPass:
                 framerate_ratio: str = stream.get("r_frame_rate")
                 self.init_framerate = round(int(framerate_ratio.split("/")[0]) / int(framerate_ratio.split("/")[1]))
             elif codec_type == "audio":
-                audio_stream = stream["index"]
                 self.audio_streams.append(stream)
-
-        return audio_stream
 
     def _process_probe(self):
         """
@@ -351,11 +346,12 @@ class TwoPass:
         # in mebibytes (MiB, 1 MiB = 1,048,576 bytes), like the target size
         self.input_filesize = float(self.probe["format"]["size"]) * FILE_SIZE_MULT
 
-        audio_stream = self._parse_streams()
+        self._parse_streams()
 
         self.source_audio_br = None
-        if audio_stream is not None:
-            self.source_audio_br = float(self.probe["streams"][audio_stream]["bit_rate"])
+        if self.audio_streams:
+            # MKV files, like OBS recordings, don't report a bitrate for each stream
+            self.source_audio_br = float(self.audio_streams[0].get("bit_rate", FALLBACK_AUDIO_BR))
         else:
             logging.warning("No audio stream found in the media file.")
 

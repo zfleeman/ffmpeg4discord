@@ -141,6 +141,18 @@ def test_audio_br_defaults_to_the_source_bitrate(make_twopass):
     assert make_twopass()._audio_bitrate(make_settings()) == 128000
 
 
+def test_source_bitrate_comes_from_the_first_audio_track(probe, make_twopass):
+    # e.g. a ShadowPlay clip with game audio first and a lower-bitrate mic track second
+    probe["streams"].append({"codec_type": "audio", "bit_rate": "64000", "index": 2})
+    assert make_twopass().source_audio_br == 128000
+
+
+def test_source_bitrate_falls_back_when_the_input_has_none(probe, make_twopass):
+    # MKV files don't report a bitrate for each stream
+    del probe["streams"][1]["bit_rate"]
+    assert make_twopass().source_audio_br == 96000
+
+
 def test_warns_when_no_audio_stream(probe, make_twopass, caplog):
     probe["streams"].pop()
     make_twopass()
