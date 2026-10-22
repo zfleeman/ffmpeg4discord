@@ -477,6 +477,8 @@
                     // ffmpeg doesn't fail here. It quietly moves the crop inside the frame, which isn't what was asked for.
                     errors.crop = `The crop goes past the edge of the ${SOURCE.width}x${SOURCE.height} video. `
                         + `Keep x offset + width at most ${SOURCE.width} and y offset + height at most ${SOURCE.height}.`;
+                } else if (!resolution && ['x264', 'x265'].includes(codec) && (width % 2 || height % 2)) {
+                    errors.crop = codec + ' needs an even crop width and height, or an even Resolution.';
                 }
             }
 

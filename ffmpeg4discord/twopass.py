@@ -289,6 +289,8 @@ class TwoPass:
         probe (dict): ffprobe's output for the input.
         duration (float): The input's length in seconds.
         input_filesize (float): The input's size in MiB.
+        width (int): The input's width as ffmpeg's filters see it, after any rotation. None without video.
+        height (int): The input's height, the same way.
         ratio (float): The input's width divided by its height.
         init_framerate (int): The input's frames per second, rounded.
         audio_streams (list[dict]): The probe's audio streams, in order.
@@ -299,6 +301,8 @@ class TwoPass:
 
     def __init__(self, filename: Path) -> None:
         self.filename = filename
+        self.width = None
+        self.height = None
         self.ratio = None
         self.init_framerate = None
         self.audio_streams = []
@@ -321,9 +325,14 @@ class TwoPass:
             codec_type = stream["codec_type"]
             if codec_type == "video":
                 self.video_stream = stream
-                width = stream["width"]
-                height = stream["height"]
-                self.ratio = width / height
+                self.width, self.height = stream["width"], stream["height"]
+                # Phones often store video sideways with a rotation tag, and ffmpeg's filters see the rotated size.
+                rotation = int(stream.get("tags", {}).get("rotate", 0))
+                for data in stream.get("side_data_list", []):
+                    rotation = int(data.get("rotation", rotation))
+                if rotation % 180 == 90:
+                    self.width, self.height = self.height, self.width
+                self.ratio = self.width / self.height
                 framerate_ratio: str = stream.get("r_frame_rate")
                 self.init_framerate = round(int(framerate_ratio.split("/")[0]) / int(framerate_ratio.split("/")[1]))
             elif codec_type == "audio":
@@ -525,7 +534,8 @@ class TwoPass:
             raise ValueError(
                 f"Target file size of {settings.target_filesize:.2f} MiB is too small for a {length:g}-second clip "
                 f"with {audio_kbps:g} kbps audio: there is no bitrate left for video. "
-                "Try a larger target size (-s), a shorter clip, a lower audio bitrate (-a), or no audio (-an)."
+                "Try a larger target size (File Size, or -s), a shorter clip, a lower audio bitrate "
+                "(Audio Bitrate, or -a), or no audio (turn off Include Audio, or -an)."
             )
 
         return {
@@ -534,6 +544,34 @@ class TwoPass:
             "maxrate": br * 1.45,
             "bufsize": br * 2,
         }
+
+    def _check_video_size(self, settings: EncodeSettings) -> None:
+        """Raise a ValueError for a crop or resolution that ffmpeg would reject or quietly change."""
+
+        if settings.crop:
+            x, y, crop_width, crop_height = (int(n) for n in settings.crop.split("x"))
+            # ffmpeg doesn't fail here. It quietly moves the crop inside the frame, which isn't what was asked for.
+            if self.width and (x + crop_width > self.width or y + crop_height > self.height):
+                raise ValueError(
+                    f"The Crop (-x) {settings.crop} goes past the edge of the {self.width}x{self.height} video. "
+                    f"Keep x offset + width at most {self.width} and y offset + height at most {self.height}."
+                )
+
+        # x264 and x265 only encode even sizes. The output size is the resolution, or the crop without one.
+        if settings.codec not in ("x264", "x265"):
+            return
+        if settings.resolution:
+            width, height = (int(n) for n in settings.resolution.split("x"))
+            if width % 2 or height % 2:
+                raise ValueError(
+                    f"{settings.codec} needs an even width and height, but the Resolution (-r) is "
+                    f"{settings.resolution}. Use even numbers, e.g. 1280x720."
+                )
+        elif settings.crop and (crop_width % 2 or crop_height % 2):
+            raise ValueError(
+                f"{settings.codec} needs an even width and height, but the Crop (-x) is {crop_width}x{crop_height}. "
+                "Use an even crop width and height, or set an even Resolution (-r)."
+            )
 
     def _output_filename(self, settings: EncodeSettings) -> str:
         """
@@ -652,6 +690,7 @@ class TwoPass:
             )
 
         start, end = self.clip_times(settings)
+        self._check_video_size(settings)
         output_filename = self._output_filename(settings)
         params = self._generate_params(settings, self._bitrate_targets(settings, end - start))
 

@@ -17,9 +17,11 @@ Functions:
 - main: The main function that parses command-line arguments and starts the encoding process or web server.
 """
 
+import atexit
 import logging
 import math
 import re
+import shutil
 import threading
 import time
 import webbrowser
@@ -194,6 +196,22 @@ class EncodeJob:
         self.pass_started = time.monotonic()
         self.pass_name = pass_name
 
+    def remove_temp_folder(self) -> None:
+        """
+        Deletes a running encode's temp folder. The encode thread is a daemon, so when Ctrl+C stops the server,
+        the TemporaryDirectory in TwoPass.run() never gets to clean up after itself.
+        """
+        if self.state != "running" or self.progress_file is None:
+            return
+        folder = self.progress_file.parent
+        # ffmpeg stops on Ctrl+C too, but Windows won't delete a file it still has open, so give it a moment to exit
+        for _ in range(10):
+            shutil.rmtree(folder, ignore_errors=True)
+            if not folder.exists():
+                return
+            time.sleep(0.2)
+        logging.warning(f"Couldn't delete the encode's temp folder: {folder}")
+
     def status(self) -> dict:
         """What /status sends the page. While running, `percent` covers the whole encode and `label` describes it."""
         if self.state != "running":
@@ -205,11 +223,12 @@ class EncodeJob:
         start, share = {"first": (0, 50), "second": (50, 50), "single": (0, 100)}[self.pass_name]
         seconds = progress_seconds(self.progress_file)
         if seconds is None:
-            # No time yet. Most passes report one within a second, but VP9's first pass writes no video, so it never does.
+            # No time yet. Most passes report one within a second, but VP9's and AV1's first passes write no video,
+            # so they never do.
             done = 0
             label = f"{PASS_LABELS[self.pass_name]}: running for {time.monotonic() - self.pass_started:.0f} s"
-            if self.codec == "vp9" and self.pass_name == "first":
-                label += ". VP9 doesn't report progress until this pass ends."
+            if self.codec in ("vp9", "av1") and self.pass_name == "first":
+                label += f". {self.codec.upper()} doesn't report progress until this pass ends."
         else:
             done = min(seconds / self.clip_seconds, 1)
             label = f"{PASS_LABELS[self.pass_name]}: {done:.0%}"
@@ -220,19 +239,10 @@ class EncodeJob:
 
 def source_facts(twopass: TwoPass) -> dict:
     """Facts about the input video that the web page's JavaScript checks the form against."""
-    stream = twopass.video_stream or {}
-    width, height = stream.get("width"), stream.get("height")
-    # Phones often store video sideways with a rotation tag, and ffmpeg's filters see the rotated size.
-    rotation = int(stream.get("tags", {}).get("rotate", 0))
-    for data in stream.get("side_data_list", []):
-        rotation = int(data.get("rotation", rotation))
-    if rotation % 180 == 90:
-        width, height = height, width
-
     return {
         "duration": twopass.duration,
-        "width": width,
-        "height": height,
+        "width": twopass.width,
+        "height": twopass.height,
         "framerate": twopass.init_framerate,
         "size_mib": twopass.input_filesize,
         "audio_tracks": len(twopass.audio_streams),
@@ -453,6 +463,11 @@ def main() -> None:
         # The current or last encode. Only one runs at a time, and job_lock keeps two requests from both starting one.
         job = None
         job_lock = threading.Lock()
+
+        @atexit.register
+        def remove_temp_folder():
+            if job is not None:
+                job.remove_temp_folder()
 
         def render_page(values: dict, encoding: bool = False, **kwargs):
             return render_template(

@@ -212,9 +212,12 @@ def web(monkeypatch, probe, tmp_path):
     monkeypatch.setattr(mainmod.threading, "Thread", FakeThread)
     monkeypatch.setattr(mainmod, "open_browser", MagicMock())
     monkeypatch.setattr(mainmod, "twopass_loop", MagicMock(return_value=result(5)))
+    exit_handlers = []
+    monkeypatch.setattr(mainmod.atexit, "register", exit_handlers.append)
     mainmod.main()
     return SimpleNamespace(
         client=apps[0].test_client(),
+        exit_handlers=exit_handlers,
         twopass_loop=mainmod.twopass_loop,
         hold=lambda: setattr(holding, "on", True),
         finish=finish,
@@ -428,6 +431,21 @@ def test_encode_settings_that_cannot_work_fail_before_starting(web):
     response = web.client.post("/encode", data=encode_form(target_filesize="0.01"))
     assert response.status_code == 400
     assert b"there is no bitrate left for video" in response.data
+    assert b"a larger target size (File Size, or -s)" in response.data
+    web.twopass_loop.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "form, message",
+    [
+        ({"resolution": "1281x720"}, b"x264 needs an even width and height"),
+        ({"crop": "1000x0x1280x720"}, b"goes past the edge of the 1920x1080 video"),
+    ],
+)
+def test_encode_sizes_ffmpeg_cannot_use_fail_before_starting(web, form, message):
+    response = web.client.post("/encode", data=encode_form(**form))
+    assert response.status_code == 400
+    assert message in response.data
     web.twopass_loop.assert_not_called()
 
 
@@ -552,10 +570,11 @@ def test_progress_seconds_without_a_file(tmp_path):
         ("x264", "first", "First pass: running for 12 s"),
         ("vp9", "first", "First pass: running for 12 s. VP9 doesn't report progress until this pass ends."),
         ("vp9", "second", "Second pass: running for 12 s"),
+        ("av1", "first", "First pass: running for 12 s. AV1 doesn't report progress until this pass ends."),
     ],
 )
 def test_job_status_before_ffmpeg_reports_a_time(tmp_path, monkeypatch, codec, pass_name, label):
-    # VP9's first pass writes stats but no video, so its progress file only ever says out_time_us=N/A
+    # VP9's and AV1's first passes write stats but no video, so their progress files only ever say out_time_us=N/A
     progress = tmp_path / "progress.txt"
     progress.write_text("frame=0\nout_time_us=N/A\nprogress=continue\n")
     job = mainmod.EncodeJob(values={}, clip_seconds=30, codec=codec)
@@ -566,6 +585,67 @@ def test_job_status_before_ffmpeg_reports_a_time(tmp_path, monkeypatch, codec, p
     monkeypatch.setattr(mainmod.time, "monotonic", lambda: 112.4)
     start = 0 if pass_name == "first" else 50
     assert job.status() == {"state": "running", "percent": start, "label": label}
+
+
+def test_exit_removes_the_running_encodes_temp_folder(web, tmp_path):
+    folder = tmp_path / "ff4d-test"
+    folder.mkdir()
+    (folder / "ffmpeg2pass-0.log").write_text("stats")
+
+    def encode_until_stopped(twopass, settings, approx, on_pass):
+        on_pass("first", folder / "first-progress.txt")
+        raise KeyboardInterrupt  # stands in for the encode still running when Ctrl+C stops the server
+
+    web.twopass_loop.side_effect = encode_until_stopped
+    with pytest.raises(KeyboardInterrupt):
+        web.client.post("/encode", data=encode_form())
+    [handler] = web.exit_handlers
+    handler()
+    assert not folder.exists()
+
+
+def test_exit_without_an_encode_does_nothing(web):
+    [handler] = web.exit_handlers
+    handler()
+
+
+def test_remove_temp_folder_leaves_a_finished_encode_alone(tmp_path):
+    job = mainmod.EncodeJob(values={}, clip_seconds=30, state="done")
+    job.start_pass("first", tmp_path / "first-progress.txt")
+    job.remove_temp_folder()
+    assert tmp_path.exists()
+
+
+def test_remove_temp_folder_waits_for_ffmpeg_to_let_go(tmp_path, monkeypatch, caplog):
+    # On Windows, ffmpeg can hold its files open for a moment after Ctrl+C, so the first tries fail
+    folder = tmp_path / "ff4d-test"
+    folder.mkdir()
+    job = mainmod.EncodeJob(values={}, clip_seconds=30)
+    job.start_pass("first", folder / "first-progress.txt")
+    tries = []
+
+    def rmtree(path, ignore_errors):
+        tries.append(path)
+        if len(tries) == 3:
+            path.rmdir()
+
+    monkeypatch.setattr(mainmod.shutil, "rmtree", rmtree)
+    monkeypatch.setattr(mainmod.time, "sleep", lambda _: None)
+    job.remove_temp_folder()
+    assert tries == [folder] * 3
+    assert not folder.exists()
+    assert "Couldn't delete" not in caplog.text
+
+
+def test_remove_temp_folder_gives_up_and_says_so(tmp_path, monkeypatch, caplog):
+    folder = tmp_path / "ff4d-test"
+    folder.mkdir()
+    job = mainmod.EncodeJob(values={}, clip_seconds=30)
+    job.start_pass("first", folder / "first-progress.txt")
+    monkeypatch.setattr(mainmod.shutil, "rmtree", lambda path, ignore_errors: None)
+    monkeypatch.setattr(mainmod.time, "sleep", lambda _: None)
+    job.remove_temp_folder()
+    assert f"Couldn't delete the encode's temp folder: {folder}" in caplog.text
 
 
 def test_twopass_loop_passes_on_pass_to_each_run(twopass, no_cleanup):

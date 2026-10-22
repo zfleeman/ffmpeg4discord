@@ -531,6 +531,42 @@ def test_dry_run_saves_commands_without_running_ffmpeg(make_twopass, passes):
     assert len(result.commands) == 2
 
 
+@pytest.mark.parametrize(
+    "settings, message",
+    [
+        ({"resolution": "1280x721"}, "x264 needs an even width and height, but the Resolution"),
+        ({"codec": "x265", "crop": "0x0x641x360"}, "x265 needs an even width and height, but the Crop"),
+        ({"crop": "0x0x1921x1080"}, "goes past the edge of the 1920x1080 video"),
+        ({"crop": "0x100x1920x1080", "codec": "vp9"}, "goes past the edge"),
+    ],
+)
+def test_run_rejects_sizes_ffmpeg_cannot_use(make_twopass, passes, settings, message):
+    with pytest.raises(ValueError, match=message):
+        make_twopass().run(make_settings(**settings), dry_run=True)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"codec": "vp9", "resolution": "1281x721"},  # only x264 and x265 need even sizes
+        {"crop": "0x0x641x360", "resolution": "640x360"},  # the resolution sets the output size
+        {"crop": "1280x0x640x1080"},  # touches the right edge, but stays inside
+    ],
+)
+def test_run_accepts_sizes_ffmpeg_can_use(make_twopass, passes, settings):
+    make_twopass().run(make_settings(**settings), dry_run=True)
+
+
+def test_crop_is_checked_against_the_rotated_size(probe, make_twopass, passes):
+    # A phone video stored as 1920x1080 with a 90 degree rotation is 1080x1920 to ffmpeg's filters
+    probe["streams"][0]["side_data_list"] = [{"side_data_type": "Display Matrix", "rotation": -90}]
+    tp = make_twopass()
+    assert (tp.width, tp.height) == (1080, 1920)
+    tp.run(make_settings(crop="0x0x1080x1920"), dry_run=True)
+    with pytest.raises(ValueError, match="past the edge of the 1080x1920 video"):
+        tp.run(make_settings(crop="0x0x1920x1080"), dry_run=True)
+
+
 def test_one_twopass_runs_encodes_with_different_settings(make_twopass, passes):
     # The web UI reuses one TwoPass for every encode, so a setting must not leak into the next one.
     tp = make_twopass()
