@@ -5,6 +5,7 @@ import logging
 import math
 import re
 import shutil
+import sys
 import threading
 import time
 import webbrowser
@@ -105,7 +106,7 @@ def success_message(result: EncodeResult) -> str:
     return f"Your compressed video file ({round(result.output_filesize, 2)}MB) is located at {output_path}"
 
 
-# What the web UI's progress line calls each pass
+# What the progress bars call each pass
 PASS_LABELS = {"first": "First pass", "second": "Second pass", "single": "Encoding"}
 
 
@@ -124,31 +125,164 @@ def progress_seconds(progress_file: Optional[Path]) -> Optional[float]:
 
 
 @dataclass
-class EncodeJob:
+class EncodeProgress:
+    """
+    How far along an encode is. Its `start_pass` goes to `twopass_loop` as `on_pass`, and both progress bars read it.
+
+    Attributes:
+        clip_seconds (float): The trimmed clip's length, for working out the progress.
+        codec (str): The encode's codec, e.g. "vp9".
+        attempt (int): Which attempt is running. ff4d tries again when an output is over the target.
+        pass_name (str): The running pass: "first", "second", or "single" for hardware encoders.
+        progress_file (Path): The file ffmpeg writes the running pass's progress to.
+        pass_started (float): When the running pass started, from time.monotonic().
+        seconds (float): How many seconds of video the running pass has encoded, or None before ffmpeg says.
+    """
+
+    clip_seconds: float
+    codec: str = ""
+    attempt: int = 0
+    pass_name: str = ""
+    progress_file: Optional[Path] = None
+    pass_started: float = 0.0
+    seconds: Optional[float] = None
+
+    def start_pass(self, pass_name: str, progress_file: Path) -> None:
+        """TwoPass.run() calls this before each pass. A first or single pass means a new attempt has started."""
+        if pass_name in ("first", "single"):
+            self.attempt += 1
+        self.progress_file = progress_file
+        self.pass_started = time.monotonic()
+        self.seconds = None
+        self.pass_name = pass_name
+
+    def finish_pass(self) -> None:
+        """Marks the running pass as done. ffmpeg's last report says so, but it can be deleted before anyone reads it."""
+        self.seconds = self.clip_seconds
+
+    def report(self) -> tuple[float, str]:
+        """The percent of the whole encode that's done, and a label that describes it."""
+        if not self.pass_name:
+            return 0, "Starting…"
+
+        # Each pass of a two-pass encode gets half of the bar
+        start, share = {"first": (0, 50), "second": (50, 50), "single": (0, 100)}[self.pass_name]
+        # Keep the furthest time ffmpeg reported. It can dip near a pass's end, and TwoPass.run() deletes the file
+        # when an attempt ends.
+        seconds = progress_seconds(self.progress_file)
+        if seconds is not None:
+            self.seconds = max(seconds, self.seconds or 0)
+        if self.seconds is None:
+            # No time yet. Most passes report one within a second, but VP9's and AV1's first passes write no video,
+            # so they never do.
+            done = 0
+            label = f"{PASS_LABELS[self.pass_name]}: running for {time.monotonic() - self.pass_started:.0f} s"
+            if self.codec in ("vp9", "av1") and self.pass_name == "first":
+                label += f". {self.codec.upper()} doesn't report progress until this pass ends."
+        else:
+            done = min(self.seconds / self.clip_seconds, 1)
+            label = f"{PASS_LABELS[self.pass_name]}: {done:.0%}"
+        if self.attempt > 1:
+            label += f". Attempt {self.attempt}, since the last one was over the target."
+        return round(start + share * done, 1), label
+
+
+# How many characters wide the CLI's bar is, between its brackets
+BAR_WIDTH = 30
+
+
+def bar_line(percent: float, label: str, width: int) -> str:
+    """The CLI's progress line, e.g. "[###---]  50%  Second pass: 0%", cut or padded to `width` characters."""
+    filled = round(BAR_WIDTH * percent / 100)
+    line = f"[{'#' * filled}{'-' * (BAR_WIDTH - filled)}] {percent:3.0f}%  {label}"
+    # The padding covers the end of a longer line drawn before it
+    return line[:width].ljust(width)
+
+
+class ProgressLine:
+    """
+    Shows a CLI encode's progress on one line that a background thread redraws in place.
+
+    It stands in for sys.stdout while the encode runs, so ff4d's own prints, like "Performing second pass", end the
+    progress line first instead of running into it. ff4d only prints between passes, so those prints also mean the
+    pass is done.
+    """
+
+    def __init__(self, progress: EncodeProgress):
+        self.progress = progress
+        self.stream = sys.stdout
+        # Reentrant, because write() ends the line, and ending it draws it one last time
+        self.lock = threading.RLock()
+        self.drawn = ""  # the progress line on screen, or "" when the cursor isn't on one
+        self.at_line_start = True
+        self.stopped = threading.Event()
+        self.thread = threading.Thread(target=self.redraw_until_stopped, name="Progress", daemon=True)
+
+    def __enter__(self) -> "ProgressLine":
+        sys.stdout = self
+        self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, *_) -> None:
+        self.stopped.set()
+        self.thread.join()
+        sys.stdout = self.stream
+        # A pass that stopped with an error or Ctrl+C keeps the percent it got to
+        self.end_line(pass_done=exc_type is None)
+
+    def redraw_until_stopped(self) -> None:
+        # ffmpeg updates its -progress file about twice a second
+        while not self.stopped.wait(0.5):
+            self.draw()
+
+    def draw(self) -> None:
+        """Redraws the line if the progress changed. It waits for a pass to start and for other prints to end their line."""
+        with self.lock:
+            if not self.progress.pass_name or not (self.drawn or self.at_line_start):
+                return
+            line = "\r" + bar_line(*self.progress.report(), shutil.get_terminal_size().columns - 1)
+            if line != self.drawn:
+                self.stream.write(line)
+                self.stream.flush()
+                self.drawn = line
+
+    def end_line(self, pass_done: bool = True) -> None:
+        """Draws the line one last time, so it keeps the pass's final percent, then moves below it."""
+        with self.lock:
+            if self.drawn:
+                if pass_done:
+                    self.progress.finish_pass()
+                self.draw()
+                self.stream.write("\n")
+                self.drawn = ""
+                self.at_line_start = True
+
+    def write(self, text: str) -> int:
+        with self.lock:
+            if text:
+                self.end_line()
+                self.stream.write(text)
+                self.at_line_start = text.endswith("\n")
+        return len(text)
+
+    def flush(self) -> None:
+        self.stream.flush()
+
+
+@dataclass
+class EncodeJob(EncodeProgress):
     """
     A web UI encode. It runs in a background thread while the page polls /status for its progress.
 
     Attributes:
         values (dict): The submitted form, to show again while and after the encode runs.
-        clip_seconds (float): The trimmed clip's length, for working out the progress.
-        codec (str): The encode's codec, e.g. "vp9".
         state (str): "running", then "done" or "failed".
-        attempt (int): Which attempt is running. ff4d tries again when an output is over the target.
-        pass_name (str): The running pass: "first", "second", or "single" for hardware encoders.
-        progress_file (Path): The file ffmpeg writes the running pass's progress to.
-        pass_started (float): When the running pass started, from time.monotonic().
         result (EncodeResult): The finished encode, once the state is "done".
         errors (list[str]): What went wrong, once the state is "failed".
     """
 
-    values: dict
-    clip_seconds: float
-    codec: str = ""
+    values: dict = field(default_factory=dict)
     state: str = "running"
-    attempt: int = 0
-    pass_name: str = ""
-    progress_file: Optional[Path] = None
-    pass_started: float = 0.0
     result: Optional[EncodeResult] = None
     errors: list[str] = field(default_factory=list)
 
@@ -172,14 +306,6 @@ class EncodeJob:
             self.errors = ["Something went wrong while encoding. The details are in the terminal running ff4d."]
             self.state = "failed"
 
-    def start_pass(self, pass_name: str, progress_file: Path) -> None:
-        """TwoPass.run() calls this before each pass. A first or single pass means a new attempt has started."""
-        if pass_name in ("first", "single"):
-            self.attempt += 1
-        self.progress_file = progress_file
-        self.pass_started = time.monotonic()
-        self.pass_name = pass_name
-
     def remove_temp_folder(self) -> None:
         """
         Deletes a running encode's temp folder. The encode thread is a daemon, so when Ctrl+C stops the server,
@@ -200,25 +326,8 @@ class EncodeJob:
         """What /status sends the page. While running, `percent` covers the whole encode and `label` describes it."""
         if self.state != "running":
             return {"state": self.state}
-        if not self.pass_name:
-            return {"state": "running", "percent": 0, "label": "Starting…"}
-
-        # Each pass of a two-pass encode gets half of the bar
-        start, share = {"first": (0, 50), "second": (50, 50), "single": (0, 100)}[self.pass_name]
-        seconds = progress_seconds(self.progress_file)
-        if seconds is None:
-            # No time yet. Most passes report one within a second, but VP9's and AV1's first passes write no video,
-            # so they never do.
-            done = 0
-            label = f"{PASS_LABELS[self.pass_name]}: running for {time.monotonic() - self.pass_started:.0f} s"
-            if self.codec in ("vp9", "av1") and self.pass_name == "first":
-                label += f". {self.codec.upper()} doesn't report progress until this pass ends."
-        else:
-            done = min(seconds / self.clip_seconds, 1)
-            label = f"{PASS_LABELS[self.pass_name]}: {done:.0%}"
-        if self.attempt > 1:
-            label = f"Attempt {self.attempt}, since the last one was over the target. {label}"
-        return {"state": "running", "percent": round(start + share * done, 1), "label": label}
+        percent, label = self.report()
+        return {"state": "running", "percent": percent, "label": label}
 
 
 def source_facts(twopass: TwoPass) -> dict:
@@ -527,7 +636,7 @@ def main() -> None:
 
                 start, end = twopass.clip_times(form_settings)
                 values = form_values(twopass, form_settings, form_approx)
-                job = EncodeJob(values, clip_seconds=end - start, codec=form_settings.codec)
+                job = EncodeJob(values=values, clip_seconds=end - start, codec=form_settings.codec)
                 worker = threading.Thread(
                     target=job.run, args=[twopass, form_settings, form_approx], name="Encode", daemon=True
                 )
@@ -540,7 +649,16 @@ def main() -> None:
         app.run("127.0.0.1", port=port)
     else:
         with exit_on_setting_error():
-            result = twopass.run(settings, dry_run=True) if dry_run else twopass_loop(twopass, settings, approx)
+            if dry_run:
+                result = twopass.run(settings, dry_run=True)
+            elif settings.verbose or not sys.stdout.isatty():
+                # --verbose prints ffmpeg's log, which a redrawn line would garble. So would a pipe or a log file.
+                result = twopass_loop(twopass, settings, approx)
+            else:
+                start, end = twopass.clip_times(settings)
+                progress = EncodeProgress(clip_seconds=end - start, codec=settings.codec)
+                with ProgressLine(progress):
+                    result = twopass_loop(twopass, settings, approx, on_pass=progress.start_pass)
 
         if dry_run:
             print(format_commands(result.commands))

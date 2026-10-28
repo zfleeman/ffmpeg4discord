@@ -1,6 +1,9 @@
+import io
 import json
+import os
 import re
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
@@ -562,7 +565,7 @@ def test_status_reports_each_pass(web, tmp_path):
         (["first"], 6, 10, "First pass: 20%"),
         (["first", "second"], 30, 100, "Second pass: 100%"),
         (["single"], 15, 50, "Encoding: 50%"),
-        (["first", "second", "first"], 3, 5, "Attempt 2, since the last one was over the target. First pass: 10%"),
+        (["first", "second", "first"], 3, 5, "First pass: 10%. Attempt 2, since the last one was over the target."),
         (["first"], 45, 50, "First pass: 100%"),  # out_time can run a little past the clip's end
     ],
 )
@@ -617,6 +620,129 @@ def test_job_status_before_ffmpeg_reports_a_time(tmp_path, monkeypatch, codec, p
     monkeypatch.setattr(mainmod.time, "monotonic", lambda: 112.4)
     start = 0 if pass_name == "first" else 50
     assert job.status() == {"state": "running", "percent": start, "label": label}
+
+
+def test_progress_keeps_the_furthest_time(tmp_path):
+    progress_file = tmp_path / "second-progress.txt"
+    progress_file.write_text("out_time_us=27000000\n")
+    progress = mainmod.EncodeProgress(clip_seconds=30)
+    progress.start_pass("second", progress_file)
+    assert progress.report() == (95, "Second pass: 90%")
+    # ffmpeg's time can dip near the end of a pass, and the file is gone once the attempt ends
+    progress_file.write_text("out_time_us=24000000\n")
+    assert progress.report() == (95, "Second pass: 90%")
+    progress_file.unlink()
+    assert progress.report() == (95, "Second pass: 90%")
+    progress.finish_pass()
+    assert progress.report() == (100, "Second pass: 100%")
+    # a new pass starts from nothing
+    progress.start_pass("first", progress_file)
+    assert progress.report()[0] == 0
+
+
+# --- the CLI's progress line (issue #135) ---
+
+
+def test_bar_line():
+    line = mainmod.bar_line(50, "Second pass: 0%", 60)
+    assert line == "[###############---------------]  50%  Second pass: 0%".ljust(60)
+    # cut to the terminal's width, so redrawing it doesn't wrap onto a second line
+    assert mainmod.bar_line(100, "x" * 100, 40) == "[" + "#" * 30 + "] 100%  x"
+
+
+@pytest.fixture
+def screen(monkeypatch):
+    """A 41-column terminal for a ProgressLine to draw on."""
+    monkeypatch.setattr(mainmod.shutil, "get_terminal_size", lambda: os.terminal_size((41, 24)))
+    return io.StringIO()
+
+
+def first_pass_line(screen, tmp_path):
+    """A ProgressLine that draws on `screen`, for a 30-second clip 15 seconds into its first pass."""
+    progress_file = tmp_path / "first-progress.txt"
+    progress_file.write_text("out_time_us=15000000\n")
+    progress = mainmod.EncodeProgress(clip_seconds=30)
+    progress.start_pass("first", progress_file)
+    # Set here, not in the screen fixture, because pytest swaps its own capture back in before each test runs
+    line = mainmod.ProgressLine(progress)
+    line.stream = screen
+    return line
+
+
+def test_progress_line_waits_for_a_pass_to_start(screen):
+    line = mainmod.ProgressLine(mainmod.EncodeProgress(clip_seconds=30))
+    line.stream = screen
+    line.draw()
+    assert screen.getvalue() == ""
+
+
+def test_progress_line_redraws_only_when_it_changes(screen, tmp_path):
+    line = first_pass_line(screen, tmp_path)
+    line.draw()
+    line.draw()
+    assert screen.getvalue() == "\r" + mainmod.bar_line(25, "First pass: 50%", 40)
+
+
+def test_a_print_ends_the_progress_line_at_the_passs_final_percent(screen, tmp_path):
+    line = first_pass_line(screen, tmp_path)
+    line.draw()
+    print("Performing second pass", file=line, flush=True)
+    first, final = mainmod.bar_line(25, "First pass: 50%", 40), mainmod.bar_line(50, "First pass: 100%", 40)
+    assert screen.getvalue() == f"\r{first}\r{final}\nPerforming second pass\n"
+
+
+def test_progress_line_waits_for_a_print_to_end_its_line(screen, tmp_path):
+    line = first_pass_line(screen, tmp_path)
+    line.write("Performing")
+    line.draw()
+    assert screen.getvalue() == "Performing"
+    line.write(" second pass\n")
+    line.draw()
+    assert screen.getvalue() == "Performing second pass\n\r" + mainmod.bar_line(25, "First pass: 50%", 40)
+
+
+@pytest.mark.parametrize("error, final", [(None, "First pass: 100%"), (KeyboardInterrupt, "First pass: 50%")])
+def test_progress_line_stands_in_for_stdout(screen, monkeypatch, tmp_path, error, final):
+    monkeypatch.setattr(mainmod.sys, "stdout", screen)
+    line = mainmod.ProgressLine(first_pass_line(screen, tmp_path).progress)
+    with pytest.raises(error) if error else nullcontext():
+        with line:
+            assert mainmod.sys.stdout is line
+            line.draw()
+            if error:
+                raise error
+    assert mainmod.sys.stdout is screen
+    assert not line.thread.is_alive()
+    # an encode that stopped early keeps the percent it got to
+    assert screen.getvalue().endswith(mainmod.bar_line(*line.progress.report(), 40) + "\n")
+    assert line.progress.report()[1] == final
+
+
+def test_progress_line_redraws_until_stopped(screen, monkeypatch, tmp_path):
+    line = first_pass_line(screen, tmp_path)
+    monkeypatch.setattr(line, "draw", MagicMock())
+    monkeypatch.setattr(line.stopped, "wait", MagicMock(side_effect=[False, False, True]))
+    line.redraw_until_stopped()
+    assert line.draw.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "tty, verbose, shows_bar",
+    [
+        (True, False, True),
+        (False, False, False),  # piped or saved to a file
+        (True, True, False),  # ffmpeg's verbose log would garble the line
+    ],
+)
+def test_main_cli_shows_a_progress_line_in_a_terminal(run_main, twopass, monkeypatch, tty, verbose, shows_bar):
+    monkeypatch.setattr(mainmod.sys.stdout, "isatty", lambda: tty)
+    twopass.clip_times.return_value = (5, 15)
+    twopass_loop = run_main(verbose=verbose, codec="vp9")
+    on_pass = twopass_loop.call_args.kwargs.get("on_pass")
+    if shows_bar:
+        assert on_pass.__self__ == mainmod.EncodeProgress(clip_seconds=10, codec="vp9")
+    else:
+        assert on_pass is None
 
 
 def test_exit_removes_the_running_encodes_temp_folder(web, tmp_path):

@@ -541,6 +541,20 @@ def test_run_without_on_pass_writes_no_progress(make_twopass, passes):
     assert all("-progress" not in p.args for p in passes)
 
 
+@pytest.mark.parametrize(
+    "watched, verbose, stats",
+    [
+        (False, False, "-stats"),
+        (True, False, "-nostats"),  # the progress bar replaces ffmpeg's stats line
+        (True, True, "-stats"),  # --verbose keeps ffmpeg's own output
+    ],
+)
+def test_run_leaves_out_the_stats_line_when_on_pass_watches(make_twopass, passes, watched, verbose, stats):
+    on_pass = (lambda name, path: None) if watched else None
+    make_twopass().run(make_settings(verbose=verbose), on_pass=on_pass)
+    assert all(stats in p.args for p in passes)
+
+
 # --- showing the ffmpeg commands (issue #92) ---
 
 

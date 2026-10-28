@@ -647,7 +647,8 @@ class TwoPass:
         :param settings: what to encode and how
         :param dry_run: build the ffmpeg commands without running them
         :param on_pass: called with the pass name ("first", "second", or "single") and a file that ffmpeg writes
-            its progress to, just before each pass starts. The web UI uses it for its progress bar.
+            its progress to, just before each pass starts. The web UI and the CLI use it for their progress bars, so
+            ffmpeg's own stats line is left out unless `settings.verbose` is set.
         :return: the output file, its size, and the ffmpeg commands
         """
 
@@ -706,7 +707,7 @@ class TwoPass:
 
             def with_logging(ffoutput, pass_name: str):
                 """Adds ff4d's logging flags, plus a -progress file when `on_pass` is watching."""
-                args = ["-loglevel", loglevel, "-stats"]
+                args = ["-loglevel", loglevel, "-nostats" if on_pass and not settings.verbose else "-stats"]
                 if on_pass:
                     progress_file = Path(log_dir, f"{pass_name}-progress.txt")
                     args += ["-progress", str(progress_file)]
