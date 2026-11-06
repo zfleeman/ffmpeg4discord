@@ -14,6 +14,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Callable, Optional
 
+import ffmpeg
 from flask import Flask, redirect, render_template, request, send_file, url_for
 
 from ffmpeg4discord import arguments
@@ -445,7 +446,13 @@ def main() -> None:
     args["output"] = Path(args["output"])
     # the rest of the args are the encode settings
     settings = EncodeSettings(**args)
-    twopass = TwoPass(path)
+    try:
+        twopass = TwoPass(path)
+    except ffmpeg.Error as exc:
+        # ffprobe's last stderr line names the file and the problem, e.g. "clip.mp4: No such file or directory"
+        reason = exc.stderr.decode(errors="replace").strip().rsplit("\n", 1)[-1]
+        logging.error(reason or f"ffprobe couldn't read {path}")
+        raise SystemExit(1) from None
 
     if web:
         # --from and --to fill in the form's starting trim, so check them before starting the server
