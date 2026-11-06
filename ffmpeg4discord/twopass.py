@@ -418,6 +418,8 @@ class TwoPass:
             },
             "pass2": {
                 "pass": 2,
+                # the same frame timing as pass 1, so pass 2 sees the frames pass 1's stats describe
+                fps_mode_flag(self.probe): "cfr",
                 "b:a": self._audio_bitrate(settings),
                 "c:v": CODEC_ENCODERS.get(codec, codec),
                 # 8-bit 4:2:0 is the only format browsers, phones, and Discord's player reliably decode

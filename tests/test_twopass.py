@@ -568,6 +568,20 @@ def test_run_puts_mp4_index_at_the_front(make_twopass, passes, codec):
     assert all("-movflags" not in p.args for p in first)
 
 
+@pytest.mark.parametrize("codec", CODEC_ENCODERS)
+def test_every_pass_uses_constant_frame_rate(make_twopass, passes, codec):
+    # Pass 2 reads pass 1's stats frame by frame. Different frame timing gave AV1 a frame count it crashed on.
+    make_twopass().run(make_settings(codec=codec))
+    for p in passes:
+        assert p.args[p.args.index("-fps_mode") + 1] == "cfr"
+
+
+def test_old_ffmpeg_gets_vsync_on_every_pass(probe, make_twopass, passes):
+    probe["program_version"] = {"version": "4.4.2"}
+    make_twopass().run(make_settings())
+    assert [p.args[p.args.index("-vsync") + 1] for p in passes] == ["cfr", "cfr"]
+
+
 def test_hardware_codecs_have_no_stats_file(make_twopass, passes):
     make_twopass().run(make_settings(codec="h264_nvenc"))
     assert "-passlogfile" not in passes[0].args
