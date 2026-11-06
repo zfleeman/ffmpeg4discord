@@ -511,6 +511,38 @@ def test_stats_folder_is_deleted_when_ffmpeg_fails(make_twopass, monkeypatch):
     assert not folders[0].exists()
 
 
+def test_run_uses_the_callers_stats_folder_and_leaves_it(make_twopass, passes, tmp_path):
+    make_twopass().run(make_settings(), log_dir=str(tmp_path))
+    assert [p.args[p.args.index("-passlogfile") + 1] for p in passes] == [str(tmp_path / "ffmpeg2pass")] * 2
+    assert tmp_path.exists()  # the caller deletes it
+
+
+@pytest.mark.parametrize("codec, flag", [("x264", "-passlogfile"), ("vp9", "-passlogfile"), ("x265", "-x265-params")])
+def test_reusing_the_first_pass_runs_only_the_second(make_twopass, passes, tmp_path, codec, flag):
+    tp = make_twopass()
+    tp.run(make_settings(codec=codec), log_dir=str(tmp_path))
+    tp.run(make_settings(codec=codec, target_filesize=8), log_dir=str(tmp_path), reuse_first_pass=True)
+    assert [p.name for p in passes] == ["first", "second", "second"]
+    # the retry reads the stats the first attempt's first pass wrote
+    stats = [p.args[p.args.index(flag) + 1].split("stats=")[-1] for p in passes]
+    assert stats[0] == stats[2]
+
+
+def test_reusing_the_first_pass_does_not_change_hardware_codecs(make_twopass, passes, tmp_path):
+    make_twopass().run(make_settings(codec="h264_nvenc"), log_dir=str(tmp_path), reuse_first_pass=True)
+    assert [p.name for p in passes] == ["single"]
+
+
+def test_a_retry_starts_with_an_empty_progress_file(make_twopass, passes, tmp_path):
+    stale = tmp_path / "second-progress.txt"
+    stale.write_text("out_time_us=10000000\n")  # left by the last attempt's second pass
+    seen = []
+    make_twopass().run(
+        make_settings(), log_dir=str(tmp_path), reuse_first_pass=True, on_pass=lambda name, f: seen.append(f.exists())
+    )
+    assert seen == [False]
+
+
 def test_x265_keeps_its_stats_in_x265_params(make_twopass, passes):
     make_twopass().run(make_settings(codec="x265"))
     first = passes[0].args[passes[0].args.index("-x265-params") + 1]

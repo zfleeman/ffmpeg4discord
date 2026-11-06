@@ -5,6 +5,7 @@ import logging
 import math
 import re
 import shutil
+import tempfile
 import threading
 import time
 import webbrowser
@@ -49,30 +50,32 @@ def twopass_loop(
     """
     target_filesize = settings.target_filesize
 
-    while True:
-        result = twopass.run(settings, on_pass=on_pass)
+    # One stats folder for every attempt. A retry only lowers the bitrate, so it reuses the first attempt's first pass.
+    with tempfile.TemporaryDirectory(prefix="ff4d-", ignore_cleanup_errors=True) as log_dir:
+        attempt = 1
+        while True:
+            result = twopass.run(settings, on_pass=on_pass, log_dir=log_dir, reuse_first_pass=attempt > 1)
 
-        # check if the filesize is within the target
-        if result.output_filesize < target_filesize or approx:
-            break
+            # check if the filesize is within the target
+            if result.output_filesize < target_filesize or approx:
+                return result
 
-        print(
-            red(
-                f"""
-                The output file size ({round(result.output_filesize, 2)}MB) is still above the target of {target_filesize}MB.
-                Restarting...
-                """
+            print(
+                red(
+                    f"""
+                    The output file size ({round(result.output_filesize, 2)}MB) is still above the target of {target_filesize}MB.
+                    Restarting...
+                    """
+                )
             )
-        )
-        Path(result.output_filename).unlink()
+            Path(result.output_filename).unlink()
 
-        # lower the target size for the next run, which lowers the bitrate.
-        # scale by how far off we are, but always cut by at least MIN_RETRY_STEP so an output
-        # that lands just over the target doesn't retry at a near-identical bitrate
-        adjustment_ratio = min(target_filesize / result.output_filesize, 1 - MIN_RETRY_STEP)
-        settings = replace(settings, target_filesize=max(settings.target_filesize * adjustment_ratio, 0.1))
-
-    return result
+            # lower the target size for the next run, which lowers the bitrate.
+            # scale by how far off we are, but always cut by at least MIN_RETRY_STEP so an output
+            # that lands just over the target doesn't retry at a near-identical bitrate
+            adjustment_ratio = min(target_filesize / result.output_filesize, 1 - MIN_RETRY_STEP)
+            settings = replace(settings, target_filesize=max(settings.target_filesize * adjustment_ratio, 0.1))
+            attempt += 1
 
 
 def open_browser(port: int) -> None:
@@ -174,8 +177,9 @@ class EncodeJob:
             self.state = "failed"
 
     def start_pass(self, pass_name: str, progress_file: Path) -> None:
-        """TwoPass.run() calls this before each pass. A first or single pass means a new attempt has started."""
-        if pass_name in ("first", "single"):
+        """TwoPass.run() calls this before each pass. Each attempt starts with a first or single pass, except a retry
+        that reuses the first pass's stats: it starts with a second pass right after the last attempt's."""
+        if pass_name != "second" or self.pass_name == "second":
             self.attempt += 1
         self.progress_file = progress_file
         self.pass_started = time.monotonic()
@@ -184,7 +188,7 @@ class EncodeJob:
     def remove_temp_folder(self) -> None:
         """
         Deletes a running encode's temp folder. The encode thread is a daemon, so when Ctrl+C stops the server,
-        the TemporaryDirectory in TwoPass.run() never gets to clean up after itself.
+        the TemporaryDirectory in twopass_loop() never gets to clean up after itself.
         """
         if self.state != "running" or self.progress_file is None:
             return
