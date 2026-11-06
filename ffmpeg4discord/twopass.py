@@ -458,6 +458,10 @@ class TwoPass:
 
         params["pass2"].update(CODEC_OVERRIDES.get(codec, {}))
 
+        # MP4 only (same rule as `_output_filename()`): move the index to the front so a linked video starts playing sooner
+        if "vp9" not in codec:
+            params["pass2"]["movflags"] = "+faststart"
+
         # Apply bitrate targets to both passes
         for pass_params in params.values():
             pass_params.update(**bitrate_targets)

@@ -506,6 +506,15 @@ def test_x265_stats_path_escapes_ffmpeg_separators():
     assert params["x265-params"] == r"pass=1:stats=C\:/Users/O\'Brien/Temp/ff4d-abc/x265_2pass.log"
 
 
+@pytest.mark.parametrize("codec", CODEC_ENCODERS)
+def test_run_puts_mp4_index_at_the_front(make_twopass, passes, codec):
+    make_twopass().run(make_settings(codec=codec))
+    *first, last = passes
+    has_faststart = "-movflags" in last.args and last.args[last.args.index("-movflags") + 1] == "+faststart"
+    assert has_faststart == (codec != "vp9")  # vp9 writes .webm, which has no movflags
+    assert all("-movflags" not in p.args for p in first)
+
+
 def test_hardware_codecs_have_no_stats_file(make_twopass, passes):
     make_twopass().run(make_settings(codec="h264_nvenc"))
     assert "-passlogfile" not in passes[0].args
