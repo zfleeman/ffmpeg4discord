@@ -170,7 +170,7 @@ def test_merge_config_args_applies_config_values(parser, write_config):
     config = {
         "output": "mydir",
         "audio_br": 128,
-        "codec": "vp9-speed",
+        "codec": "vp9",
         "filename_times": True,
         "from": "00:00:10",
         "framerate": 60,
@@ -205,10 +205,30 @@ def test_merge_config_args_command_line_beats_config(parser, write_config, confi
     assert result[key] == expected
 
 
-def test_merge_config_args_keeps_keys_that_are_not_flags(parser, write_config):
-    argv = ["file.mp4", "--config", str(write_config({"something_else": 1}))]
-    result = _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
-    assert result["something_else"] == 1
+def test_merge_config_args_rejects_unknown_key(parser, write_config, capsys):
+    path = write_config({"target-filesize": 20})
+    argv = ["file.mp4", "--config", str(path)]
+    with pytest.raises(SystemExit):
+        _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
+    err = capsys.readouterr().err
+    assert f"{path.resolve()} has an unknown setting 'target-filesize'. Did you mean 'target_filesize'?" in err
+
+
+def test_merge_config_args_rejects_invalid_codec(parser, write_config, capsys):
+    path = write_config({"codec": "libvpx-vp9"})
+    argv = ["file.mp4", "--config", str(path)]
+    with pytest.raises(SystemExit):
+        _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
+    err = capsys.readouterr().err
+    assert f"{path.resolve()}: argument -c/--codec: invalid choice: 'libvpx-vp9'" in err
+
+
+def test_merge_config_args_names_the_nested_file_with_the_bad_value(parser, write_config, capsys):
+    inner = write_config({"codec": "bogus"}, name="inner.json")
+    argv = ["file.mp4", "--config", str(write_config({"config": str(inner)}))]
+    with pytest.raises(SystemExit):
+        _merge_config_args(vars(parser.parse_args(argv)), parser, argv)
+    assert f"{inner.resolve()}: argument -c/--codec" in capsys.readouterr().err
 
 
 def test_merge_config_args_follows_config_key(parser, write_config):

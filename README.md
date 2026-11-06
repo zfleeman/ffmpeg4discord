@@ -7,7 +7,7 @@ The package provides a convenient interface for FFmpeg, including a 2-pass encod
 
 ## Installation
 
-This package requires Python >= 3.9. For Windows users, ensure that Python is added to your system's PATH. I highly recommend that you use the [python.org](https://python.org) Python installation.
+This package requires Python >= 3.10. For Windows users, ensure that Python is added to your system's PATH. I highly recommend that you use the [python.org](https://python.org) Python installation.
 
 Install this package with the following command.
 
@@ -75,7 +75,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `--astreams` | all | `--astreams "0,1"` | Comma-separated list of **0-based audio stream positions** to include. When used with `--amix`, those streams will be mixed; otherwise, only the first selected stream is kept. |
 | `-v`<br>`--verbose` | false | `--verbose` | Enable verbose FFmpeg logging (useful for debugging). |
 | `--config` | off | `--config config.json` | Path to a JSON file containing a saved configuration. When a setting is provided by both JSON and CLI flags, the CLI flag wins. See [JSON Configuration](#json-configuration). |
-| `--no-config` | off | `no---config` | Disable loading any default configuration files. See [JSON Configuration](#json-configuration). |
+| `--no-config` | off | `--no-config` | Disable loading any default configuration files. See [JSON Configuration](#json-configuration). |
 | `--web` | false | `--web` | Launch the Web UI for this job. See [Web UI](#web-ui). |
 | `-p`<br>`--port` | random (when `--web`) | `-p 5333` | Run the Web UI on a specific port. If omitted, a random free port between 5000–6000 is chosen. |
 
@@ -115,7 +115,7 @@ Create a new plain text JSON file (`my-config.json`) structured like this:
 {
     "target_filesize": 10.0,
     "resolution": "1280x720",
-    "codec": "libvpx-vp9",
+    "codec": "vp9",
     "to": "00:00:40"
 }
 ```
