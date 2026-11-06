@@ -24,8 +24,8 @@ from ffmpeg4discord.versioning import check_for_update
 # smallest fraction the target size is cut by on each retry
 MIN_RETRY_STEP = 0.02
 
-# the formats the web UI accepts, e.g. 1280x720 and 255x0x1410x1080
-RESOLUTION_PATTERN = re.compile(r"\d+x\d+")
+# the formats the web UI accepts, e.g. 1280x720, 720, or 50% for a resolution, and 255x0x1410x1080 for a crop
+RESOLUTION_PATTERN = re.compile(r"\d+x\d+|\d+|\d+(\.\d+)?%")
 CROP_PATTERN = re.compile(r"\d+x\d+x\d+x\d+")
 
 
@@ -341,7 +341,7 @@ def parse_encode_form(form, twopass: TwoPass, codecs: list[str]) -> tuple[Encode
 
     resolution = form.get("resolution", "").strip()
     if resolution and not RESOLUTION_PATTERN.fullmatch(resolution):
-        errors.append("The Resolution must be width x height, e.g. 1280x720, or left blank.")
+        errors.append("The Resolution must be width x height, a height, or a percentage, e.g. 1280x720, 720, or 50%.")
 
     crop = form.get("crop", "").strip()
     if crop and not CROP_PATTERN.fullmatch(crop):

@@ -214,7 +214,8 @@ class EncodeSettings:
         audio_br (float): Audio bitrate in kbps. None means the input's audio bitrate.
         codec (str): A key of `CODEC_ENCODERS`, e.g. "x264".
         crop (str): x offset, y offset, width, and height joined by x, e.g. "255x0x1410x1080".
-        resolution (str): Output width and height, e.g. "1280x720".
+        resolution (str): Output width and height, a height, or a percentage of the height, e.g. "1280x720",
+            "720", or "50%". The last two keep the aspect ratio.
         framerate (int): Output frames per second. None keeps the input's frame rate.
         no_audio (bool): Leave audio out of the output.
         amix (bool): Mix the selected audio tracks into one.
@@ -504,6 +505,25 @@ class TwoPass:
             "bufsize": br * 2,
         }
 
+    def _scale_size(self, settings: EncodeSettings) -> tuple[int, int]:
+        """
+        The width and height for ffmpeg's scale filter from `settings.resolution`: "1280x720", "720", or "50%".
+        A height or percentage gives a width of -2, which tells ffmpeg to keep the aspect ratio with an even width.
+        """
+        resolution = settings.resolution
+        if size := re.fullmatch(r"(\d+)x(\d+)", resolution):
+            return int(size[1]), int(size[2])
+        if re.fullmatch(r"\d+", resolution) and int(resolution) > 0:
+            return -2, int(resolution)
+        if (percent := re.fullmatch(r"(\d+(?:\.\d+)?)%", resolution)) and float(percent[1]) > 0:
+            # a percentage of the cropped height, or the input's height without a crop, rounded to an even number
+            base = int(settings.crop.split("x")[3]) if settings.crop else self.height
+            return -2, max(2, round(base * float(percent[1]) / 200) * 2)
+        raise ValueError(
+            f"Invalid Resolution (-r) {resolution!r}. Use width x height, a height, or a percentage of the height, "
+            "e.g. 1280x720, 720, or 50%."
+        )
+
     def _check_video_size(self, settings: EncodeSettings) -> None:
         """Raise a ValueError for a crop or resolution that ffmpeg would reject or quietly change."""
 
@@ -516,15 +536,18 @@ class TwoPass:
                     f"Keep x offset + width at most {self.width} and y offset + height at most {self.height}."
                 )
 
+        if settings.resolution:
+            self._scale_size(settings)  # raises for a Resolution in the wrong format
+
         # x264 and x265 only encode even sizes. The output size is the resolution, or the crop without one.
         if settings.codec not in ("x264", "x265"):
             return
         if settings.resolution:
-            width, height = (int(n) for n in settings.resolution.split("x"))
-            if width % 2 or height % 2:
+            width, height = self._scale_size(settings)
+            if width % 2 or height % 2:  # -2, the width ffmpeg picks, is even
                 raise ValueError(
                     f"{settings.codec} needs an even width and height, but the Resolution (-r) is "
-                    f"{settings.resolution}. Use even numbers, e.g. 1280x720."
+                    f"{settings.resolution}. Use even numbers, e.g. 1280x720 or 720."
                 )
         elif settings.crop and (crop_width % 2 or crop_height % 2):
             raise ValueError(
@@ -588,12 +611,11 @@ class TwoPass:
             ratio = int(crop[2]) / int(crop[3])
 
         if settings.resolution:
-            video = video.filter("scale", settings.resolution)
-            x = int(settings.resolution.split("x")[0])
-            y = int(settings.resolution.split("x")[1])
-            outputratio = x / y
+            width, height = self._scale_size(settings)
+            video = video.filter("scale", width, height)
 
-            if ratio != outputratio:
+            # A height or percentage (width -2) always keeps the aspect ratio
+            if width != -2 and ratio != width / height:
                 logging.warning(
                     red(
                         """
