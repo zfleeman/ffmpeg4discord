@@ -212,6 +212,8 @@ Different codecs have different trade-offs in terms of quality, speed, file size
 
 Hardware encoders (NVENC and VideoToolbox) don't support ffmpeg's two-pass encoding, so `ff4d` encodes them in a single pass. This is faster, but the output size is less precise, so `ff4d` may need an extra retry to get under your target.
 
+When an output lands over the target, `ff4d` encodes again at a lower bitrate. Software codecs skip the first pass on these retries and reuse its stats, since only the bitrate changed. On a 10-second 1080p60 game clip, that made a retry about 25% faster with `vp9`, 40% faster with `x264`, and twice as fast with `x265`.
+
 - **`vp9` (VP9, CPU, `.webm`)**
   Produces `.webm` video. VP9 can save about 20–50% bitrate compared to H.264 (`x264`) at similar quality. It is well supported in modern browsers (especially for web streaming) but may have more limited support in older devices, legacy players, and some hardware decoders.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Encode/VP9)

@@ -87,6 +87,16 @@ def test_twopass_loop_cuts_target_by_min_step(twopass, no_cleanup):
     assert settings.target_filesize == 8  # the caller's settings stay the same
 
 
+def test_twopass_loop_reuses_the_first_pass_on_retries(twopass, no_cleanup):
+    twopass.run.side_effect = [result(15), result(12), result(9)]
+    mainmod.twopass_loop(twopass, EncodeSettings(target_filesize=10))
+    calls = twopass.run.call_args_list
+    assert [c.kwargs["reuse_first_pass"] for c in calls] == [False, True, True]
+    folders = {c.kwargs["log_dir"] for c in calls}
+    assert len(folders) == 1  # every attempt shares one stats folder
+    assert not Path(folders.pop()).exists()  # and it's deleted when the loop ends
+
+
 def test_success_message():
     message = mainmod.success_message(result(4.567))
     assert message == f"Your compressed video file (4.57MB) is located at {Path('output.mp4').resolve()}"
@@ -592,6 +602,9 @@ def test_status_reports_each_pass(web, tmp_path):
         (["first", "second"], 30, 100, "Second pass: 100%"),
         (["single"], 15, 50, "Encoding: 50%"),
         (["first", "second", "first"], 3, 5, "Attempt 2, since the last one was over the target. First pass: 10%"),
+        # a retry that reuses the first pass's stats starts with the second pass
+        (["first", "second", "second"], 15, 75, "Attempt 2, since the last one was over the target. Second pass: 50%"),
+        (["single", "single"], 15, 50, "Attempt 2, since the last one was over the target. Encoding: 50%"),
         (["first"], 45, 50, "First pass: 100%"),  # out_time can run a little past the clip's end
     ],
 )

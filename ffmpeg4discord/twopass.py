@@ -8,6 +8,7 @@ import shlex
 import string
 import sys
 import tempfile
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -666,7 +667,12 @@ class TwoPass:
         )
 
     def run(
-        self, settings: EncodeSettings, dry_run: bool = False, on_pass: Optional[Callable[[str, Path], None]] = None
+        self,
+        settings: EncodeSettings,
+        dry_run: bool = False,
+        on_pass: Optional[Callable[[str, Path], None]] = None,
+        log_dir: Optional[str] = None,
+        reuse_first_pass: bool = False,
     ) -> EncodeResult:
         """
         Perform the CPU-intensive encoding job
@@ -674,6 +680,10 @@ class TwoPass:
         :param dry_run: build the ffmpeg commands without running them
         :param on_pass: called with the pass name ("first", "second", or "single") and a file that ffmpeg writes
             its progress to, just before each pass starts. The web UI uses it for its progress bar.
+        :param log_dir: the folder for the two-pass stats and progress files. Without one, run() makes a temp folder
+            and deletes it when the encode ends.
+        :param reuse_first_pass: skip the first pass and use the stats an earlier run() left in `log_dir`. Only do this
+            when nothing but `settings.target_filesize` has changed, since the stats don't depend on the bitrate.
         :return: the output file, its size, and the ffmpeg commands
         """
 
@@ -723,8 +733,12 @@ class TwoPass:
         if dry_run:
             return EncodeResult(output_filename, 0, commands)
 
-        # A new folder for each encode, so two encodes at once can't read or delete each other's stats
-        with tempfile.TemporaryDirectory(prefix="ff4d-", ignore_cleanup_errors=True) as log_dir:
+        # Without a folder from the caller, a new temp folder for each encode, so two encodes at once can't share stats
+        if log_dir:
+            folder = nullcontext(log_dir)  # the caller deletes it
+        else:
+            folder = tempfile.TemporaryDirectory(prefix="ff4d-", ignore_cleanup_errors=True)
+        with folder as log_dir:
             first_pass, second_pass = build_passes(
                 self._with_pass_log(params["pass1"], settings.codec, log_dir),
                 self._with_pass_log(params["pass2"], settings.codec, log_dir),
@@ -735,11 +749,14 @@ class TwoPass:
                 args = ["-loglevel", loglevel, "-stats"]
                 if on_pass:
                     progress_file = Path(log_dir, f"{pass_name}-progress.txt")
+                    progress_file.unlink(missing_ok=True)  # a retry's progress shouldn't start with the last one's
                     args += ["-progress", str(progress_file)]
                     on_pass(pass_name, progress_file)
                 return ffoutput.global_args(*args)
 
-            if first_pass is not None:
+            if first_pass is not None and reuse_first_pass:
+                print("Reusing the first pass's stats")
+            elif first_pass is not None:
                 print("Performing first pass")
                 run_pass(with_logging(first_pass, "first"), "first", capture_stdout=True)
 
