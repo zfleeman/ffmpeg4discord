@@ -331,6 +331,7 @@ def test_apply_video_filters_warns_on_aspect_ratio_mismatch(make_twopass, caplog
         ({"resolution": "50%"}, "scale=-2:540"),
         ({"resolution": "33%"}, "scale=-2:356"),  # 356.4 rounds to an even height
         ({"resolution": "50%", "crop": "0x0x1280x720"}, "scale=-2:360"),  # a percentage of the cropped height
+        ({"resolution": 720}, "scale=-2:720"),  # a config file can give a number
     ],
 )
 def test_run_scales_to_the_resolution(make_twopass, passes, settings, scale):

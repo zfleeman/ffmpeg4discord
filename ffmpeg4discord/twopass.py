@@ -510,7 +510,7 @@ class TwoPass:
         The width and height for ffmpeg's scale filter from `settings.resolution`: "1280x720", "720", or "50%".
         A height or percentage gives a width of -2, which tells ffmpeg to keep the aspect ratio with an even width.
         """
-        resolution = settings.resolution
+        resolution = str(settings.resolution)  # a config file can give a number, e.g. "resolution": 720
         if size := re.fullmatch(r"(\d+)x(\d+)", resolution):
             return int(size[1]), int(size[2])
         if re.fullmatch(r"\d+", resolution) and int(resolution) > 0:
