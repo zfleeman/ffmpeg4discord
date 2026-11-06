@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
 
+import ffmpeg
 import pytest
 from flask import Flask
 
@@ -149,6 +150,26 @@ def test_main_shows_bad_flags_without_a_traceback(monkeypatch, caplog):
         mainmod.main()
     assert exc_info.value.code == 1
     assert "Invalid --astreams value '0,x'" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("stderr", "message"),
+    [
+        (
+            b"ffprobe version 8.0\n/clips/nope.mp4: No such file or directory\n",
+            "/clips/nope.mp4: No such file or directory",
+        ),
+        (b"", "ffprobe couldn't read"),
+    ],
+)
+def test_main_shows_unreadable_input_without_a_traceback(monkeypatch, caplog, stderr, message):
+    monkeypatch.setattr(mainmod, "check_for_update", lambda **_: VersionInfo("0.1.9", "0.1.9"))
+    monkeypatch.setattr(sys, "argv", ["ff4d", "nope.mp4", "--no-config"])
+    monkeypatch.setattr(mainmod, "TwoPass", MagicMock(side_effect=ffmpeg.Error("ffprobe", b"", stderr)))
+    with pytest.raises(SystemExit) as exc_info:
+        mainmod.main()
+    assert exc_info.value.code == 1
+    assert message in caplog.text
 
 
 def test_main_web_ignores_dry_run(run_main, monkeypatch, caplog):
