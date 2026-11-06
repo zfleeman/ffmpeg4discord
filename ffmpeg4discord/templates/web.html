@@ -105,6 +105,7 @@
                     <label for="resolution" class="form-label">Resolution</label>
                     <input class="form-control" name="resolution" id="resolution" type="text" value="{{ values.resolution }}" />
                     <div id="resolutionFeedback" class="invalid-feedback"></div>
+                    <div class="form-text">e.g. 1280x720, 720, or 50%</div>
                 </div>
                 <div class="col">
                     <label for="target_filesize" class="form-label"><span id="targetApprox">{{ "Approximate" if values.approx else "Target" }}</span> File Size (MB)</label>
@@ -444,11 +445,15 @@
 
             const codec = document.getElementById('codec').value;
             const resolution = document.getElementById('resolution').value.trim();
-            const size = resolution.match(/^(\d+)x(\d+)$/);
-            if (resolution && !size) {
-                errors.resolution = 'Use width x height, e.g. 1280x720, or leave it blank.';
+            // width x height, a height (the width follows), or a percentage of the height
+            const size = resolution.match(/^(\d+)x(\d+)$/) || resolution.match(/^()(\d+)$/);
+            const percent = resolution.match(/^(\d+(\.\d+)?)%$/);
+            if (resolution && !size && !percent) {
+                errors.resolution = 'Use width x height, a height, or a percentage, e.g. 1280x720, 720, or 50%, or leave it blank.';
+            } else if ((size && Number(size[2]) === 0) || (percent && Number(percent[1]) === 0)) {
+                errors.resolution = 'The Resolution must be above 0.';
             } else if (size && ['x264', 'x265'].includes(codec) && (size[1] % 2 || size[2] % 2)) {
-                errors.resolution = codec + ' needs an even width and height, e.g. 1280x720.';
+                errors.resolution = codec + ' needs an even width and height, e.g. 1280x720 or 720.';
             }
 
             const audioKbps = readNumber('audio_br');

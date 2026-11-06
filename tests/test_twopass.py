@@ -312,7 +312,7 @@ def test_apply_video_filters_crop_and_resolution(make_twopass):
     video.filter.return_value = video
     make_twopass()._apply_video_filters(video, make_settings(crop="10x20x640x360", resolution="1280x720"))
     video.crop.assert_called_once_with(x="10", y="20", width="640", height="360")
-    video.filter.assert_called_once_with("scale", "1280x720")
+    video.filter.assert_called_once_with("scale", 1280, 720)
 
 
 def test_apply_video_filters_warns_on_aspect_ratio_mismatch(make_twopass, caplog):
@@ -321,6 +321,27 @@ def test_apply_video_filters_warns_on_aspect_ratio_mismatch(make_twopass, caplog
     video.filter.return_value = video
     make_twopass()._apply_video_filters(video, make_settings(resolution="1280x800"))
     assert "aspect ratio does not match" in caplog.text.lower()
+
+
+@pytest.mark.parametrize(
+    "settings, scale",
+    [
+        ({"resolution": "1280x720"}, "scale=1280:720"),
+        ({"resolution": "720"}, "scale=-2:720"),
+        ({"resolution": "50%"}, "scale=-2:540"),
+        ({"resolution": "33%"}, "scale=-2:356"),  # 356.4 rounds to an even height
+        ({"resolution": "50%", "crop": "0x0x1280x720"}, "scale=-2:360"),  # a percentage of the cropped height
+        ({"resolution": 720}, "scale=-2:720"),  # a config file can give a number
+    ],
+)
+def test_run_scales_to_the_resolution(make_twopass, passes, settings, scale):
+    make_twopass().run(make_settings(**settings))
+    assert scale in " ".join(passes[-1].args)
+
+
+def test_height_only_resolution_does_not_warn_about_aspect_ratio(make_twopass, passes, caplog):
+    make_twopass().run(make_settings(crop="0x0x1440x1080", resolution="720"))
+    assert "aspect ratio does not match" not in caplog.text.lower()
 
 
 def test_crop_does_not_change_the_next_encodes_aspect_ratio(make_twopass, caplog):
@@ -578,6 +599,11 @@ def test_dry_run_saves_commands_without_running_ffmpeg(make_twopass, passes):
     "settings, message",
     [
         ({"resolution": "1280x721"}, "x264 needs an even width and height, but the Resolution"),
+        ({"resolution": "721"}, "x264 needs an even width and height, but the Resolution"),
+        ({"codec": "x265", "resolution": "721"}, "x265 needs an even width and height, but the Resolution"),
+        ({"resolution": "720p"}, "Invalid Resolution"),
+        ({"codec": "vp9", "resolution": "0"}, "Invalid Resolution"),
+        ({"resolution": "0%"}, "Invalid Resolution"),
         ({"codec": "x265", "crop": "0x0x641x360"}, "x265 needs an even width and height, but the Crop"),
         ({"crop": "0x0x1921x1080"}, "goes past the edge of the 1920x1080 video"),
         ({"crop": "0x100x1920x1080", "codec": "vp9"}, "goes past the edge"),
@@ -592,6 +618,7 @@ def test_run_rejects_sizes_ffmpeg_cannot_use(make_twopass, passes, settings, mes
     "settings",
     [
         {"codec": "vp9", "resolution": "1281x721"},  # only x264 and x265 need even sizes
+        {"codec": "vp9", "resolution": "721"},
         {"crop": "0x0x641x360", "resolution": "640x360"},  # the resolution sets the output size
         {"crop": "1280x0x640x1080"},  # touches the right edge, but stays inside
     ],

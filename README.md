@@ -61,7 +61,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `-s`<br>`--target-filesize` | 10 | `-s 50` | Target output file size in MiB. The encoder will iterate until it gets under this size (unless `--approx` is used). |
 | `-a`<br>`--audio-br` | 96 | `-a 128` | Audio bitrate in kbps. Lowering this allows a slightly higher video bitrate for the same target file size. |
 | `-c`<br>`--codec` | x264 | `-c hevc_nvenc` | Video "codec profile". These aren't 1:1 titles with the FFmpeg codec choices, because modern codecs require more tweaking for encoding performance, so I've setup a profile for `vp9` and `av1` speed. Options are ordered from "most compatible" to "least compatible": `x264`, `h264_nvenc`, `h264_videotoolbox`, `x265`, `hevc_nvenc`, `hevc_videotoolbox`, `vp9`, `av1`. The VideoToolbox codecs are only offered on macOS. See [Notes on Codec Selection](#notes-on-codec-selection) for more information. |
-| `-r`<br>`--resolution` | off | `-r 1280x720` | Scale the output video to a specific resolution (format: `WIDTHxHEIGHT`). |
+| `-r`<br>`--resolution` | off | `-r 1280x720`<br>`-r 720`<br>`-r 50%` | Scale the output video. Give `WIDTHxHEIGHT`, just a height (`720`), or a percentage of the height (`50%`). A height or percentage keeps the aspect ratio and picks the width for you. With `--crop`, both apply to the cropped area. |
 | `-x`<br>`--crop` | No default | `-x 440x0x2560x1440` | Crop the input before encoding. The format is four numbers joined by `x`: the left offset, top offset, width, and height of the area to keep, in pixels. The crop runs before `--resolution`. See the [Detailed Example](#detailed-example). |
 | `-f`<br>`--framerate` | off | `-f 30` | Output frame rate (FPS). If you specify a value higher than the input video’s FPS, the original FPS will be kept. |
 | `--from` | No default | `--from 00:01:00`<br>`--from 75%` | Start time for trimming the input, as a timestamp (`HH:MM:SS` or `MM:SS`), seconds (`90`), or a percentage of the video's length. Timestamps and seconds can include milliseconds, e.g. `00:01:30.250` or `90.25`. Percentages work well in a config file because they adjust to each clip. |
@@ -146,7 +146,7 @@ This example takes a 3440x1440 ultrawide recording and turns it into a normal 16
 
 - **Trim:** It keeps 00:00:50 to 00:01:45, read from the [file name](#file-name-formatting) because of `--filename-times`.
 - **Crop (`-x`):** It keeps a 2560x1440 area from the middle of the frame. 2560x1440 is the widest 16:9 area that fits in 1440 pixels of height. To center it, the left offset is the leftover width split in half: (3440 − 2560) / 2 = 440. The top offset is 0 because the crop uses the full height.
-- **Scale (`-r`):** It shrinks the cropped 2560x1440 area to 1920x1080. Both are 16:9, so nothing gets stretched.
+- **Scale (`-r`):** It shrinks the cropped 2560x1440 area to 1920x1080. Both are 16:9, so nothing gets stretched. `-r 1080` or `-r 75%` would do the same job, since both keep the crop's aspect ratio.
 - **Size and audio:** The output will be 50MB (`-s`) with 48k audio (`-a`), which will probably sound terrible. The file is saved in `D:/shadowplay/` (`-o`).
 
 ![A 3440x1440 frame with a centered 2560x1440 crop and 440 pixels cut off each side, scaled down to 1920x1080](https://raw.githubusercontent.com/zfleeman/ffmpeg4discord/main/docs/crop-example.svg)

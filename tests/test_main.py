@@ -429,7 +429,7 @@ def test_encode_audio_stream_selection(web, astreams, expected):
         ({"target_filesize": "nan"}, b"File Size must be a number above 0"),
         ({"target_filesize": "60"}, b"larger than the input file (50.54 MiB)"),
         ({"codec": "not_a_codec"}, b"Pick a Video Codec from the list"),
-        ({"resolution": "1280"}, b"Resolution must be width x height"),
+        ({"resolution": "720p"}, b"Resolution must be width x height, a height, or a percentage"),
         ({"crop": "0x0x100"}, b"Crop must be four numbers joined by x"),
         ({"output": "missing/out.mp4"}, b"The output folder missing"),
         ({"framerate": "29.97"}, b"Frame Rate must be a whole number above 0"),
@@ -488,10 +488,18 @@ def test_encode_settings_that_cannot_work_fail_before_starting(web):
     web.twopass_loop.assert_not_called()
 
 
+@pytest.mark.parametrize("resolution", ["1280x720", "720", "50%", "33.3%"])
+def test_encode_accepts_each_resolution_form(web, resolution):
+    response = web.client.post("/encode", data=encode_form(resolution=resolution))
+    assert response.status_code != 400
+    assert posted_settings(web).resolution == resolution
+
+
 @pytest.mark.parametrize(
     "form, message",
     [
         ({"resolution": "1281x720"}, b"x264 needs an even width and height"),
+        ({"resolution": "0%"}, b"Invalid Resolution"),
         ({"crop": "1000x0x1280x720"}, b"goes past the edge of the 1920x1080 video"),
     ],
 )
