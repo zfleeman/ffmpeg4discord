@@ -11,6 +11,7 @@ import pytest
 from ffmpeg4discord.__main__ import twopass_loop
 from ffmpeg4discord.twopass import (
     CODEC_ENCODERS,
+    VAAPI_CODECS,
     EncodeSettings,
     TwoPass,
     available_codecs,
@@ -282,7 +283,8 @@ def test_generate_params_hardware_codec_has_no_pass_flags(make_twopass):
     assert params["pass2"]["c:a"] == "aac"
 
 
-@pytest.mark.parametrize("codec", CODEC_ENCODERS)
+# VA-API gets its 8-bit 4:2:0 from the nv12 upload instead (test_vaapi_uploads_frames_to_the_gpu)
+@pytest.mark.parametrize("codec", [c for c in CODEC_ENCODERS if c not in VAAPI_CODECS])
 def test_generate_params_forces_yuv420p(make_twopass, codec):
     """10-bit and 4:4:4 sources must be converted to 8-bit 4:2:0 so the output plays everywhere."""
     params = make_twopass()._generate_params(make_settings(codec=codec), BITRATE)
@@ -598,6 +600,26 @@ def test_av1_nvenc_runs_one_pass_with_av1_overrides(make_twopass, passes):
     assert "-pass" not in args and "-cpu-used" not in args
 
 
+@pytest.mark.parametrize(
+    "codec, tag, audio",
+    [("h264_vaapi", None, "aac"), ("av1_vaapi", "av01", "libopus")],
+)
+def test_vaapi_uploads_frames_to_the_gpu(make_twopass, passes, codec, tag, audio):
+    make_twopass().run(make_settings(codec=codec, resolution="1280x720"))
+    assert len(passes) == 1
+    args = passes[0].args
+    assert args[args.index("-c:v") + 1] == codec
+    assert args[args.index("-rc_mode") + 1] == "VBR"
+    assert args[args.index("-c:a") + 1] == audio
+    assert (args[args.index("-tag:v") + 1] if "-tag:v" in args else None) == tag
+    # the upload has to come last, after the CPU filters, and replaces -pix_fmt, which the GPU frames can't take
+    graph = args[args.index("-filter_complex") + 1]
+    assert graph.index("scale=") < graph.index("format=nv12") < graph.index("hwupload")
+    assert "-pix_fmt" not in args
+    assert args[args.index("-init_hw_device") + 1] == "vaapi=va"
+    assert args[args.index("-filter_hw_device") + 1] == "va"
+
+
 def test_shown_commands_leave_out_the_temp_stats_folder(make_twopass, passes):
     for codec in ["x264", "x265"]:
         commands = make_twopass().run(make_settings(codec=codec)).commands
@@ -769,17 +791,19 @@ def test_probe_requests_the_version_section(probe, monkeypatch):
 # --- codec list ---
 
 
-def test_available_codecs_lists_videotoolbox_on_macos(monkeypatch):
-    monkeypatch.setattr("ffmpeg4discord.twopass.sys.platform", "darwin")
-    assert "h264_videotoolbox" in available_codecs()
-
-
-def test_available_codecs_hides_videotoolbox_off_macos(monkeypatch):
-    monkeypatch.setattr("ffmpeg4discord.twopass.sys.platform", "linux")
+@pytest.mark.parametrize(
+    "platform, offered",
+    [
+        ("darwin", {"h264_videotoolbox", "hevc_videotoolbox"}),
+        ("linux", {"h264_vaapi", "av1_vaapi"}),
+    ],
+)
+def test_available_codecs_offers_each_platform_only_its_own_hardware_codecs(monkeypatch, platform, offered):
+    monkeypatch.setattr("ffmpeg4discord.twopass.sys.platform", platform)
     codecs = available_codecs()
-    assert "h264_videotoolbox" not in codecs
-    assert "hevc_videotoolbox" not in codecs
-    assert "h264_nvenc" in codecs
+    os_specific = {c for c in codecs if any(api in c for api in ("videotoolbox", "vaapi"))}
+    assert os_specific == offered
+    assert {"x264", "h264_nvenc", "av1_nvenc"} <= set(codecs)
 
 
 # --- run_pass error handling ---

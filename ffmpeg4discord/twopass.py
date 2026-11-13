@@ -25,6 +25,7 @@ FILE_SIZE_MULT = 1 / 1024**2
 CODEC_ENCODERS = {
     "x264": "libx264",
     "h264_nvenc": "h264_nvenc",
+    "h264_vaapi": "h264_vaapi",
     "h264_videotoolbox": "h264_videotoolbox",
     "x265": "libx265",
     "hevc_nvenc": "hevc_nvenc",
@@ -32,10 +33,29 @@ CODEC_ENCODERS = {
     "vp9": "libvpx-vp9",
     "av1": "libaom-av1",
     "av1_nvenc": "av1_nvenc",
+    "av1_vaapi": "av1_vaapi",
 }
 
+# No hevc_vaapi: with Mesa's AMD driver (seen with Mesa 26.2 on an RX 9070 XT), the PPS ffmpeg puts in the MP4
+# header has a different initial QP than the one the driver writes into the stream. The hvc1 tag that Apple
+# players need drops the in-stream copy, so every frame decodes with the wrong QP.
+VAAPI_CODECS = {"h264_vaapi", "av1_vaapi"}
+
 # Hardware encoders ignore ffmpeg's two-pass stats file, so ff4d encodes them in a single pass.
-HARDWARE_CODECS = {"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_videotoolbox", "hevc_videotoolbox"}
+HARDWARE_CODECS = {
+    "h264_nvenc",
+    "hevc_nvenc",
+    "av1_nvenc",
+    "h264_videotoolbox",
+    "hevc_videotoolbox",
+} | VAAPI_CODECS
+
+# The one `sys.platform` each OS-specific codec is offered on.
+CODEC_PLATFORMS = {
+    "h264_videotoolbox": "darwin",
+    "hevc_videotoolbox": "darwin",
+    **{codec: "linux" for codec in VAAPI_CODECS},
+}
 
 # Characters that cmd and PowerShell both leave alone, so an argument made only of these needs no quotes.
 WINDOWS_SAFE_CHARS = set(string.ascii_letters + string.digits + "-_./\\:=+")
@@ -55,11 +75,11 @@ def red(text: str) -> str:
 def available_codecs() -> list[str]:
     """Return the codecs from `CODEC_ENCODERS` that this operating system can use.
 
-    VideoToolbox only exists on macOS, so it is hidden elsewhere. NVENC is always listed because we
-    can't cheaply tell whether an NVIDIA GPU is present; `run_pass` explains that failure if it happens.
+    Codecs in `CODEC_PLATFORMS` are hidden on other systems. The GPU itself isn't checked, because we
+    can't cheaply tell whether one is present; `run_pass` explains that failure if it happens.
     """
 
-    return [c for c in CODEC_ENCODERS if "videotoolbox" not in c or sys.platform == "darwin"]
+    return [c for c in CODEC_ENCODERS if CODEC_PLATFORMS.get(c, sys.platform) == sys.platform]
 
 
 def ffmpeg_major_version(probe: dict) -> Optional[int]:
@@ -200,6 +220,8 @@ CODEC_OVERRIDES = {
     "vp9": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
     "av1": {"tag:v": "av01", "c:a": "libopus", "row-mt": 1, "cpu-used": 8},
     "av1_nvenc": {"tag:v": "av01", "c:a": "libopus"},
+    "h264_vaapi": {"c:a": "aac", "rc_mode": "VBR"},
+    "av1_vaapi": {"tag:v": "av01", "c:a": "libopus", "rc_mode": "VBR"},
 }
 
 
@@ -463,6 +485,8 @@ class TwoPass:
             _ = params["pass2"].pop("pass")
 
         params["pass2"].update(CODEC_OVERRIDES.get(codec, {}))
+        if codec in VAAPI_CODECS:
+            del params["pass2"]["pix_fmt"]  # run() uploads nv12, which is also 8-bit 4:2:0
 
         # MP4 only (same rule as `_output_filename()`): move the index to the front so a linked video starts playing sooner
         if "vp9" not in codec:
@@ -710,6 +734,10 @@ class TwoPass:
         # separate streams from ffinput
         ffinput = ffmpeg.input(self.filename, ss=seconds_to_timestamp(start), to=seconds_to_timestamp(end))
         video = self._apply_video_filters(ffinput.video, settings)
+        vaapi = settings.codec in VAAPI_CODECS
+        if vaapi:
+            # VA-API encoders only take frames already on the GPU. The filters before this still run on the CPU.
+            video = video.filter("format", "nv12").filter("hwupload")
         audio = self._apply_audio_filters(ffinput, settings)
 
         # Set our logging level. We use "error" rather than "quiet" so that ffmpeg's own failure
@@ -723,13 +751,19 @@ class TwoPass:
             if hardware
             else ""
         )
+        if vaapi:
+            hint += " VA-API also needs a driver that can encode this codec; `vainfo` lists the ones yours can."
 
         output_streams = [video, audio] if audio and not settings.no_audio else [video]
 
         def build_passes(pass1: dict, pass2: dict) -> tuple:
             """The first and second pass. The first is None for hardware encoders, which can't use its stats."""
             first = None if hardware else ffmpeg.output(video, "pipe:", **pass1)
-            return first, ffmpeg.output(*output_streams, output_filename, **pass2)
+            second = ffmpeg.output(*output_streams, output_filename, **pass2)
+            if vaapi:
+                # no device path, so ffmpeg finds a working VA-API device itself; `hwupload` uploads to it
+                second = second.global_args("-init_hw_device", "vaapi=va", "-filter_hw_device", "va")
+            return first, second
 
         # The commands for the user leave out ff4d's logging flags and the temp stats folder, which is deleted after
         # the encode. Without that folder, ffmpeg keeps its stats in the working directory, so a copied command works.
