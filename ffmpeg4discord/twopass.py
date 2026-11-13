@@ -25,14 +25,17 @@ FILE_SIZE_MULT = 1 / 1024**2
 CODEC_ENCODERS = {
     "x264": "libx264",
     "h264_nvenc": "h264_nvenc",
+    "h264_amf": "h264_amf",
     "h264_vaapi": "h264_vaapi",
     "h264_videotoolbox": "h264_videotoolbox",
     "x265": "libx265",
     "hevc_nvenc": "hevc_nvenc",
+    "hevc_amf": "hevc_amf",
     "hevc_videotoolbox": "hevc_videotoolbox",
     "vp9": "libvpx-vp9",
     "av1": "libaom-av1",
     "av1_nvenc": "av1_nvenc",
+    "av1_amf": "av1_amf",
     "av1_vaapi": "av1_vaapi",
 }
 
@@ -46,14 +49,21 @@ HARDWARE_CODECS = {
     "h264_nvenc",
     "hevc_nvenc",
     "av1_nvenc",
+    "h264_amf",
+    "hevc_amf",
+    "av1_amf",
     "h264_videotoolbox",
     "hevc_videotoolbox",
 } | VAAPI_CODECS
 
-# The one `sys.platform` each OS-specific codec is offered on.
+# The one `sys.platform` each OS-specific codec is offered on. AMF also runs on Linux, but only with AMD's
+# separate AMF runtime installed, so Linux users get VA-API instead.
 CODEC_PLATFORMS = {
     "h264_videotoolbox": "darwin",
     "hevc_videotoolbox": "darwin",
+    "h264_amf": "win32",
+    "hevc_amf": "win32",
+    "av1_amf": "win32",
     **{codec: "linux" for codec in VAAPI_CODECS},
 }
 
@@ -220,6 +230,11 @@ CODEC_OVERRIDES = {
     "vp9": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
     "av1": {"tag:v": "av01", "c:a": "libopus", "row-mt": 1, "cpu-used": 8},
     "av1_nvenc": {"tag:v": "av01", "c:a": "libopus"},
+    # A size-capped clip is short on bits, so these favor quality over encode speed. ffmpeg already picks
+    # peak-constrained VBR because -maxrate is set.
+    "h264_amf": {"c:a": "aac", "quality": "quality"},
+    "hevc_amf": {"tag:v": "hvc1", "c:a": "aac", "quality": "quality"},
+    "av1_amf": {"tag:v": "av01", "c:a": "libopus", "quality": "high_quality"},
     "h264_vaapi": {"c:a": "aac", "rc_mode": "VBR"},
     "av1_vaapi": {"tag:v": "av01", "c:a": "libopus", "rc_mode": "VBR"},
 }

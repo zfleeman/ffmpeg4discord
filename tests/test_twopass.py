@@ -601,6 +601,24 @@ def test_av1_nvenc_runs_one_pass_with_av1_overrides(make_twopass, passes):
 
 
 @pytest.mark.parametrize(
+    "codec, tag, audio, preset",
+    [
+        ("h264_amf", None, "aac", "quality"),
+        ("hevc_amf", "hvc1", "aac", "quality"),
+        ("av1_amf", "av01", "libopus", "high_quality"),
+    ],
+)
+def test_amf_runs_one_pass_with_its_best_preset(make_twopass, passes, codec, tag, audio, preset):
+    make_twopass().run(make_settings(codec=codec))
+    assert len(passes) == 1
+    args = passes[0].args
+    assert args[args.index("-c:v") + 1] == codec
+    assert args[args.index("-quality") + 1] == preset
+    assert args[args.index("-c:a") + 1] == audio
+    assert (args[args.index("-tag:v") + 1] if "-tag:v" in args else None) == tag
+
+
+@pytest.mark.parametrize(
     "codec, tag, audio",
     [("h264_vaapi", None, "aac"), ("av1_vaapi", "av01", "libopus")],
 )
@@ -795,13 +813,14 @@ def test_probe_requests_the_version_section(probe, monkeypatch):
     "platform, offered",
     [
         ("darwin", {"h264_videotoolbox", "hevc_videotoolbox"}),
+        ("win32", {"h264_amf", "hevc_amf", "av1_amf"}),
         ("linux", {"h264_vaapi", "av1_vaapi"}),
     ],
 )
 def test_available_codecs_offers_each_platform_only_its_own_hardware_codecs(monkeypatch, platform, offered):
     monkeypatch.setattr("ffmpeg4discord.twopass.sys.platform", platform)
     codecs = available_codecs()
-    os_specific = {c for c in codecs if any(api in c for api in ("videotoolbox", "vaapi"))}
+    os_specific = {c for c in codecs if any(api in c for api in ("videotoolbox", "amf", "vaapi"))}
     assert os_specific == offered
     assert {"x264", "h264_nvenc", "av1_nvenc"} <= set(codecs)
 

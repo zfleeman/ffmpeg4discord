@@ -60,7 +60,7 @@ I've had a good time using this command with a Batch file on Windows. Refer to t
 | `-o`<br>`--output` | current working directory | `-o "C:/Users/zflee/A Folder"`<br>`-o "C:/Users/zflee/Desktop/A Folder/filename.mp4"` | Output directory **or** full output filename. If you provide a directory, `ff4d` will generate a timestamped filename. If you provide a filename, `ff4d` will use it (and will correct the extension if it doesn’t match the selected codec). |
 | `-s`<br>`--target-filesize` | 10 | `-s 50` | Target output file size in MiB. The encoder will iterate until it gets under this size (unless `--approx` is used). |
 | `-a`<br>`--audio-br` | 96 | `-a 128` | Audio bitrate in kbps. Lowering this allows a slightly higher video bitrate for the same target file size. |
-| `-c`<br>`--codec` | x264 | `-c hevc_nvenc` | Video "codec profile". These aren't 1:1 titles with the FFmpeg codec choices, because modern codecs require more tweaking for encoding performance, so I've setup a profile for `vp9` and `av1` speed. Options are ordered from "most compatible" to "least compatible": `x264`, `h264_nvenc`, `h264_vaapi`, `h264_videotoolbox`, `x265`, `hevc_nvenc`, `hevc_videotoolbox`, `vp9`, `av1`, `av1_nvenc`, `av1_vaapi`. The VA-API codecs are only offered on Linux, and VideoToolbox on macOS. See [Notes on Codec Selection](#notes-on-codec-selection) for more information. |
+| `-c`<br>`--codec` | x264 | `-c hevc_nvenc` | Video "codec profile". These aren't 1:1 titles with the FFmpeg codec choices, because modern codecs require more tweaking for encoding performance, so I've setup a profile for `vp9` and `av1` speed. Options are ordered from "most compatible" to "least compatible": `x264`, `h264_nvenc`, `h264_amf`, `h264_vaapi`, `h264_videotoolbox`, `x265`, `hevc_nvenc`, `hevc_amf`, `hevc_videotoolbox`, `vp9`, `av1`, `av1_nvenc`, `av1_amf`, `av1_vaapi`. The AMF codecs are only offered on Windows, VA-API on Linux, and VideoToolbox on macOS. See [Notes on Codec Selection](#notes-on-codec-selection) for more information. |
 | `-r`<br>`--resolution` | off | `-r 1280x720`<br>`-r 720`<br>`-r 50%` | Scale the output video. Give `WIDTHxHEIGHT`, just a height (`720`), or a percentage of the height (`50%`). A height or percentage keeps the aspect ratio and picks the width for you. With `--crop`, both apply to the cropped area. |
 | `-x`<br>`--crop` | No default | `-x 440x0x2560x1440` | Crop the input before encoding. The format is four numbers joined by `x`: the left offset, top offset, width, and height of the area to keep, in pixels. The crop runs before `--resolution`. See the [Detailed Example](#detailed-example). |
 | `-f`<br>`--framerate` | off | `-f 30` | Output frame rate (FPS). If you specify a value higher than the input video’s FPS, the original FPS will be kept. |
@@ -194,6 +194,10 @@ Different codecs have different trade-offs in terms of quality, speed, file size
   Hardware‑accelerated H.264 using an NVIDIA GPU. Typically faster than `x264` with slightly lower quality at the same bitrate. Compatibility of the output files is essentially the same as `x264`; the difference is how the video is encoded, not how it is played.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
 
+- **`h264_amf` (H.264, AMD GPU, Windows only)**
+  Hardware‑accelerated H.264 using an AMD GPU. Faster than `x264`, with the same playback compatibility. Only offered on Windows.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#AMDUVDVCE)
+
 - **`h264_vaapi` (H.264, VA-API GPU, Linux only)**
   Hardware‑accelerated H.264 using an AMD or Intel GPU through VA-API. Faster than `x264`, with the same playback compatibility. Only offered on Linux. Some distributions ship Mesa without H.264 encoding, like Fedora, where `mesa-va-drivers-freeworld` from RPM Fusion adds it back; `vainfo` lists what your driver can encode. There is no `hevc_vaapi`, because Mesa's AMD driver writes HEVC that decodes with errors once it's tagged for Apple players.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/Hardware/VAAPI)
@@ -210,11 +214,15 @@ Different codecs have different trade-offs in terms of quality, speed, file size
   Hardware‑accelerated HEVC using an NVIDIA GPU. Similar compression benefits and compatibility characteristics as `x265`, but significantly faster encoding due to GPU offload.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
 
+- **`hevc_amf` (HEVC, AMD GPU, Windows only)**
+  Hardware‑accelerated HEVC using an AMD GPU. Similar compression benefits and compatibility as `x265`, but much faster. Only offered on Windows.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#AMDUVDVCE)
+
 - **`hevc_videotoolbox` (HEVC, Apple VideoToolbox, macOS only)**
   Hardware‑accelerated HEVC on Macs. Similar compression benefits and compatibility as `x265`, but much faster. Only offered on macOS.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#VideoToolbox)
 
-Hardware encoders (NVENC, VA-API, and VideoToolbox) don't support ffmpeg's two-pass encoding, so `ff4d` encodes them in a single pass. This is faster, but the output size is less precise, so `ff4d` may need an extra retry to get under your target.
+Hardware encoders (NVENC, AMF, VA-API, and VideoToolbox) don't support ffmpeg's two-pass encoding, so `ff4d` encodes them in a single pass. This is faster, but the output size is less precise, so `ff4d` may need an extra retry to get under your target.
 
 When an output lands over the target, `ff4d` encodes again at a lower bitrate. Software codecs skip the first pass on these retries and reuse its stats, since only the bitrate changed. On a 10-second 1080p60 game clip, that made a retry about 25% faster with `vp9`, 40% faster with `x264`, and twice as fast with `x265`.
 
@@ -229,6 +237,10 @@ When an output lands over the target, `ff4d` encodes again at a lower bitrate. S
 - **`av1_nvenc` (AV1, NVENC GPU)**
   Hardware‑accelerated AV1 using an NVIDIA GPU. It needs an RTX 40‑series card or newer, and ffmpeg 6.0 or newer. The output plays wherever `av1` does, and it encodes in seconds instead of minutes.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#NVENC)
+
+- **`av1_amf` (AV1, AMD GPU, Windows only)**
+  Hardware‑accelerated AV1 using an AMD GPU. It needs an RX 7000‑series card or newer, and ffmpeg 6.0 or newer. The output plays wherever `av1` does. Only offered on Windows.
+  [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#AMDUVDVCE)
 
 - **`av1_vaapi` (AV1, VA-API GPU, Linux only)**
   Hardware‑accelerated AV1 through VA-API, using an AMD RX 7000‑series card or newer, or an Intel Arc or Core Ultra GPU. It needs ffmpeg 6.1 or newer, and is only offered on Linux. The output plays wherever `av1` does, and it encodes in seconds instead of minutes.
