@@ -234,7 +234,7 @@
                                     {% endif %}
                                 >
                                 <label class="form-check-label" for="astream_{{ idx }}" style="font-size: 0.9rem;">
-                                    {{ idx }}
+                                    {{ idx }}{% if stream.tags and stream.tags.title %}: {{ stream.tags.title }}{% endif %}
                                 </label>
                             </div>
                         </div>
