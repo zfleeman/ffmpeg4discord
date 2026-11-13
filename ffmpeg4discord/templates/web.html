@@ -149,6 +149,7 @@
                             "hevc_videotoolbox": "HEVC VideoToolbox (macOS, .mp4)",
                             "vp9": "VP9 (.webm)",
                             "av1": "AV1 (.mp4)",
+                            "av1_nvenc": "AV1 NVENC (.mp4)",
                         } %}
                         {% for codec in codecs %}
                         <option {{ "selected" if values.codec == codec else "" }} value="{{ codec }}">{{ codec_labels[codec] }}</option>
