@@ -143,6 +143,7 @@
                         {% set codec_labels = {
                             "x264": "x264 (.mp4)",
                             "h264_nvenc": "H264 NVENC (.mp4)",
+                            "h264_vaapi": "H264 VA-API (AMD/Intel, .mp4)",
                             "h264_videotoolbox": "H264 VideoToolbox (macOS, .mp4)",
                             "x265": "x265 (.mp4)",
                             "hevc_nvenc": "HEVC NVENC (.mp4)",
@@ -150,6 +151,7 @@
                             "vp9": "VP9 (.webm)",
                             "av1": "AV1 (.mp4)",
                             "av1_nvenc": "AV1 NVENC (.mp4)",
+                            "av1_vaapi": "AV1 VA-API (AMD/Intel, .mp4)",
                         } %}
                         {% for codec in codecs %}
                         <option {{ "selected" if values.codec == codec else "" }} value="{{ codec }}">{{ codec_labels[codec] }}</option>
