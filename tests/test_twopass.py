@@ -587,6 +587,17 @@ def test_hardware_codecs_have_no_stats_file(make_twopass, passes):
     assert "-passlogfile" not in passes[0].args
 
 
+def test_av1_nvenc_runs_one_pass_with_av1_overrides(make_twopass, passes):
+    make_twopass().run(make_settings(codec="av1_nvenc"))
+    assert len(passes) == 1
+    args = passes[0].args
+    assert args[args.index("-c:v") + 1] == "av1_nvenc"
+    assert args[args.index("-tag:v") + 1] == "av01"
+    assert args[args.index("-c:a") + 1] == "libopus"
+    # libaom's speed options would be ignored by NVENC, so they aren't passed
+    assert "-pass" not in args and "-cpu-used" not in args
+
+
 def test_shown_commands_leave_out_the_temp_stats_folder(make_twopass, passes):
     for codec in ["x264", "x265"]:
         commands = make_twopass().run(make_settings(codec=codec)).commands

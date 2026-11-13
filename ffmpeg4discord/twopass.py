@@ -31,10 +31,11 @@ CODEC_ENCODERS = {
     "hevc_videotoolbox": "hevc_videotoolbox",
     "vp9": "libvpx-vp9",
     "av1": "libaom-av1",
+    "av1_nvenc": "av1_nvenc",
 }
 
 # Hardware encoders ignore ffmpeg's two-pass stats file, so ff4d encodes them in a single pass.
-HARDWARE_CODECS = {"h264_nvenc", "hevc_nvenc", "h264_videotoolbox", "hevc_videotoolbox"}
+HARDWARE_CODECS = {"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_videotoolbox", "hevc_videotoolbox"}
 
 # Characters that cmd and PowerShell both leave alone, so an argument made only of these needs no quotes.
 WINDOWS_SAFE_CHARS = set(string.ascii_letters + string.digits + "-_./\\:=+")
@@ -198,6 +199,7 @@ CODEC_OVERRIDES = {
     "hevc_videotoolbox": {"tag:v": "hvc1", "c:a": "aac"},
     "vp9": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
     "av1": {"tag:v": "av01", "c:a": "libopus", "row-mt": 1, "cpu-used": 8},
+    "av1_nvenc": {"tag:v": "av01", "c:a": "libopus"},
 }
 
 
