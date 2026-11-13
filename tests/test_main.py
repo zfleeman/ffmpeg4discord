@@ -476,6 +476,18 @@ def two_tracks(probe):
     probe["streams"].append({"codec_type": "audio", "bit_rate": "128000", "index": 2})
 
 
+@pytest.fixture
+def named_second_track(probe, two_tracks):
+    """Give the second audio track a title, like OBS writes for each track. List it before `web`."""
+    probe["streams"][2]["tags"] = {"title": "Mic"}
+
+
+def test_page_labels_audio_tracks_with_their_names(named_second_track, web):
+    page = web.client.get("/").get_data(as_text=True)
+    labels = re.findall(r'<label class="form-check-label" for="astream_\d+"[^>]*>\s*(.*?)\s*</label>', page)
+    assert labels == ["0", "1: Mic"]
+
+
 def test_encode_two_tracks_needs_one_checked(two_tracks, web):
     response = web.client.post("/encode", data=encode_form())
     assert response.status_code == 400
