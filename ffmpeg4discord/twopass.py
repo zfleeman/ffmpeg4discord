@@ -223,15 +223,15 @@ def run_pass(ffoutput, pass_name: str, hint: str = "", **run_kwargs):
 CODEC_OVERRIDES = {
     "x264": {"c:a": "aac"},
     "x265": {"tag:v": "hvc1", "c:a": "aac"},
-    "h264_nvenc": {"c:a": "aac"},
-    "hevc_nvenc": {"tag:v": "hvc1", "c:a": "aac"},
     "h264_videotoolbox": {"c:a": "aac"},
     "hevc_videotoolbox": {"tag:v": "hvc1", "c:a": "aac"},
     "vp9": {"c:a": "libopus", "row-mt": 1, "cpu-used": 5, "deadline": "good"},
     "av1": {"tag:v": "av01", "c:a": "libopus", "row-mt": 1, "cpu-used": 8},
-    "av1_nvenc": {"tag:v": "av01", "c:a": "libopus"},
     # A size-capped clip is short on bits, so these favor quality over encode speed. ffmpeg already picks
     # peak-constrained VBR because -maxrate is set.
+    "h264_nvenc": {"c:a": "aac", "preset": "p7"},
+    "hevc_nvenc": {"tag:v": "hvc1", "c:a": "aac", "preset": "p7"},
+    "av1_nvenc": {"tag:v": "av01", "c:a": "libopus", "preset": "p7"},
     "h264_amf": {"c:a": "aac", "quality": "quality"},
     "hevc_amf": {"tag:v": "hvc1", "c:a": "aac", "quality": "quality"},
     "av1_amf": {"tag:v": "av01", "c:a": "libopus", "quality": "high_quality"},
@@ -500,6 +500,10 @@ class TwoPass:
             _ = params["pass2"].pop("pass")
 
         params["pass2"].update(CODEC_OVERRIDES.get(codec, {}))
+        # ffmpeg 4.3 named NVENC's presets p1-p7, and the major version can't tell 4.3 from 4.2, so 4.x keeps its default
+        major = ffmpeg_major_version(self.probe)
+        if "nvenc" in codec and major is not None and major < 5:
+            del params["pass2"]["preset"]
         if codec in VAAPI_CODECS:
             del params["pass2"]["pix_fmt"]  # run() uploads nv12, which is also 8-bit 4:2:0
 

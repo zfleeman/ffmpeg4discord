@@ -222,7 +222,7 @@ Different codecs have different trade-offs in terms of quality, speed, file size
   Hardware‑accelerated HEVC on Macs. Similar compression benefits and compatibility as `x265`, but much faster. Only offered on macOS.
   [FFmpeg trac link](https://trac.ffmpeg.org/wiki/HWAccelIntro#VideoToolbox)
 
-Hardware encoders (NVENC, AMF, VA-API, and VideoToolbox) don't support ffmpeg's two-pass encoding, so `ff4d` encodes them in a single pass. This is faster, but the output size is less precise, so `ff4d` may need an extra retry to get under your target.
+Hardware encoders (NVENC, AMF, VA-API, and VideoToolbox) don't support ffmpeg's two-pass encoding, so `ff4d` encodes them in a single pass. This is faster, but the output size is less precise, so `ff4d` may need an extra retry to get under your target. `ff4d` also picks each one's best-quality preset (`p7` for NVENC, `quality` for AMF), since a size-capped clip is short on bits. On a 30-second 1080p60 clip, that adds a few seconds to an NVENC encode, up to about 7 for `hevc_nvenc`.
 
 When an output lands over the target, `ff4d` encodes again at a lower bitrate. Software codecs skip the first pass on these retries and reuse its stats, since only the bitrate changed. On a 10-second 1080p60 game clip, that made a retry about 25% faster with `vp9`, 40% faster with `x264`, and twice as fast with `x265`.
 

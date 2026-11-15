@@ -100,7 +100,7 @@ def build_parser() -> ArgumentParser:
         type=str,
         default="x264",
         choices=available_codecs(),
-        help="Video codec. VideoToolbox codecs are only listed on macOS.",
+        help="Video codec. AMF codecs are only listed on Windows, VA-API on Linux, and VideoToolbox on macOS.",
     )
     parser.add_argument(
         "-v",
