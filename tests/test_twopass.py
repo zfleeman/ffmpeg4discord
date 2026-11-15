@@ -589,6 +589,19 @@ def test_hardware_codecs_have_no_stats_file(make_twopass, passes):
     assert "-passlogfile" not in passes[0].args
 
 
+@pytest.mark.parametrize("codec", ["h264_nvenc", "hevc_nvenc", "av1_nvenc"])
+def test_nvenc_uses_its_best_preset(make_twopass, passes, codec):
+    make_twopass().run(make_settings(codec=codec))
+    args = passes[0].args
+    assert args[args.index("-preset") + 1] == "p7"
+
+
+def test_old_ffmpeg_keeps_the_default_nvenc_preset(probe, make_twopass, passes):
+    probe["program_version"] = {"version": "4.4.2"}
+    make_twopass().run(make_settings(codec="h264_nvenc"))
+    assert "-preset" not in passes[0].args
+
+
 def test_av1_nvenc_runs_one_pass_with_av1_overrides(make_twopass, passes):
     make_twopass().run(make_settings(codec="av1_nvenc"))
     assert len(passes) == 1
